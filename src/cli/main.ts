@@ -1,37 +1,21 @@
-import { cli, lazy } from "gunshi";
+import { cli } from "gunshi";
 import { renderValidationErrors } from "gunshi/renderer";
 import completion from "@gunshi/plugin-completion";
 
 import login from "../commands/login.ts";
 import logout from "../commands/logout.ts";
 import whoami from "../commands/whoami.ts";
-
-const sheet = lazy(() => import("../commands/sheet.ts"), {
-	name: "sheet",
-	description: "Read your Mage: The Ascension character sheet",
-});
-const mint = lazy(() => import("../commands/mint.ts"), {
-	name: "mint",
-	description: "Mint a new Node — a place where quintessence gathers",
-});
-const tassilize = lazy(() => import("../commands/tassilize.ts"), {
-	name: "tassilize",
-	description: "Crystallize quintessence into Tass at a Node",
-});
-const meditate = lazy(() => import("../commands/meditate.ts"), {
-	name: "meditate",
-	description: "Pull quintessence from a Node's ambiance",
-});
-const enervate = lazy(() => import("../commands/enervate.ts"), {
-	name: "enervate",
-	description: "Drain/expend tass — register a withdrawal of current",
-});
+import sheet from "../commands/sheet.ts";
+import mint from "../commands/mint.ts";
+import tassilize from "../commands/tassilize.ts";
+import meditate from "../commands/meditate.ts";
+import enervate from "../commands/enervate.ts";
 
 const entry = {
 	name: "tassle",
 	description:
 		"Tassle — Mage: The Ascension quintessence/tass energy ledger on atproto (rpg.actor)",
-		run: () => {
+	run: () => {
 		console.log("tassle: an energy ledger for rpg.actor mages");
 		console.log("\nCommands:");
 		console.log("  login <handle>   authenticate via OAuth");
@@ -57,26 +41,21 @@ export async function runCli(argv: string[]): Promise<void> {
 			// Wire the validation-error renderer so missing required args print
 			// a clean usage message instead of throwing an AggregateError stack.
 			renderValidationErrors,
-		subCommands: {
-			login,
-			logout,
-			whoami,
-			sheet,
-			mint,
-			tassilize,
-			meditate,
-			enervate,
-		},
+			subCommands: {
+				login,
+				logout,
+				whoami,
+				sheet,
+				mint,
+				tassilize,
+				meditate,
+				enervate,
+			},
 		});
 	} catch (err) {
 		// gunshi renders validation errors via renderValidationErrors above,
-		// then re-throws the AggregateError. Swallow cleanly so the user
-		// doesn't see a stack trace for a missing required arg.
-		if (err instanceof AggregateError) {
-			process.exit(1);
-		}
+		// then re-throws the AggregateError. Swallow cleanly.
+		if (err instanceof AggregateError) process.exit(1);
 		throw err;
 	}
 }
-
-
