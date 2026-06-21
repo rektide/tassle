@@ -1,0 +1,77 @@
+{
+	"lexicon": 1,
+	"id": "com.superbfowle.tass.resonance",
+	"description": "Canonical resonance type registry + the reusable value/profile defs that entities (nodes, tass, avatars) embed to declare their resonance characterization.",
+	"defs": {
+		"main": {
+			"type": "record",
+			"description": "A canonical resonance type declaration. Each record defines one named axis that entities can be characterized along. Tagged with a 'system' so multiple game cosmologies coexist:\n  - mage: Dynamic (Wyld), Static (Weaver), Primordial (Wyrm) — the Triat\n  - reverie: entropy, liberty, skeptic, receptive, authority, oblivion\n  - custom: anything else\nEntities reference these by at-uri in #resonanceValue.axis, OR they use freeform axis names.",
+			"key": "tid",
+			"record": {
+				"type": "object",
+				"required": ["name", "system", "createdAt"],
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 50,
+						"maxGraphemes": 32,
+						"description": "Canonical name (e.g. 'Dynamic', 'Static', 'Primordial', 'entropy', 'liberty')"
+					},
+					"system": {
+						"type": "string",
+						"maxLength": 50,
+						"description": "Game system this canonical belongs to ('mage', 'reverie', 'custom', ...)"
+					},
+					"description": {
+						"type": "string",
+						"maxLength": 2000,
+						"maxGraphemes": 1000
+					},
+					"cosmology": {
+						"type": "string",
+						"maxLength": 50,
+						"description": "Optional cosmological referent (e.g. 'Wyld', 'Weaver', 'Wyrm' for Mage Triat)"
+					},
+					"opposedTo": {
+						"type": "string",
+						"description": "Name or at-uri of the canonical opposite pole (e.g. Dynamic ↔ Static)"
+					},
+					"createdAt": { "type": "string", "format": "datetime" }
+				}
+			}
+		},
+		"resonanceValue": {
+			"type": "object",
+			"description": "A single (axis, value) pair characterizing an entity along one resonance. 'axis' is either an at-uri pointing to a canonical resonance record in this collection, OR a freeform string name (when the entity is characterized ad-hoc without referencing a published record). 'value' is the entity's position on this axis, -1 to 1.",
+			"required": ["axis", "value"],
+			"properties": {
+				"axis": {
+					"type": "string",
+					"description": "AT-URI of a canonical resonance record, OR freeform axis name"
+				},
+				"value": {
+					"type": "number",
+					"minimum": -1,
+					"maximum": 1
+				}
+			}
+		},
+		"resonanceProfile": {
+			"type": "object",
+			"description": "An entity's resonance characterization. EITHER 'ref' (at-uri pointing to a published named profile) OR 'values' (inline axis/value pairs). Both unset = no resonance specified. Both set = inline values augment the referenced profile (uncommon).",
+			"properties": {
+				"ref": {
+					"type": "string",
+					"format": "at-uri",
+					"description": "AT-URI of a published named resonance profile"
+				},
+				"values": {
+					"type": "array",
+					"items": { "type": "ref", "ref": "#resonanceValue" },
+					"maxItems": 32,
+					"description": "Inline axis/value pairs (freeform, no named record)"
+				}
+			}
+		}
+	}
+}
