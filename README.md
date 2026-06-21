@@ -18,7 +18,7 @@ Awakened beings also can carry significant quintessence in their own pattern (mo
 
 Records published to act. XRPC API for convenient pass through as well.
 
-`Tassilize` formation of tass at a node.
+`Tassilize` formation of tass at a node, genesis record of all tass, it's energy past.
 
 `Meditate` pull quintessence from a node's ambiance.
 
