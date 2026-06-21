@@ -1,5 +1,7 @@
 import type { CommandRunner } from "gunshi";
-import { requireAgent } from "../auth/agent.ts";
+import { publicAgent } from "../auth/agent.ts";
+import { loadAuthInfo } from "../auth/stores/file-store.ts";
+import { DEV_REFERENCE } from "../config.ts";
 import {
 	fetchMageSheet,
 	SPHERES,
@@ -62,11 +64,22 @@ function renderSheet(
 }
 
 export const run: CommandRunner = async (ctx) => {
-	const { agent, did } = await requireAgent();
 	const didArg = ctx.values.did as string | undefined;
 	const rkey = ctx.values.rkey as string | undefined;
 
-	const sheet = await fetchMageSheet(agent, { did: didArg ?? did, rkey });
+	// Try authenticated first; fall back to a public agent for public reads
+	// (the dev-reference sheet and most user sheets are public).
+	const auth = await (async () => {
+		const info = loadAuthInfo();
+		if (!info) return null;
+		const { getAgent } = await import("../auth/agent.ts");
+		return await getAgent(info);
+	})();
+
+	const agent = auth?.agent ?? publicAgent(DEV_REFERENCE.pdsEndpoint);
+	const targetDid = didArg ?? auth?.did ?? DEV_REFERENCE.did;
+
+	const sheet = await fetchMageSheet(agent, { did: targetDid, rkey });
 	if (!sheet) {
 		console.error("no mage block found in actor.rpg.stats record");
 		process.exit(1);

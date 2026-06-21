@@ -211,6 +211,19 @@ export async function requireAgent(): Promise<{
 	return result;
 }
 
+/**
+ * Construct an unauthenticated Agent for public reads.
+ *
+ * Useful for `sheet` against public records when the user hasn't logged in
+ * yet. The agent points at the given PDS URL (defaults to the dev-reference
+ * PDS). Writes will fail — only public XRPC reads work.
+ */
+export function publicAgent(pdsUrl = "https://bsky.social"): Agent {
+	// Atproto's Agent accepts a URL string for an unauthenticated session.
+	// Reads of public records work; authenticated XRPCs return 401.
+	return new Agent(pdsUrl);
+}
+
 export function logout(): void {
 	const authInfo = loadAuthInfo();
 	if (authInfo) {

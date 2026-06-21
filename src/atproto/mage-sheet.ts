@@ -4,6 +4,11 @@ import { DEV_REFERENCE } from "../config.ts";
 /**
  * The nine Spheres of Magick in Mage: The Ascension.
  * `prime` is the sphere of working quintessence — central to tassle.
+ *
+ * NB: the actor.rpg.stats lexicon declares these in lowercase, but legacy
+ * `self` rkey records (including the dev-reference sheet) use Capitalized
+ * keys, and `Forces` appears as singular `Force`. We accept either form on
+ * read; writes use the lexicon-canonical lowercase.
  */
 export const SPHERES = [
 	"correspondence",
@@ -18,10 +23,46 @@ export const SPHERES = [
 ] as const;
 export type Sphere = (typeof SPHERES)[number];
 
+/** Aliases seen in real records (legacy `self` rkey uses Capitalized + `Force`). */
+const SPHERE_ALIASES: Record<string, Sphere> = {
+	correspondence: "correspondence",
+	Correspondence: "correspondence",
+	entropy: "entropy",
+	Entropy: "entropy",
+	forces: "forces",
+	Forces: "forces",
+	force: "forces",
+	Force: "forces",
+	life: "life",
+	Life: "life",
+	matter: "matter",
+	Matter: "matter",
+	mind: "mind",
+	Mind: "mind",
+	prime: "prime",
+	Prime: "prime",
+	spirit: "spirit",
+	Spirit: "spirit",
+	time: "time",
+	Time: "time",
+};
+
+/** Same case-tolerance for advantage keys. */
+function pick(
+	mage: Record<string, unknown>,
+	...candidates: string[]
+): number | undefined {
+	for (const k of candidates) {
+		const v = mage[k];
+		if (typeof v === "number") return v;
+	}
+	return undefined;
+}
+
 /**
  * Subset of actor.rpg.stats#mageStats that tassle cares about.
  * Full sheet has many more fields (attributes, abilities, backgrounds);
- * we type only what we touch and pass the rest through as `unknown`.
+ * we type only what we touch and pass the rest through as `raw`.
  */
 export interface MageSheet {
 	arete?: number;
@@ -53,9 +94,9 @@ function extractSpheres(
 	mage: Record<string, unknown>,
 ): Partial<Record<Sphere, number>> {
 	const out: Partial<Record<Sphere, number>> = {};
-	for (const s of SPHERES) {
-		const v = mage[s];
-		if (typeof v === "number") out[s] = v;
+	for (const [k, v] of Object.entries(mage)) {
+		const canonical = SPHERE_ALIASES[k];
+		if (canonical && typeof v === "number") out[canonical] = v;
 	}
 	return out;
 }
@@ -85,14 +126,10 @@ export async function fetchMageSheet(
 		rkey,
 		uri: data.uri,
 		spheres: extractSpheres(mage),
-		arete: typeof mage.arete === "number" ? mage.arete : undefined,
-		willpower:
-			typeof mage.willpower === "number"
-				? mage.willpower
-				: (mage.willpower as { current?: number; max?: number } | undefined),
-		quintessence:
-			typeof mage.quintessence === "number" ? mage.quintessence : undefined,
-		paradox: typeof mage.paradox === "number" ? mage.paradox : undefined,
+		arete: pick(mage, "arete", "Arete"),
+		willpower: pick(mage, "willpower", "Willpower"),
+		quintessence: pick(mage, "quintessence", "Quintessence"),
+		paradox: pick(mage, "paradox", "Paradox"),
 		updatedAt: data.value.updatedAt,
 		raw: mage,
 	};
@@ -105,6 +142,8 @@ export async function fetchMageSheet(
  * into the mage block, writes the full record back. Caller is responsible
  * for not stomping concurrent edits — for high-frequency writes prefer an
  * append-only action record (see tass.ts).
+ *
+ * Patches should use lexicon-canonical lowercase keys.
  */
 export async function patchMageSheet(
 	agent: Agent,
