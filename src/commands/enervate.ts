@@ -1,14 +1,17 @@
 import type { CommandRunner } from "gunshi";
 import { requireAgent } from "../auth/agent.ts";
 import { putTassRecord } from "../atproto/pds.ts";
-import { TASS_COLLECTIONS, makeEnervate } from "../atproto/tass.ts";
+import { TASS_COLLECTIONS, enervate } from "../atproto/tass.ts";
 
 export const run: CommandRunner = async (ctx) => {
 	const { agent, did } = await requireAgent();
-	const tass = ctx.values.tass as string;
-	const amount = ctx.values.amount as number;
 
-	const record = makeEnervate(tass, amount);
+	const record = enervate()
+		.tass(ctx.values.tass as string)
+		.amount(Number(ctx.values.amount))
+		.purpose(ctx.values.purpose as string | undefined)
+		.build();
+
 	const result = await putTassRecord(
 		agent,
 		did,
@@ -18,7 +21,7 @@ export const run: CommandRunner = async (ctx) => {
 	if (ctx.values.json) {
 		console.log(JSON.stringify({ uri: result.uri, cid: result.cid, record }));
 	} else {
-		console.log(`✓ enervated ${amount}q from ${tass}`);
+		console.log(`✓ enervated ${record.amount}q from ${record.tass}`);
 		console.log(`  ${result.uri}`);
 	}
 };
@@ -36,6 +39,11 @@ export default {
 			type: "positional",
 			required: true,
 			description: "Quintessence withdrawn",
+		},
+		purpose: {
+			type: "string",
+			short: "p",
+			description: "What the withdrawn quintessence was spent on",
 		},
 		json: {
 			type: "boolean",

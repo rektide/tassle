@@ -1,14 +1,16 @@
 import type { CommandRunner } from "gunshi";
 import { requireAgent } from "../auth/agent.ts";
 import { putTassRecord } from "../atproto/pds.ts";
-import { TASS_COLLECTIONS, makeMeditate } from "../atproto/tass.ts";
+import { TASS_COLLECTIONS, meditate } from "../atproto/tass.ts";
 
 export const run: CommandRunner = async (ctx) => {
 	const { agent, did } = await requireAgent();
-	const node = ctx.values.node as string;
-	const amount = ctx.values.amount as number;
 
-	const record = makeMeditate(node, amount);
+	const record = meditate()
+		.node(ctx.values.node as string)
+		.amount(Number(ctx.values.amount))
+		.build();
+
 	const result = await putTassRecord(
 		agent,
 		did,
@@ -18,7 +20,7 @@ export const run: CommandRunner = async (ctx) => {
 	if (ctx.values.json) {
 		console.log(JSON.stringify({ uri: result.uri, cid: result.cid, record }));
 	} else {
-		console.log(`✓ meditated ${amount}q from ${node}`);
+		console.log(`✓ meditated ${record.amount}q from ${record.node}`);
 		console.log(`  ${result.uri}`);
 	}
 };

@@ -10,6 +10,7 @@
 export const OAUTH_SCOPES = [
 	"atproto",
 	"repo:actor.rpg.stats",
+	"repo:com.superbfowle.tass.node",
 	"repo:com.superbfowle.tass.tassilize",
 	"repo:com.superbfowle.tass.meditate",
 	"repo:com.superbfowle.tass.enervate",

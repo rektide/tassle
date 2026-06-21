@@ -10,6 +10,10 @@ const sheet = lazy(() => import("../commands/sheet.ts"), {
 	name: "sheet",
 	description: "Read your Mage: The Ascension character sheet",
 });
+const mint = lazy(() => import("../commands/mint.ts"), {
+	name: "mint",
+	description: "Mint a new Node — a place where quintessence gathers",
+});
 const tassilize = lazy(() => import("../commands/tassilize.ts"), {
 	name: "tassilize",
 	description: "Crystallize quintessence into Tass at a Node",
@@ -27,13 +31,14 @@ const entry = {
 	name: "tassle",
 	description:
 		"Tassle — Mage: The Ascension quintessence/tass energy ledger on atproto (rpg.actor)",
-	run: () => {
+		run: () => {
 		console.log("tassle: an energy ledger for rpg.actor mages");
 		console.log("\nCommands:");
 		console.log("  login <handle>   authenticate via OAuth");
 		console.log("  logout           clear session");
 		console.log("  whoami           show current user");
 		console.log("  sheet            read your mage character sheet");
+		console.log("  mint             mint a Node");
 		console.log("  tassilize        crystallize quintessence into tass");
 		console.log("  meditate         draw quintessence from a node");
 		console.log("  enervate         drain tass");
@@ -52,15 +57,16 @@ export async function runCli(argv: string[]): Promise<void> {
 			// Wire the validation-error renderer so missing required args print
 			// a clean usage message instead of throwing an AggregateError stack.
 			renderValidationErrors,
-			subCommands: {
-				login,
-				logout,
-				whoami,
-				sheet,
-				tassilize,
-				meditate,
-				enervate,
-			},
+		subCommands: {
+			login,
+			logout,
+			whoami,
+			sheet,
+			mint,
+			tassilize,
+			meditate,
+			enervate,
+		},
 		});
 	} catch (err) {
 		// gunshi renders validation errors via renderValidationErrors above,
