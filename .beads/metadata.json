@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "tass",
+  "project_id": "a6187d92-53f0-423c-bc89-20dbff8e0ad2"
+}
