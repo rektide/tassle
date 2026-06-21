@@ -1,0 +1,45 @@
+{
+	"lexicon": 1,
+	"id": "com.superbfowle.tass.tassilize",
+	"defs": {
+		"main": {
+			"type": "record",
+			"description": "Genesis record: quintessence crystallized into Tass at a Node. Captures the initial energy endowment of a tass object at the moment of its formation. Forms the anchor that enervate records drain against.",
+			"key": "tid",
+			"record": {
+				"type": "object",
+				"required": ["node", "quintessence", "createdAt"],
+				"properties": {
+					"node": {
+						"type": "string",
+						"format": "at-uri",
+						"description": "AT-URI of the Node where this tass formed (e.g. at://did:plc:.../com.superbfowle.tass.node/rkey)"
+					},
+					"quintessence": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 100,
+						"description": "Initial quintessence value crystallized into this tass"
+					},
+					"form": {
+						"type": "string",
+						"maxLength": 200,
+						"maxGraphemes": 100,
+						"description": "Coincidental form the tass takes in reality (e.g. 'a silver coin', 'a vial of ink')"
+					},
+					"note": {
+						"type": "string",
+						"maxLength": 2000,
+						"maxGraphemes": 1000,
+						"description": "Freeform note about the tassilization"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "datetime",
+						"description": "Timestamp when this tass was crystallized"
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,39 @@
+{
+	"lexicon": 1,
+	"id": "com.superbfowle.tass.enervate",
+	"defs": {
+		"main": {
+			"type": "record",
+			"description": "A registered drain or expenditure of Tass. 'To enervate' literally means to draw the sinew (the nerve, the current-carrying conduit) out of a node — to tap the tass and withdraw its current. Each enervate reduces the available quintessence in the referenced tassilize record.",
+			"key": "tid",
+			"record": {
+				"type": "object",
+				"required": ["tass", "amount", "createdAt"],
+				"properties": {
+					"tass": {
+						"type": "string",
+						"format": "at-uri",
+						"description": "AT-URI of the com.superbfowle.tass.tassilize record being drained"
+					},
+					"amount": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 100,
+						"description": "Quintessence withdrawn from the tass"
+					},
+					"purpose": {
+						"type": "string",
+						"maxLength": 500,
+						"maxGraphemes": 250,
+						"description": "Optional: what the withdrawn quintessence was spent on"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "datetime",
+						"description": "Timestamp of the enervation"
+					}
+				}
+			}
+		}
+	}
+}

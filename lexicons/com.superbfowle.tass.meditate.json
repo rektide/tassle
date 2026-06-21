@@ -1,0 +1,33 @@
+{
+	"lexicon": 1,
+	"id": "com.superbfowle.tass.meditate",
+	"defs": {
+		"main": {
+			"type": "record",
+			"description": "Record of a Mage meditating at a Node to pull quintessence from its ambiance into their own pattern. Limited by Avatar rating (enforced out-of-band by the mage's sheet, not by this schema).",
+			"key": "tid",
+			"record": {
+				"type": "object",
+				"required": ["node", "amount", "createdAt"],
+				"properties": {
+					"node": {
+						"type": "string",
+						"format": "at-uri",
+						"description": "AT-URI of the Node meditated at"
+					},
+					"amount": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 20,
+						"description": "Quintessence drawn from the Node's ambient field"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "datetime",
+						"description": "Timestamp of the meditation"
+					}
+				}
+			}
+		}
+	}
+}
