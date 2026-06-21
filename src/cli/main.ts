@@ -1,4 +1,5 @@
 import { cli, lazy } from "gunshi";
+import { renderValidationErrors } from "gunshi/renderer";
 import completion from "@gunshi/plugin-completion";
 
 import login from "../commands/login.ts";
@@ -40,18 +41,36 @@ const entry = {
 };
 
 export async function runCli(argv: string[]): Promise<void> {
-	await cli(argv, entry, {
-		name: "tassle",
-		version: "1.0.0",
-		plugins: [completion()],
-		subCommands: {
-			login,
-			logout,
-			whoami,
-			sheet,
-			tassilize,
-			meditate,
-			enervate,
-		},
-	});
+	try {
+		await cli(argv, entry, {
+			name: "tassle",
+			version: "1.0.0",
+			plugins: [completion()],
+			// Suppress the per-command banner; we only want output from `run`.
+			// Header still appears on `--help` via the usage renderer.
+			renderHeader: null,
+			// Wire the validation-error renderer so missing required args print
+			// a clean usage message instead of throwing an AggregateError stack.
+			renderValidationErrors,
+			subCommands: {
+				login,
+				logout,
+				whoami,
+				sheet,
+				tassilize,
+				meditate,
+				enervate,
+			},
+		});
+	} catch (err) {
+		// gunshi renders validation errors via renderValidationErrors above,
+		// then re-throws the AggregateError. Swallow cleanly so the user
+		// doesn't see a stack trace for a missing required arg.
+		if (err instanceof AggregateError) {
+			process.exit(1);
+		}
+		throw err;
+	}
 }
+
+
