@@ -1,10 +1,22 @@
 {
 	"name": "tassle",
 	"version": "1.0.0",
-	"description": "",
-	"main": "index.js",
+	"description": "Tassle — Mage: The Ascension quintessence/tass energy ledger on atproto (rpg.actor)",
+	"type": "module",
+	"bin": {
+		"tassle": "./tassle.ts"
+	},
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"start": "node ./tassle.ts",
+		"build:bundle": "tsdown ./tassle.ts --format esm --dts",
+		"build": "concurrently 'pnpm:build:*'",
+		"check:lint": "oxlint .",
+		"check:type": "tsgo --noEmit",
+		"check": "concurrently 'pnpm:check:*'",
+		"fix:format": "oxfmt --write src",
+		"fix:lint": "oxlint --fix .",
+		"fix": "concurrently 'pnpm:fix:*'",
+		"test": "vitest run"
 	},
 	"repository": {
 		"type": "git",
@@ -13,10 +25,27 @@
 	"keywords": [],
 	"author": "rektide de la faye",
 	"license": "MIT",
-	"type": "module",
 	"bugs": {
 		"url": "https://github.com/rektide/tassle/issues"
 	},
 	"homepage": "https://github.com/rektide/tassle#readme",
-	"module": "tassle.js"
+	"dependencies": {
+		"@atproto/api": "^0.20.16",
+		"@atproto/common-web": "^0.5.1",
+		"@atproto/oauth-client": "^0.7.4",
+		"@atproto/oauth-client-node": "^0.4.2",
+		"@gunshi/plugin-completion": "^0.35.1",
+		"gunshi": "^0.35.1",
+		"open": "^11.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^26.0.0",
+		"@typescript/native-preview": "7.0.0-dev.20260621.1",
+		"concurrently": "^10.0.3",
+		"oxfmt": "^0.55.0",
+		"oxlint": "^1.70.0",
+		"tsdown": "^0.22.3",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.9"
+	}
 }
