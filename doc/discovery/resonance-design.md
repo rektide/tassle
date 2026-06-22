@@ -670,3 +670,207 @@ No need to delete or migrate existing records — the v2 collections are additiv
 - [`doc/ref/pub.layers.graph.graphEdge.json`](../ref/pub.layers.graph.graphEdge.json) — full graphEdge schema with the 60+ knownValues edge types
 - [`doc/ref/pub.layers.persona.persona.json`](../ref/pub.layers.persona.persona.json) — the persona shape that `com.superbfowle.tass.reality` mirrors
 - [`doc/ref/actor.rpg.stats.json`](../ref/actor.rpg.stats.json) — the entity being annotated; `mageStats.quintessence` is at integer 0-20
+
+---
+
+# Resonance design — round 3 (authority, vouchers, `main`)
+
+Round 3 settles a few things from round 2's open questions and unifies the reality concept with rpg.actor's `actor.rpg.master` voucher pattern.
+
+## What got settled
+
+1. **Authority model: assume our own, accept a set.** Tassle-the-project publishes its own canonical cosmology/reality under `com.superbfowle.tass.*` and treats that as the default authority. The tool system accepts *additional* authorities (a Storyteller's DID, another project's DID) so downstream consumers can choose who to trust. There is no single global root of trust — there's the tassle default plus a configurable accepted-authorities set.
+
+2. **`edgeType: "contradicts"` for opposedTo.** Use layers.pub's existing `edgeType: "contradicts"` slug with `label: "opposedTo"`. Locked in. No upstream contribution needed for this piece.
+
+3. **`rangeSpec` is tassle-local, marked prototype.** Defer upstreaming until it's been used in production. The v1 spec is `{min, max, type: "integer" | "number", step?}`, parallel to layers.pub's `allowedValues`. Mark every collection that uses it as prototype-status in its description.
+
+3. **Reality unifies with `actor.rpg.master`.** The voucher pattern in rpg.actor's master lexicon *is* the reality-acceptance pattern at smaller scope. A Reality is a master-authority that vouches for many mages instead of one, and it's also a persona (per layers.pub) because it owns a cosmology framework.
+
+## Direct answers
+
+### What `main` is, and why it isn't in the NSID
+
+Survey of every lexicon in `lexicons/` + `doc/ref/`:
+
+- **61 files have `defs.main`** — every record-bearing lexicon (collections you can publish records *to*). Includes all of tassle's own (`tassilize`/`meditate`/`enervate`/`node`/`resonance`), all of rpg.actor's, all of co/core's, all of layers.pub's record lexicons.
+- **14 files do NOT have `defs.main`** — every one is a `*.defs` namespace (`pub.layers.defs`, `dev.cocore.compute.defs`, etc.) that holds only reusable sub-shapes (`money`, `featureMap`, `roleSlot`). These are not collections; no records get published to them.
+
+The structure of any record-bearing lexicon is:
+
+```
+NSID (the path):       actor.rpg.master             ← never has "main"
+                       ↓
+File:                  actor.rpg.master.json
+                       ↓
+Inside the file:       {
+                         "lexicon": 1,
+                         "id": "actor.rpg.master",
+                         "defs": {
+                           "main": {               ← only here
+                             "type": "record",
+                             "record": { ... }
+                           },
+                           "someSubDef": { ... }   ← optional named sub-shapes
+                         }
+                       }
+```
+
+So:
+
+- The NSID (the user-visible collection name, the part that shows up in `at://` URIs and XRPC method names) never contains `main`.
+- The def name `main` is INSIDE the lexicon JSON. It's the atproto convention for "the record shape this collection holds".
+- You can technically name the def anything, but atproto SDK codegen tools assume `defs.main` (they generate types like `MasterRecord` from it). Stick with `main`.
+- Sub-defs (additional named object shapes referenced by `main`) get descriptive names: `resonanceValue`, `featureMap`, `knowledgeRef`, `rangeSpec`, etc.
+
+Tassle's existing `com.superbfowle.tass.resonance.json` already does this: `defs.main` (the canonical record) plus `defs.resonanceValue` and `defs.resonanceProfile` (sub-shapes). The v2 collections will follow the same pattern.
+
+### Reality unifies with `actor.rpg.master`
+
+Look at the `actor.rpg.master` lexicon's record shape (from [`doc/ref/actor.rpg.master.json`](../ref/actor.rpg.master.json)):
+
+| `actor.rpg.master` field | purpose | reality analogue |
+| --- | --- | --- |
+| `player` | DID of the player being vouched for | DID of the Mage being accepted into the chronicle |
+| `system` | which game system is validated (`'mage'`, `'dnd'`, ...) | which cosmology is accepted |
+| `campaign` | free-text campaign name | chronicle name |
+| `snapshotScope` | strictness (`'none'`/`'custom'`/`'full'`) | acceptance strictness — does the reality snapshot the Mage's sheet or just trust it? |
+| `stats` | snapshot of the validated sheet state | the snapshot when reality accepted the Mage |
+| `spriteCid` | additional CID-anchored property | additional CID-anchored properties (resonance profile, current quintessence) |
+| `createdAt` / `updatedAt` | timestamps | same |
+
+A Reality is structurally a Master that vouches for many Mages under one chronicle instead of one player at a time. It also has persona properties (it owns a cosmology framework) and corpus properties (it declares which ontologies are accepted). The three concepts — Reality, Master, Persona — are not three different things; they are three angles on the same thing.
+
+### How they unify: three options
+
+**Option A: Reality extends persona, publishes Master records per-Mage**
+
+The Reality collection is structurally a layers.pub `persona.persona` with extra `system` / `ontologyRefs` / `reviewRules` fields. The voucher side stays separate — for every Mage the reality accepts, the reality publishes an `actor.rpg.master`-shaped record (or a tassle equivalent).
+
+```mermaid
+flowchart LR
+  Reality["com.superbfowle.tass.reality<br/> persona + cosmology + system"]
+  Master1["actor.rpg.master<br/> player=mage1, system=mage"]
+  Master2["actor.rpg.master<br/> player=mage2, system=mage"]
+  Master3["actor.rpg.master<br/> player=mage3, system=mage"]
+
+  Reality -- "publishes per-Mage" --> Master1
+  Reality -- "publishes per-Mage" --> Master2
+  Reality -- "publishes per-Mage" --> Master3
+```
+
+**Pros:** clean separation between the authority (one Reality record) and the per-Mage acceptance (many Master records). Re-uses rpg.actor's existing master lexicon directly. Players who already have `actor.rpg.master` records from rpg.actor's own UI can be seamlessly accepted.
+**Cons:** two collections to maintain. The Reality record alone doesn't tell you who's accepted — you have to scan its master records.
+
+**Option B: Reality extends Master, adds persona fields**
+
+The Reality collection IS a Master record that also has persona/cosmology properties. One record per chronicle per Mage — the cosmology/framework is duplicated across every acceptance.
+
+```mermaid
+flowchart LR
+  Reality1["com.superbfowle.tass.reality<br/> player=mage1, cosmology=mage, persona=..."]
+  Reality2["com.superbfowle.tass.reality<br/> player=mage2, cosmology=mage, persona=..."]
+  Reality3["com.superbfowle.tass.reality<br/> player=mage3, cosmology=mage, persona=..."]
+```
+
+**Pros:** one collection, every acceptance is self-contained. **Cons:** cosmology/framework duplicated on every record; updating it means rewriting every reality record.
+
+**Option C: Reality is its own thing that embeds both**
+
+A new `com.superbfowle.tass.reality` collection that has *all three* aspects: persona fields (cosmology, ontology, framework), master fields (acceptance list, snapshot scope), and corpus fields (review rules, guidelines).
+
+```mermaid
+flowchart LR
+  Reality["com.superbfowle.tass.reality"]
+  Reality -- "persona fields" --> Persona["cosmology, ontologyRefs,<br/>knowledgeRefs, guidelines"]
+  Reality -- "master fields" --> Master["acceptedMages[],<br/>snapshotScope, acceptanceCIDs"]
+  Reality -- "corpus fields" --> Corpus["reviewRules,<br/>adjudicationMethod,<br/>agreementThreshold"]
+```
+
+**Pros:** one record carries everything; updating the cosmology is a single record edit. **Cons:** the per-Mage acceptance list grows unboundedly large. Need a cap or a separate "acceptance" sub-record.
+
+My current lean is **Option A**: a Reality is a persona, and accepts Mages by publishing `actor.rpg.master` records that point at itself. This maximally re-uses rpg.actor's existing voucher infrastructure — players coming from rpg.actor can be adopted into a tassle reality with no schema migration, and the master records they already have remain valid.
+
+### Revised reality + master integration sketch
+
+A Reality persona record (Option A):
+
+```json
+{
+  "$type": "com.superbfowle.tass.reality",
+  "name": "The Tuesday Chronicles",
+  "description": "My home Mage chronicle, Tuesday nights, Reverie-compatible crossover.",
+  "system": "mage",
+  "domain": "custom",
+  "domainUri": "at://did:plc:kwgllf365cwmxbnxitx4pjdj/pub.layers.graph.graphNode/<rpg-cosmology-node>",
+  "kind": "expert-panel",
+  "ontologyRefs": [
+    "at://did:plc:com-superbfowle-tass-authority/com.superbfowle.tass.cosmology/<mage-rkey>",
+    "at://did:plc:com-superbfowle-tass-authority/com.superbfowle.tass.cosmology/<reverie-rkey>"
+  ],
+  "knowledgeRefs": [
+    { "source": "custom", "identifier": "mage-revised", "uri": "https://whitewolf.fandom.com/wiki/Mage:_The_Ascension", "label": "Mage Revised" }
+  ],
+  "features": { "entries": [
+    { "key": "paradoxRule", "value": "backlash-per-5" },
+    { "key": "quintessenceCap", "value": "avatar-rating-times-five" }
+  ] },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+This is the reality persona — one record per chronicle per authority.
+
+For every Mage the reality accepts, the *same DID* (the reality's DID) publishes an `actor.rpg.master`-shaped record:
+
+```json
+{
+  "$type": "actor.rpg.master",
+  "player": "did:plc:mage-jane",
+  "system": "mage",
+  "campaign": "The Tuesday Chronicles",
+  "snapshotScope": "custom",
+  "stats": { "...snapshot of mage fields the reality cares about..." : "..." },
+  "spriteCid": "bafy...",
+  "createdAt": "2026-06-21T20:00:00Z",
+  "updatedAt": "2026-06-21T20:00:00Z"
+}
+```
+
+This is a normal `actor.rpg.master` record, published by the reality's DID. Existing rpg.actor tooling sees it as a Master record. The link to the Reality is implicit (the publisher DID is the reality's DID, and the campaign name matches).
+
+Optionally, tassle can extend this with a stronger link:
+
+```json
+{
+  "$type": "com.superbfowle.tass.acceptance",
+  "realityRef": "at://did:plc:reality-did/com.superbfowle.tass.reality/<rkey>",
+  "masterRef": "at://did:plc:reality-did/actor.rpg.master/<rkey>",
+  "mageDid": "did:plc:mage-jane",
+  "acceptedAt": "2026-06-21T20:00:00Z",
+  "acceptedBy": "did:plc:reality-did"
+}
+```
+
+A thin acceptance record that ties a reality to its master records. Not strictly necessary if the implicit DID+campaign link is enough, but useful for explicitness and querying.
+
+## Open questions (round 3)
+
+1. **Option A vs B vs C for the Reality shape — which fits the use case?** I lean A (reality-as-persona, publishes master records per-Mage), but B and C are still on the table. The deciding question: do you want a Mage's acceptance to be re-usable across multiple realities without rewriting, or always tied to one reality?
+
+2. **Should `com.superbfowle.tass.acceptance` exist as a separate record, or is the implicit "publisher DID = reality DID + campaign name = chronicle name" link enough?** Separate acceptance record gives explicit querying (an appview can `listAcceptances` instead of scanning all master records and filtering). Implicit is less schema surface but weaker queries.
+
+3. **What does the authority set look like concretely?** "Tassle-the-project publishes canonical" + "consumers accept a set" — is the set a configuration in the consuming tool (a CLI flag, an appview config), or is it a published record somewhere (a "trusted authorities registry" the project maintains)?
+
+4. **Does the canonical tassle authority use a separate DID from the tassle project account, or the same DID?** A separate `did:plc:tassle-canonical-authority` that only publishes cosmology/reality records is cleaner separation; the same DID as the project repo conflates publishing authority with code authority.
+
+5. **The `actor.rpg.master.campaign` field is a free-text string — should tassle require it to match the reality's name?** Otherwise Mages might be accepted into "Tuesday Chronicles" vs "Tuesday chronicle" and the link gets fuzzy.
+
+6. **`actor.rpg.master.snapshotScope: "custom"` — what does the reality's "custom" snapshot look like for a Mage?** Probably theMage's `arete`, `quintessence`, the relevant sphere ratings, and a hash of the resonance profile. Worth specifying explicitly so consumers know what the reality vouches for.
+
+7. **Acceptance lifecycle — what happens when a reality *unaccepts* a Mage?** Delete the master record? Mark it revoked? The reality's persona persists but the master record is gone — historical queries break unless we keep a tombstone.
+
+## See also (round 3 additions)
+
+- [`doc/ref/actor.rpg.master.json`](../ref/actor.rpg.master.json) — the voucher pattern that `com.superbfowle.tass.reality` extends
+- [`lexicons/com.superbfowle.tass.resonance.json`](../../lexicons/com.superbfowle.tass.resonance.json) — tassle's existing lexicon that uses `defs.main` plus named sub-defs (`resonanceValue`, `resonanceProfile`)
