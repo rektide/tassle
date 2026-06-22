@@ -42,7 +42,7 @@
 		},
 		"resonanceValue": {
 			"type": "object",
-			"description": "A single (axis, value) pair characterizing an entity along one resonance. 'axis' is either an at-uri pointing to a canonical resonance record in this collection, OR a freeform string name (when the entity is characterized ad-hoc without referencing a published record). 'value' is the entity's position on this axis, -1 to 1.",
+			"description": "A single (axis, value) pair characterizing an entity along one resonance. 'axis' is either an at-uri pointing to a canonical resonance record in this collection, OR a freeform string name (when the entity is characterized ad-hoc without referencing a published record). 'value' is the entity's position on this axis, stored as a fixed-point integer in range [-1000, 1000] representing the float [-1.0, 1.0] (i.e. actual_value = stored / 1000). Atproto lexicons have no native float type; this is the canonical workaround.",
 			"required": ["axis", "value"],
 			"properties": {
 				"axis": {
@@ -50,9 +50,10 @@
 					"description": "AT-URI of a canonical resonance record, OR freeform axis name"
 				},
 				"value": {
-					"type": "number",
-					"minimum": -1,
-					"maximum": 1
+					"type": "integer",
+					"minimum": -1000,
+					"maximum": 1000,
+					"description": "Position on this axis, fixed-point: actual_value = stored / 1000 (so 500 = 0.5, -250 = -0.25)"
 				}
 			}
 		},

@@ -1,0 +1,32 @@
+[package]
+name = "tassle-lexicons"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Generated Rust types for tassle lexicons (com.superbfowle.tass.*). Do not edit — regenerate via `cargo run -p tassle-codegen`."
+
+[lib]
+name = "tassle_lexicons"
+path = "src/lib.rs"
+
+[features]
+default = ["com_superbfowle"]
+com_superbfowle = []
+
+[dependencies]
+jacquard-common = { git = "https://github.com/rsform/jacquard.git" }
+jacquard-derive = { git = "https://github.com/rsform/jacquard.git" }
+jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+chrono = "0.4"
+jacquard-common = { git = "https://github.com/rsform/jacquard.git" }
+jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
+
+[[example]]
+name = "smoke"
+path = "examples/smoke.rs"
