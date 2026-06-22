@@ -1,14 +1,4 @@
-// tassle: the Rust CLI for tassle.
-//
-// Composes tassle-lexicons (types + fluent builders) and tassle-validate
-// (schema validation) in-process. For now, only `mint` exists, and it
-// outputs the constructed record as JSON to stdout. Login/publish/cbor
-// come later.
-//
-// Usage:
-//   tassle mint "Crystal Spring" --rating 3 --resonance dynamic
-//   tassle mint "Crystal Spring" --rating 3 --no-validate
-//   tassle mint "Crystal Spring" --rating 3 --output cbor  # deferred
+// tassle: the Rust CLI.
 
 mod commands;
 
@@ -28,13 +18,20 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Mint a new Node — a place where quintessence gathers
-    Mint(commands::mint::MintArgs),
+    /// Generate records (node, tassilize, etc.) as JSON or CBOR
+    Generate(commands::generate::GenerateArgs),
+    /// Generate example records into samples/
+    Samples(commands::samples::SamplesArgs),
 }
 
 fn main() -> miette::Result<ExitCode> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Mint(args) => commands::mint::run(args),
+        Command::Generate(args) => match args.kind {
+            commands::generate::GenerateKind::Node(a) => {
+                commands::generate::node::run(a)
+            }
+        },
+        Command::Samples(args) => commands::samples::run(args),
     }
 }

@@ -18,5 +18,6 @@ jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
 clap = { version = "~4.4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+serde_ipld_dagcbor = "0.6"
 miette = { version = "7", features = ["fancy"] }
 chrono = "0.4"

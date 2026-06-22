@@ -1,8 +1,4 @@
-// tassle mint — construct and validate a Node record.
-//
-// Builds a com.superbfowle.tass.node record using the fluent builder,
-// validates it against the lexicon schema in-process, and writes the
-// result to stdout as JSON. No PDS round-trip (publish comes later).
+// `tassle gen node` — construct and validate a Node record.
 
 use crate::commands::OutputFormat;
 use clap::Args;
@@ -14,7 +10,7 @@ use std::process::ExitCode;
 use tassle_lexicons::com_superbfowle::tass::node::Node;
 
 #[derive(Args, Debug)]
-pub struct MintArgs {
+pub struct NodeArgs {
     /// Display name for the Node
     pub name: String,
 
@@ -46,12 +42,12 @@ pub struct MintArgs {
     #[arg(long)]
     pub no_validate: bool,
 
-    /// Output format (cbor deferred — currently always json)
+    /// Output format
     #[arg(long, default_value = "json")]
     pub output: OutputFormat,
 }
 
-pub fn run(args: MintArgs) -> miette::Result<ExitCode> {
+pub fn run(args: NodeArgs) -> miette::Result<ExitCode> {
     let mut builder = Node::<DefaultStr>::builder()
         .name(args.name.clone())
         .rating(args.rating)
@@ -83,15 +79,5 @@ pub fn run(args: MintArgs) -> miette::Result<ExitCode> {
         }
     }
 
-    match args.output {
-        OutputFormat::Json => {
-            let json = serde_json::to_string_pretty(&node).into_diagnostic()?;
-            println!("{json}");
-            Ok(ExitCode::SUCCESS)
-        }
-        OutputFormat::Cbor => {
-            eprintln!("error: cbor output not yet implemented");
-            Ok(ExitCode::FAILURE)
-        }
-    }
+    crate::commands::emit(&node, args.output)
 }
