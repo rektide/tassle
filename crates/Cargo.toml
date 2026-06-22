@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["tassle-codegen", "tassle-lexicons"]
+members = ["tassle-codegen", "tassle-lexicons", "tassle-validate"]
 
 [workspace.package]
 edition = "2024"
