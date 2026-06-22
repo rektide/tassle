@@ -274,3 +274,399 @@ My current lean is Option 3, but the call should turn on how stable layers.pub l
 - [`doc/ref/pub.layers.ontology.ontology.json`](../ref/pub.layers.ontology.ontology.json), [`doc/ref/pub.layers.ontology.typeDef.json`](../ref/pub.layers.ontology.typeDef.json), [`doc/ref/pub.layers.ontology.defs.json`](../ref/pub.layers.ontology.defs.json) — source schemas
 - [`doc/ref/pub.layers.corpus.corpus.json`](../ref/pub.layers.corpus.corpus.json), [`doc/ref/pub.layers.corpus.membership.json`](../ref/pub.layers.corpus.membership.json), [`doc/ref/pub.layers.corpus.defs.json`](../ref/pub.layers.corpus.defs.json) — source schemas
 - [`lexicons/com.superbfowle.tass.resonance.json`](../../lexicons/com.superbfowle.tass.resonance.json) — tassle's current resonance schema
+
+---
+
+# Resonance design — round 2 (resolutions)
+
+The first-round discussion above landed on enough convergences to update the design. This section records what was settled, answers the direct questions that came back, and proposes a concrete v2 sketch with sample typeDefs. New open questions at the end.
+
+## What got settled
+
+1. **Reverie and Mage are peer ontologies, not nested.** The Pattern A example in round 1 (`Reverie extends Mage via parentRef`) was wrong. Mage and Reverie are independent cosmologies that exist at the same level. A given Reality persona can compose both via corpus membership (Pattern B), but neither is the parent of the other.
+
+2. **`parentRef` is for *intra-ontology* hierarchies.** Inside the Mage ontology, `Dynamic` can `parentTypeRef` up to a broader `Mage-Resonance` parent type, which itself can `parentTypeRef` up to a `Mage-Attribute` parent. Cross-ontology lineage (Mage ↔ Reverie) does *not* use `parentRef` — it uses corpus composition.
+
+3. **Annotation as the instance frame is adopted.** A resonance profile on a Node or Tass is an annotation layer over that entity; the canonical resonance types are attribute-type defs in the ontology. This is the framing shift from round 1 that we're keeping.
+
+4. **A new `com.superbfowle.tass.reality` collection** is the canonical-authority persona. It is a published record owned by an account (often the tassle project itself, or a Storyteller's account), declares which ontologies this reality accepts, and is the `personaRef` that every annotation layer published under this reality carries. **One account can publish multiple realities** — three different Mage chronicles, a Reverie campaign, an experimental homebrew — each as a separate reality record.
+
+5. **Persona splits into two roles**:
+   - **Reality persona** (the new `com.superbfowle.tass.reality`): the authority, owns the cosmology + review rules, publishes annotation layers down onto entities. Source of truth for "what counts in this world".
+   - **Player persona** (theMage character, equivalent to rpg.actor's `actor.rpg.stats`): owns their sheet, can publish their own annotation layers over themselves, but is not an authority over consensus reality.
+   
+   These are different records with different lexicons. A reality is a layers.pub `persona` analogue; a player is an rpg.actor `actor` whose sheet is annotated *by* reality personas.
+
+6. **Corpus is the authority + composition mechanism.** A reality persona publishes a corpus that declares `ontologyRefs: [<Mage ontology>, <Reverie ontology>, <custom homebrew>]` plus an `annotationDesign` describing the review process. Consensus-reality modifications ("can we add a new canonical resonance?") flow through corpus membership rules.
+
+7. **Range spec is tassle-native, parallel to `allowedValues`.** We define a tassle-local `allowedRange` def with shape `{min, max, type: "integer" | "number", step?}`. Defer the integer-vs-number distinction at first (treat everything as integer; fractional quintessence is a known future need). Naming chosen to be parallel to `allowedValues` so future cross-ecosystem tools can dispatch on either.
+
+8. **rpg.actor integration is via annotation, not duplication.** Tassle does not redefine spheres, arete, quintessence, paradox — those already live in `actor.rpg.stats/mage`. Tassle publishes *annotation layers* over that sheet: "this `prime` rating of 3 is annotated by theMage-reality persona with these provenance/guideline notes". The entity being annotated is the rpg.actor sheet.
+
+## Direct answers
+
+### What is `main` and why is it everywhere?
+
+`main` is just convention. In an ATProto lexicon file, `defs` is a map of named definitions; the **record** type that the collection's records take their shape from is conventionally named `main`. So `pub.layers.ontology.ontology.json` has `defs.main` of `type: "record"` because every record published to the `pub.layers.ontology.ontology` collection uses that shape, and the convention is to call that def `main`.
+
+You can name defs anything — `defs.resonanceCanonical`, `defs.sphereTypeDef`, whatever. The convention exists because:
+- `com.atproto.repo.getRecord` and similar tools historically look for `#main` as the default record shape
+- Most lexicons have only one record type, so the single def might as well be `main`
+- Sub-defs (object shapes that the record references) get descriptive names (`roleSlot`, `featureMap`, `knowledgeRef`)
+
+For tassle v2, multi-def lexicons should use descriptive names (`cosmology`, `resonanceType`, `rangeSpec`). The record def can stay `main` for tool compatibility, but every reusable sub-shape gets a real name.
+
+### How does `pub.layers.graph.graphEdge` work?
+
+A `graphEdge` record is one directed typed edge between any two Layers objects. The shape:
+
+```
+{
+  source: objectRef,        # one of: localId (UUID), recordRef (AT-URI), knowledgeRef (external KB)
+  target: objectRef,        # same shape as source
+  edgeType: string,         # slug from knownValues list, OR edgeTypeUri for full reference
+  label: string,            # optional human-readable label
+  ordinal: integer,         # optional ordering
+  confidence: integer,      # 0-1000
+  properties: featureMap,   # open key-value properties on this edge
+  metadata: annotationMetadata,
+  createdAt: datetime
+}
+```
+
+The `edgeType` knownValues list is huge — `coreference`, `derived-from`, `supports`, `contradicts`, `same-as`, `type-of`, plus Allen temporal relations and RCC-8 spatial relations. For tassle we'd mostly use:
+
+- `derived-from` — a Tass is derived-from its Node
+- `contradicts` — Dynamic contradicts Static (this is the opposedTo relation)
+- `supports` — a resonance complements another (e.g. certain resonant pairs are canonically synergistic)
+- `type-of` — a custom canonical is a type-of a parent canonical
+- `annotates` — a resonance profile annotation annotates its target entity
+
+A separate `graphEdgeSet` record batches many edges into one published record for high-volume relationships. For tassle's small graphs (one Triat = 3 nodes + 3 opposed-to edges) a single `graphEdgeSet` would do.
+
+The `graphNode` record is for entities that don't have their own record — floating concepts. Most tassle entities (Nodes, Tass, Mages) *do* have their own records and are "implicitly nodes via objectRef" — no separate `graphNode` record needed.
+
+### What is `roleSlot` and do we need it?
+
+A `roleSlot` is a named position in a frame/situation type definition. From `pub.layers.ontology.defs#roleSlot`:
+
+```
+{
+  roleName: string,         # e.g. "Agent", "Patient", "Theme", "ARG0"
+  roleDescription: string,
+  fillerTypeRefs: at-uri[], # which typeDefs can fill this slot
+  collectionRef: at-uri,    # OR a resource.collection constraining fillers
+  required: boolean,
+  defaultValue: string,
+  constraints: constraint[],# declarative constraints on fillers
+  knowledgeRefs: knowledgeRef[],
+  features: featureMap
+}
+```
+
+It's the linguistic concept of a *frame slot* — like Fillmore's frame semantics where a "Buying" frame has Agent, Patient, Theme, Source roles. A `situation-type` typeDef for "Buying" would list its `allowedRoles` as those four roleSlots.
+
+**Tassle relevance: skip for v1, plan for rituals.** Resonance canonicals and spheres are attribute-types; they don't have roles. Rituals (later) are situation-types: a `Working` situation might have roleSlots for `Lead Mage`, `Secondary Mage`, `Target`, `Focus Object`, each with `fillerTypeRefs` constraining what entity types can fill them. When tassle gets to modeling rituals/workings as records, roleSlot is the right shape. Not needed yet.
+
+### What is `featureMap`?
+
+The shape is `{entries: feature[]}` where `feature` is an open key-value entry (the file shows it has its own def). The intended use is for arbitrary typed key-value properties that don't fit the structured fields.
+
+The user asked: *"we might want to make features which are the eponymous name of the def. features: { quintessence: ... }? but that too is also needing enumerated string list?"*
+
+Two answers:
+
+- For **eponymous features** (a feature named after the def it's characterizing), the featureMap pattern works — `features: { entries: [{key: "quintessence", value: 5}, {key: "prime", value: 3}, ...] }` is fine.
+- For **typed values** (integer / number / enumerated string), the layers.pub `feature` shape supports all of these — see [`doc/ref/pub.layers.defs.json#feature`](../ref/pub.layers.defs.json). We do not need a separate enumerated-string-list mechanism on top of featureMap; it's already there.
+
+That said: for the *definitional* shape of an attribute (what range can this attribute take?), featureMap is the wrong tool. Use `allowedRange` for numeric and `allowedValues` for enumerated strings, as typeDef fields. FeatureMap is for *instance* properties (what's the value on this specific entity?), not *definitional* constraints.
+
+## A concrete v2 sketch with sample typeDefs
+
+Two new collections plus the existing resonance lib restructured.
+
+### `com.superbfowle.tass.reality` (new) — the authority persona
+
+A reality is what an account publishes to declare "this is a game reality I run". It is the persona that owns consensus-reality annotations. Multiple per account.
+
+```json
+{
+  "$type": "com.superbfowle.tass.reality",
+  "name": "The Tuesday Chronicles",
+  "description": "My home Mage chronicle, Tuesday nights, Reverie-compatible crossover.",
+  "system": "mage",
+  "domain": "custom",
+  "domainUri": "at://did:plc:kwgllf365cwmxbnxitx4pjdj/pub.layers.graph.graphNode/<rpg-cosmology-node>",
+  "kind": "expert-panel",
+  "ontologyRefs": [
+    "at://did:plc:<tassle-authority>/pub.layers.ontology.ontology/<mage-cosmology-rkey>",
+    "at://did:plc:<tassle-authority>/pub.layers.ontology.ontology/<reverie-cosmology-rkey>"
+  ],
+  "knowledgeRefs": [
+    { "source": "custom", "identifier": "mage-revised", "uri": "https://whitewolf.fandom.com/wiki/Mage:_The_Ascension", "label": "Mage Revised" }
+  ],
+  "features": { "entries": [
+    { "key": "paradoxRule", "value": "backlash-per-5" },
+    { "key": "quintessenceCap", "value": "avatar-rating-times-five" }
+  ] },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+This is structurally a layers.pub `persona.persona` (same `domain`/`domainUri`/`kind`/`parentRef`/`ontologyRefs`/`guidelines`/`knowledgeRefs`/`features` shape) with a tassle-specific `system` field kept for back-compat with the existing resonance schema. The `system` field becomes a tag that says "this reality operates in Mage cosmology" — separate from the `ontologyRefs[]` which can compose multiple peer cosmologies.
+
+### `com.superbfowle.tass.cosmology` (new) — analog of `pub.layers.ontology.ontology`
+
+Peers, never nested across systems. Mage, Reverie, Vampire Roads, custom homebrews are all cosmology records at the same level. `parentRef` is reserved for "this cosmology is a revision/edition of another cosmology" (e.g. Mage M20 → Mage Revised as a *publishing lineage*, not a cosmological-lineage).
+
+```json
+{
+  "$type": "com.superbfowle.tass.cosmology",
+  "name": "Mage: The Ascension",
+  "description": "World of Darkness consensus-reality model. Awakened beings reshape reality through nine spheres of magick, fueled by Quintessence, balanced against Paradox.",
+  "version": "M20-rev",
+  "domain": "custom",
+  "domainUri": "at://did:plc:kwgllf365cwmxbnxitx4pjdj/pub.layers.graph.graphNode/<rpg-cosmology-node>",
+  "parentRef": "at://did:plc:<authority>/com.superbfowle.tass.cosmology/<mage-revised-rkey>",
+  "personaRef": "at://did:plc:<authority>/com.superbfowle.tass.reality/<rkey-of-canonical-Mage-reality>",
+  "knowledgeRefs": [
+    { "source": "custom", "identifier": "whitewolf-mage-revised", "uri": "https://whitewolf.fandom.com/wiki/Mage:_The_Ascension", "label": "Mage Revised" },
+    { "source": "custom", "identifier": "whitewolf-mage-M20", "uri": "https://www.drivethrurpg.com/product/181757", "label": "Mage 20th Anniversary Edition" }
+  ],
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+### `com.superbfowle.tass.typeDef` (new, replaces `com.superbfowle.tass.resonance.main`)
+
+The actual type definitions — spheres, resonance canonicals, quintessence, arete, etc. This is parallel to `pub.layers.ontology.typeDef` but with a tassle-native `allowedRange` and a reduced `kind` set.
+
+**Sample: Quintessence as an attribute typedef**
+
+```json
+{
+  "$type": "com.superbfowle.tass.typeDef",
+  "cosmologyRef": "at://did:plc:<authority>/com.superbfowle.tass.cosmology/<mage-cosmology-rkey>",
+  "name": "Quintessence",
+  "kind": "attribute",
+  "gloss": "Raw magickal energy channeled by Avatars through the Sphere of Prime. Mages store up to their Avatar rating in their pattern; Nodes produce it; Tass is its crystallized form.",
+  "parentTypeRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<mage-energy-attribute-rkey>",
+  "allowedRange": { "min": 0, "max": 20, "type": "integer" },
+  "knowledgeRefs": [
+    { "source": "custom", "identifier": "mage-revised-prime", "uri": "https://whitewolf.fandom.com/wiki/Quintessence_(MTAs)", "label": "Quintessence, Mage Revised" }
+  ],
+  "features": { "entries": [
+    { "key": "carriedBy", "value": "actor.rpg.stats/mage" },
+    { "key": "canonicalField", "value": "quintessence" }
+  ] },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+Note the **`features.carriedBy` and `features.canonicalField`** — these are how the typeDef points at the rpg.actor field that already stores the value. Tassle does *not* duplicate quintessence; it publishes an annotation layer over `actor.rpg.stats/mage` whose entries reference this typeDef.
+
+**Sample: a sphere as an attribute typedef**
+
+```json
+{
+  "$type": "com.superbfowle.tass.typeDef",
+  "cosmologyRef": "at://did:plc:<authority>/com.superbfowle.tass.cosmology/<mage-cosmology-rkey>",
+  "name": "Prime",
+  "kind": "attribute",
+  "gloss": "The Sphere of raw magick itself. Governs Quintessence, Tass, Nodes, and the energetic underpinnings of all working.",
+  "parentTypeRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<sphere-attribute-rkey>",
+  "allowedRange": { "min": 0, "max": 5, "type": "integer" },
+  "knowledgeRefs": [
+    { "source": "custom", "identifier": "mage-revised-prime-sphere", "uri": "https://whitewolf.fandom.com/wiki/Prime_(Sphere)", "label": "Prime Sphere" }
+  ],
+  "features": { "entries": [
+    { "key": "carriedBy", "value": "actor.rpg.stats/mage" },
+    { "key": "canonicalField", "value": "prime" }
+  ] },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+**Sample: a resonance canonical as an attribute typedef**
+
+```json
+{
+  "$type": "com.superbfowle.tass.typeDef",
+  "cosmologyRef": "at://did:plc:<authority>/com.superbfowle.tass.cosmology/<mage-cosmology-rkey>",
+  "name": "Dynamic",
+  "kind": "attribute",
+  "gloss": "The Wyld. Creative chaos, unshaped potential, the principle of change. Opposed to Static (the Weaver).",
+  "parentTypeRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<mage-resonance-attribute-rkey>",
+  "allowedRange": { "min": -1, "max": 1, "type": "number" },
+  "knowledgeRefs": [
+    { "source": "custom", "identifier": "mage-revised-wyld", "uri": "https://whitewolf.fandom.com/wiki/Wyld", "label": "Wyld / Dynamic Resonance" }
+  ],
+  "features": { "entries": [
+    { "key": "cosmology", "value": "Wyld" },
+    { "key": "triatRole", "value": "creator" }
+  ] },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+The `parentTypeRef` here points at a `mage-resonance-attribute` parent typeDef, which itself points at `mage-attribute` — that's the intra-ontology nesting you liked. The Mage cosmology has one big typeDef tree:
+
+```
+Mage-Attribute
+├── Mage-Resonance
+│   ├── Dynamic         (allowedRange: -1 to +1, number)
+│   ├── Static          (allowedRange: -1 to +1, number)
+│   └── Primordial      (allowedRange: -1 to +1, number)
+├── Mage-Sphere
+│   ├── Correspondence  (allowedRange: 0 to 5, integer)
+│   ├── Entropy         (...)
+│   ├── Forces          (...)
+│   ├── Life            (...)
+│   ├── Matter          (...)
+│   ├── Mind            (...)
+│   ├── Prime           (...)
+│   ├── Spirit          (...)
+│   └── Time            (...)
+├── Mage-Energy
+│   ├── Quintessence    (allowedRange: 0 to 20, integer)
+│   └── Paradox         (allowedRange: 0 to 20, integer)
+└── Mage-Meta
+    ├── Arete           (allowedRange: 0 to 10, integer)
+    └── Willpower       (...)
+```
+
+This is all *inside* the Mage cosmology. The Reverie cosmology has its own tree. The two cosmologies are peers; nothing in Reverie has a `parentTypeRef` into Mage.
+
+### `opposedTo` as a typed graphEdge
+
+```json
+{
+  "$type": "pub.layers.graph.graphEdge",
+  "source": { "recordRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<dynamic-rkey>" },
+  "target": { "recordRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<static-rkey>" },
+  "edgeType": "contradicts",
+  "label": "opposedTo",
+  "confidence": 1000,
+  "properties": { "entries": [
+    { "key": "triatRelation", "value": "opposite-poles" }
+  ] },
+  "metadata": {
+    "author": "did:plc:<authority>",
+    "tool": "tassle",
+    "createdAt": "2026-06-21T20:00:00Z"
+  },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+The existing `edgeType: "contradicts"` from layers.pub's knownValues list is a decent fit for opposedTo; the `label: "opposedTo"` carries theMage-specific name. For multiple Triat relations in one published record, use a `graphEdgeSet`.
+
+The bidirectional inverse (Static opposedTo Dynamic) is a separate edge record — graphEdge is directed. Either publish both or have consumers treat `contradicts` as semantically bidirectional for tassle purposes.
+
+### An annotation layer instance (the resonance profile on a Node)
+
+This is what the current `resonanceProfile` def becomes — an instance, not a definition:
+
+```json
+{
+  "$type": "com.superbfowle.tass.annotationLayer",
+  "targetRef": { "recordRef": "at://did:plc:<mage>/com.superbfowle.tass.node/<rkey>" },
+  "personaRef": "at://did:plc:<authority>/com.superbfowle.tass.reality/<rkey-of-Mage-reality>",
+  "ontologyRef": "at://did:plc:<authority>/com.superbfowle.tass.cosmology/<mage-cosmology-rkey>",
+  "annotations": [
+    {
+      "typeRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<dynamic-rkey>",
+      "value": 0.7,
+      "confidence": 800
+    },
+    {
+      "typeRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<primordial-rkey>",
+      "value": 0.3,
+      "confidence": 600
+    }
+  ],
+  "metadata": {
+    "author": "did:plc:<storyteller>",
+    "tool": "tassle",
+    "createdAt": "2026-06-21T20:00:00Z"
+  },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+The structure mirrors `pub.layers.annotation.annotationLayer` with tassle-specific simplification. The `personaRef` is the *reality* persona (authority); a player persona can publish their own `annotationLayer` over themselves with their own `personaRef` to declare self-assessed resonance.
+
+### An annotation layer over rpg.actor quintessence
+
+```json
+{
+  "$type": "com.superbfowle.tass.annotationLayer",
+  "targetRef": { "recordRef": "at://did:plc:<mage-did>/actor.rpg.stats/mage" },
+  "personaRef": "at://did:plc:<authority>/com.superbfowle.tass.reality/<rkey>",
+  "ontologyRef": "at://did:plc:<authority>/com.superbfowle.tass.cosmology/<mage-cosmology-rkey>",
+  "annotations": [
+    {
+      "typeRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<quintessence-rkey>",
+      "fieldPath": "quintessence",
+      "observedValue": 5,
+      "assertedAt": "2026-06-21T20:00:00Z",
+      "confidence": 1000
+    },
+    {
+      "typeRef": "at://did:plc:<authority>/com.superbfowle.tass.typeDef/<prime-sphere-rkey>",
+      "fieldPath": "prime",
+      "observedValue": 3,
+      "assertedAt": "2026-06-21T20:00:00Z",
+      "confidence": 1000
+    }
+  ],
+  "metadata": { "tool": "tassle", "author": "did:plc:<authority>", "createdAt": "2026-06-21T20:00:00Z" },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+This is the answer to "how can we use rpg.actor's sense of quintessence". TheMage sheet's `quintessence` field (integer 0-20, per `actor.rpg.stats/mage`) is the authoritative value; tassle's annotation layer cites it by `fieldPath` and stamps it with provenance (which reality, which ontology, when observed). No duplication. If the sheet changes, the annotation layer can be republished; consumers comparing the annotation's `observedValue` to the sheet's current value can detect drift.
+
+## What this means for existing tassle lexicons
+
+Migration path for the current lexicons:
+
+| Current | v2 |
+| --- | --- |
+| `com.superbfowle.tass.resonance.main` (canonical record) | migrates to `com.superbfowle.tass.typeDef` records |
+| `com.superbfowle.tass.resonance.resonanceValue` | absorbed into the `annotations[]` array of `com.superbfowle.tass.annotationLayer` |
+| `com.superbfowle.tass.resonance.resonanceProfile` | becomes `com.superbfowle.tass.annotationLayer` itself |
+| `com.superbfowle.tass.resonance` (the collection) | kept as a back-compat namespace; new records go to the new collections |
+| `com.superbfowle.tass.node.resonance` (inline profile) | becomes a `targetRef` to a separately published `annotationLayer` |
+| `com.superbfowle.tass.tassilize`/`meditate`/`enervate` | unchanged for now (action records), but each can publish an `annotationLayer` as a side-effect of the energy transfer |
+
+No need to delete or migrate existing records — the v2 collections are additive. New code writes to the new collections; old records continue to validate against the old lexicon.
+
+## Open questions (round 2)
+
+1. **Should `com.superbfowle.tass.reality` carry an explicit `system` field, or just infer from `ontologyRefs`?** The current proposal has both — `system: "mage"` as a denormalized tag plus `ontologyRefs` as the canonical list. The tag is for fast filtering without resolving the ontology refs; the list is for the actual authority. Is the redundancy worth it?
+
+2. **Where does the *canonical* Mage reality live?** Should the tassle project itself (under `com.superbfowle.tass` NSID authority) publish one "canonical Mage" reality record that downstream consumers treat as the default? Or should every Storyteller publish their own and there's no canonical?
+
+3. **`features.carriedBy` pointing at rpg.actor — what are the integrity implications?** If rpg.actor changes theMage sheet schema (e.g. renames `quintessence` to `patternEnergy`), every tassle typeDef with that `carriedBy` is stale. Need a versioning story.
+
+4. **Does each Mage reality need its own copy of the cosmology + typeDefs, or do they all reference a shared published set?** If my friend and I both run Mage chronicles, do we both publish our own `Dynamic` typeDef records (with different rkeys) or do we both reference the canonical Mage cosmology's `Dynamic` typeDef? The latter is much less duplication but requires the canonical Mage cosmology to be published somewhere durable.
+
+5. **Fractional quintessence — when?** The `allowedRange.type: "integer" | "number"` field is in the spec but the v1 sketch treats everything as integer. The user wants fractional quintessence eventually (with synthetic canonical quintessence derived from the fractional value). When does this become concrete enough to design?
+
+6. **Annotation layers as changelog entries.** Each annotation layer could itself be a changelog entry against the target entity (per the lexicon-ideas.md theme 11). Worth unifying from the start, or keep them separate collections?
+
+7. **OpposedTo as `contradicts` or as a custom edgeType?** Layers.pub's `edgeType: "contradicts"` is in the knownValues list and is semantically correct, but it carries NLP baggage (claim contradiction). Worth proposing a custom `"opposed-to"` to layers.pub upstream, or just use `contradicts` with a `label: "opposedTo"` override?
+
+8. **The reality persona's `kind` field.** Layers.pub persona kinds are `human-annotator` / `ml-model` / `guidelines-persona` / `expert-panel` / `crowd-worker` / `custom`. For a reality, `expert-panel` (a Storyteller + their advisory circle) or `guidelines-persona` (a published rules framework) seem closest. Worth adding `"game-reality"` or `"chronicle"` to the upstream knownValues?
+
+9. **Does tassle publish its own `com.superbfowle.tass.rangeSpec` def, or extend `pub.layers.ontology.typeDef#allowedValues`?** Parallel naming (`allowedRange` next to `allowedValues`) is clean but creates a tassle-local concept. Could contribute `rangeSpec` to layers.pub upstream — the use case (any scientific measurement, any game system with bounded attributes) is general.
+
+10. **When a player annotates themselves vs. when a reality annotates them — what's the trust story?** A Mage's self-published `annotationLayer` over their own sheet carries different weight than the reality's authoritative `annotationLayer` over the same sheet. AppViews need a clear way to dispatch.
+
+## See also (round 2 additions)
+
+- [`doc/ref/pub.layers.defs.json`](../ref/pub.layers.defs.json) — for `featureMap`, `feature`, `knowledgeRef`, `objectRef`, `annotationMetadata` shapes
+- [`doc/ref/pub.layers.graph.graphEdge.json`](../ref/pub.layers.graph.graphEdge.json) — full graphEdge schema with the 60+ knownValues edge types
+- [`doc/ref/pub.layers.persona.persona.json`](../ref/pub.layers.persona.persona.json) — the persona shape that `com.superbfowle.tass.reality` mirrors
+- [`doc/ref/actor.rpg.stats.json`](../ref/actor.rpg.stats.json) — the entity being annotated; `mageStats.quintessence` is at integer 0-20
