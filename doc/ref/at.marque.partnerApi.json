@@ -1,0 +1,39 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.partnerApi",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Marque",
+      "detail": "Register and manage your domains and their DNS records",
+      "permissions": [
+        {
+          "type": "permission",
+          "action": [
+            "create",
+            "update",
+            "delete"
+          ],
+          "resource": "repo",
+          "collection": [
+            "at.marque.dns",
+            "at.marque.domain"
+          ]
+        },
+        {
+          "lxm": [
+            "at.marque.partner.listPricing",
+            "at.marque.partner.checkAvailability",
+            "at.marque.partner.createCheckout",
+            "at.marque.partner.getOrder"
+          ],
+          "type": "permission",
+          "resource": "rpc",
+          "inheritAud": true
+        }
+      ],
+      "title:langs": {},
+      "detail:langs": {}
+    }
+  }
+}

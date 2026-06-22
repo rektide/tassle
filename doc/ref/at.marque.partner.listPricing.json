@@ -1,0 +1,81 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.partner.listPricing",
+  "description": "List the TLDs Marque offers and their prices, for partner integrations.",
+  "defs": {
+    "tld": {
+      "type": "object",
+      "required": [
+        "tld",
+        "registerPrice",
+        "renewPrice",
+        "transferPrice"
+      ],
+      "properties": {
+        "tld": {
+          "type": "string",
+          "description": "The TLD including leading dot, e.g. .com."
+        },
+        "popular": {
+          "type": "boolean",
+          "description": "Whether this TLD is featured as popular."
+        },
+        "maxPeriod": {
+          "type": "integer",
+          "description": "Maximum registration period in years. Upper bound for an item's years in createCheckout; a larger value is capped to this."
+        },
+        "minPeriod": {
+          "type": "integer",
+          "description": "Minimum registration period in years. Use as the lower bound for an item's years in createCheckout; a smaller value is raised to this."
+        },
+        "renewPrice": {
+          "type": "integer",
+          "description": "Renewal price per year, in whole US dollars."
+        },
+        "tldUnicode": {
+          "type": "string",
+          "description": "Unicode display form of the TLD, if it differs from the ASCII form."
+        },
+        "registerPrice": {
+          "type": "integer",
+          "description": "Registration price per year, in whole US dollars."
+        },
+        "transferPrice": {
+          "type": "integer",
+          "description": "Transfer price, in whole US dollars."
+        },
+        "transferAddsYear": {
+          "type": "boolean",
+          "description": "Whether a transfer of this TLD adds a year of registration."
+        },
+        "whoisPrivacyAllowed": {
+          "type": "boolean",
+          "description": "Whether WHOIS privacy can be enabled for this TLD. When false, the years field in createCheckout still applies but whoisPrivacy is ignored."
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "output": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "tlds"
+          ],
+          "properties": {
+            "tlds": {
+              "type": "array",
+              "items": {
+                "ref": "#tld",
+                "type": "ref"
+              },
+              "description": "All offered TLDs, one entry each."
+            }
+          }
+        },
+        "encoding": "application/json"
+      },
+      "description": "Return the full catalog of available TLDs with register, renew, and transfer prices. Call it proxied through the user's PDS (atproto-proxy: did:web:marque.at#marque_registrar) with an at.marque.partnerApi-scoped token. Prices are in whole US dollars and may change; they exclude tax and any premium-domain surcharge (use checkAvailability for the price of a specific domain). Does not include premium pricing, which is per-domain."
+    }
+  }
+}

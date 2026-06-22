@@ -1,0 +1,110 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.partner.getOrder",
+  "description": "Get the status of a partner checkout order and the resulting domain details.",
+  "defs": {
+    "item": {
+      "type": "object",
+      "required": [
+        "domain",
+        "status"
+      ],
+      "properties": {
+        "domain": {
+          "type": "string",
+          "maxLength": 253,
+          "description": "The fully qualified domain name."
+        },
+        "status": {
+          "type": "string",
+          "description": "Per-domain provisioning status. pending: not yet registered. active: registered successfully. failed: registration failed for this domain.",
+          "knownValues": [
+            "pending",
+            "active",
+            "failed"
+          ]
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "When the registration expires. Present once the item is active. Write this into the at.marque.domain record."
+        },
+        "nameServers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253
+          },
+          "description": "Authoritative nameservers assigned to the domain. Present once the item is active."
+        },
+        "registeredAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "When the domain was registered upstream. Present once the item is active."
+        }
+      }
+    },
+    "main": {
+      "type": "query",
+      "errors": [
+        {
+          "name": "NotFound",
+          "description": "No order with that id is owned by the authenticated user."
+        }
+      ],
+      "output": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "orderId",
+            "status",
+            "items"
+          ],
+          "properties": {
+            "error": {
+              "type": "string",
+              "description": "Failure reason when status is failed."
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "ref": "#item",
+                "type": "ref"
+              },
+              "description": "One entry per domain in the order, in the order submitted to createCheckout."
+            },
+            "status": {
+              "type": "string",
+              "description": "Overall order status. awaitingPayment: the user has not completed Stripe checkout. paid: payment captured, registration queued. provisioning: registering with the registry. provisioned: all domains registered (individual items may still be failed). failed: the order could not be provisioned.",
+              "knownValues": [
+                "awaitingPayment",
+                "paid",
+                "provisioning",
+                "provisioned",
+                "failed"
+              ]
+            },
+            "orderId": {
+              "type": "string",
+              "description": "Echoes the requested order id."
+            }
+          }
+        },
+        "encoding": "application/json"
+      },
+      "parameters": {
+        "type": "params",
+        "required": [
+          "orderId"
+        ],
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "The order id returned by createCheckout."
+          }
+        }
+      },
+      "description": "Poll an order created by createCheckout. Call it proxied through the user's PDS (atproto-proxy: did:web:marque.at#marque_registrar) with an at.marque.partnerApi-scoped token; only orders owned by the authenticated user (the JWT iss) are returned. Status flows awaitingPayment (user has not finished paying) -> paid -> provisioning -> provisioned (or failed). Poll every few seconds until provisioned or failed. Once provisioned, each item carries the registeredAt, expiresAt, and nameServers the partner needs to write the at.marque.domain and at.marque.dns records into the user's repository. Individual items can be failed even when the order is provisioned (a partial failure); check each item's status."
+    }
+  }
+}

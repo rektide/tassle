@@ -1,0 +1,65 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.dns.getDsRecords",
+  "description": "Get the DNSSEC DS records for a managed zone.",
+  "defs": {
+    "main": {
+      "type": "query",
+      "errors": [
+        {
+          "name": "NotFound",
+          "description": "The specified domain was not found or has no DNSSEC keys."
+        }
+      ],
+      "output": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "domain",
+            "ds"
+          ],
+          "properties": {
+            "ds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "digest": {
+                    "type": "string"
+                  },
+                  "keyTag": {
+                    "type": "integer"
+                  },
+                  "algorithm": {
+                    "type": "integer"
+                  },
+                  "digestType": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "domain": {
+              "type": "string"
+            }
+          }
+        },
+        "encoding": "application/json"
+      },
+      "parameters": {
+        "type": "params",
+        "required": [
+          "domain"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "The fully qualified domain name."
+          }
+        }
+      },
+      "description": "Fetch the DNSSEC DS (Delegation Signer) records for a domain to publish to the parent registrar."
+    }
+  }
+}

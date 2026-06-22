@@ -1,0 +1,228 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.partner.createCheckout",
+  "description": "Create a hosted Stripe Checkout session to register one or more domains for the calling user.",
+  "defs": {
+    "item": {
+      "type": "object",
+      "required": [
+        "domain"
+      ],
+      "properties": {
+        "years": {
+          "type": "integer",
+          "maximum": 10,
+          "minimum": 1,
+          "description": "Registration period in years. Defaults to the TLD minimum."
+        },
+        "domain": {
+          "type": "string",
+          "maxLength": 253,
+          "description": "Fully qualified domain name to register."
+        },
+        "autoRenew": {
+          "type": "boolean",
+          "description": "Mark the domain to auto-renew before expiry using the user's saved payment method. Defaults to false. Auto-renewal is charged separately from this order."
+        },
+        "whoisPrivacy": {
+          "type": "boolean",
+          "description": "Whether to redact the registrant's details from public WHOIS. Defaults to true (privacy on) when omitted; set false to publish the registrant's contact data. Silently ignored for TLDs that do not allow it, and for TLDs whose registry redacts WHOIS regardless (see whoisPrivacyAllowed from listPricing / checkAvailability)."
+        }
+      }
+    },
+    "main": {
+      "type": "procedure",
+      "input": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "items",
+            "registrant",
+            "successUrl",
+            "cancelUrl"
+          ],
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "ref": "#item",
+                "type": "ref"
+              },
+              "maxLength": 50,
+              "minLength": 1,
+              "description": "Domains to register in this order, 1 to 50. Every domain must currently be available (verify with checkAvailability first); if any is unavailable or on an unsupported TLD the whole call fails."
+            },
+            "cancelUrl": {
+              "type": "string",
+              "format": "uri",
+              "description": "Where Stripe redirects if the user cancels."
+            },
+            "registrant": {
+              "ref": "#registrant",
+              "type": "ref"
+            },
+            "successUrl": {
+              "type": "string",
+              "format": "uri",
+              "description": "Where Stripe redirects after successful payment. An order parameter carrying the order id is appended."
+            }
+          }
+        },
+        "encoding": "application/json"
+      },
+      "errors": [
+        {
+          "name": "InvalidRequest",
+          "description": "The request is malformed: no items, too many items (max 50), or an item with an invalid domain."
+        },
+        {
+          "name": "Unavailable",
+          "description": "A requested domain cannot be registered: it is taken, on an unsupported TLD, or could not be verified with the registry. The message identifies the domain."
+        },
+        {
+          "name": "InvalidRegistrant",
+          "description": "The registrant is missing a required field (including state/province where the country requires it) or is missing an extra field a specific TLD mandates. The message names what is missing."
+        },
+        {
+          "name": "InvalidCallback",
+          "description": "successUrl or cancelUrl is not a valid absolute https URL."
+        }
+      ],
+      "output": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "orderId",
+            "checkoutUrl",
+            "subtotalCents",
+            "currency"
+          ],
+          "properties": {
+            "orderId": {
+              "type": "string",
+              "description": "Opaque order id; pass to getOrder to poll status."
+            },
+            "currency": {
+              "type": "string",
+              "description": "ISO 4217 currency code of subtotalCents. Currently always usd."
+            },
+            "checkoutUrl": {
+              "type": "string",
+              "format": "uri",
+              "description": "Hosted Stripe Checkout URL to send the user to."
+            },
+            "subtotalCents": {
+              "type": "integer",
+              "description": "Order subtotal in cents, before tax. Tax (if any) is computed by Stripe on the hosted page and added on top, so the amount the user pays may be higher."
+            }
+          }
+        },
+        "encoding": "application/json"
+      },
+      "description": "Prices and validates the requested domains, ensures a registrant contact for the authenticated user, and returns a hosted Stripe Checkout URL. Call this proxied through the user's PDS (atproto-proxy: did:web:marque.at#marque_registrar) with a token holding the at.marque.partnerApi permission set: the authenticated user (the JWT iss) becomes the owner of the domains, and is the one billed on Stripe. The owning DID is taken from that authenticated session, never from input. The end user completes payment on Stripe's hosted page (where they see and confirm the exact domains and amount) and is redirected to successUrl with an order query parameter (successUrl?order=<orderId>) on success, or to cancelUrl if they abandon. Domains are not registered until payment is captured; poll at.marque.partner.getOrder with the returned orderId for provisioning status, then write the at.marque.domain and at.marque.dns records into the user's repository yourself. Only new registrations are supported here (no transfers or renewals)."
+    },
+    "registrant": {
+      "type": "object",
+      "required": [
+        "firstName",
+        "lastName",
+        "email",
+        "street",
+        "city",
+        "zipcode",
+        "country",
+        "phoneCountryCode",
+        "phoneSubscriber"
+      ],
+      "properties": {
+        "city": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "City or locality."
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 320,
+          "description": "Registrant email. Must be a real, monitored address: registries may send a verification message here, and registry/transfer notifications go to it."
+        },
+        "state": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "State, province, or region. Required for countries that mandate one (e.g. US, CA, AU, BR); send the full name or its ISO 3166-2 code (e.g. 'California' or 'CA'). Omit for countries that do not use one."
+        },
+        "street": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Street address including house/building number, e.g. '123 Main St'."
+        },
+        "country": {
+          "type": "string",
+          "maxLength": 2,
+          "minLength": 2,
+          "description": "ISO 3166-1 alpha-2 country code, uppercase, e.g. US, GB, DE. Determines which address/state rules apply."
+        },
+        "zipcode": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Postal/ZIP code. Required even where the country's format is loose."
+        },
+        "lastName": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Registrant's legal family name."
+        },
+        "firstName": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Registrant's legal given name."
+        },
+        "taxIdType": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Optional. Type of the tax identifier in taxIdValue, e.g. 'vat' for an EU VAT number or a registry-specific code. Send together with taxIdValue. Some TLDs (notably several EU ccTLDs registered to an organization) require a VAT number."
+        },
+        "taxIdValue": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional. The tax identifier itself, e.g. an EU VAT number like DE123456789. Paired with taxIdType."
+        },
+        "organization": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "Optional. If set, the domain is registered to this organization rather than an individual. Leave empty for a personal registration."
+        },
+        "phoneAreaCode": {
+          "type": "string",
+          "maxLength": 16,
+          "description": "Optional area/city code, for regions that use one separately from the subscriber number."
+        },
+        "passportNumber": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional. Passport or national identity document number. Required by a few ccTLDs for individual registrants."
+        },
+        "phoneSubscriber": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Local subscriber number, digits only. Combined with phoneCountryCode (and phoneAreaCode) to form the full phone number. Required."
+        },
+        "phoneCountryCode": {
+          "type": "string",
+          "maxLength": 8,
+          "description": "International calling code with a leading plus, e.g. +1 for US/CA or +44 for UK. Required."
+        },
+        "socialSecurityNumber": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional. National identification / social security number, where a TLD mandates it (e.g. certain Nordic or Latin American ccTLDs). Handle as sensitive data."
+        },
+        "companyRegistrationNumber": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Optional. Company/commercial register number. Required by some TLDs when registering to an organization (organization set)."
+        }
+      },
+      "description": "The person or organization that will own the domains (the WHOIS registrant). Marque creates one registrant contact from these fields and uses it as the registrant, admin, tech, and billing contact for every domain in this order. Collect these in the partner's UI; the end user never visits Marque. All names and addresses must be real and accurate. Most gTLDs require the registrant email to be verifiable, so a registry verification email may be sent to it after registration; an unverified address can cause some TLDs to suspend the domain until confirmed. Certain TLDs require extra fields beyond these (for example a tax/VAT or national ID); those orders fail with InvalidRegistrant naming the missing field, and are not yet supported through this endpoint."
+    }
+  }
+}

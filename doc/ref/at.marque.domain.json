@@ -1,0 +1,90 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.domain",
+  "description": "A domain registration managed by Marque. Stored in the user's repository.",
+  "defs": {
+    "main": {
+      "key": "any",
+      "type": "record",
+      "record": {
+        "type": "object",
+        "required": [
+          "domain",
+          "status",
+          "registeredAt",
+          "expiresAt",
+          "createdAt"
+        ],
+        "properties": {
+          "dnssec": {
+            "type": "boolean",
+            "description": "Whether DNSSEC is enabled."
+          },
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Fully qualified domain name, e.g. example.com."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current lifecycle status of the domain.",
+            "knownValues": [
+              "active",
+              "expiring",
+              "expired",
+              "transferPending"
+            ]
+          },
+          "autoRenew": {
+            "type": "boolean",
+            "description": "Whether the domain renews automatically before it expires."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Client-declared timestamp when this record was created."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the domain registration expires."
+          },
+          "nameServers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 253
+            },
+            "maxLength": 8,
+            "description": "Authoritative name servers for this domain."
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the domain was registered with the upstream registrar."
+          },
+          "whoisPrivacy": {
+            "type": "string",
+            "description": "WHOIS privacy status: on, off, gdpr (for TLDs with mandated data protection), or registry (for TLDs where the registry redacts WHOIS data by default).",
+            "knownValues": [
+              "on",
+              "off",
+              "gdpr",
+              "registry"
+            ]
+          },
+          "atprotoHandle": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "AT Protocol handle set on this domain, if any."
+          },
+          "atprotoVerified": {
+            "type": "boolean",
+            "description": "Whether the atproto handle has been verified via DNS."
+          }
+        }
+      },
+      "description": "Record representing a domain registered through Marque. The record key is the fully qualified domain name (e.g. example.com)."
+    }
+  }
+}

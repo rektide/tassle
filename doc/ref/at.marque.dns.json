@@ -1,0 +1,91 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.dns",
+  "description": "DNS zone records for a domain where Marque handles the nameservers. Stored in the user's repository.",
+  "defs": {
+    "main": {
+      "key": "any",
+      "type": "record",
+      "record": {
+        "type": "object",
+        "required": [
+          "domain",
+          "subject",
+          "records",
+          "createdAt"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Fully qualified domain name this zone belongs to. Denormalized from the subject record so consumers can read the FQDN without resolving the reference."
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "ref": "#entry",
+              "type": "ref"
+            },
+            "description": "The DNS resource records in this zone."
+          },
+          "subject": {
+            "ref": "com.atproto.repo.strongRef",
+            "type": "ref",
+            "description": "Strong reference to the at.marque.domain record this zone belongs to."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Client-declared timestamp when this record was last written."
+          }
+        }
+      },
+      "description": "Record containing the DNS zone entries for a domain managed by Marque. The record key matches the corresponding at.marque.domain record key (the FQDN)."
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "name",
+        "recordType",
+        "value",
+        "ttl"
+      ],
+      "properties": {
+        "ttl": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Time-to-live in seconds."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 253,
+          "description": "Record name relative to the zone apex. Use '@' for the apex itself."
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Record value / rdata."
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Priority value for MX and SRV records."
+        },
+        "recordType": {
+          "type": "string",
+          "description": "DNS record type.",
+          "knownValues": [
+            "A",
+            "AAAA",
+            "CNAME",
+            "MX",
+            "TXT",
+            "SRV",
+            "NS",
+            "CAA"
+          ]
+        }
+      },
+      "description": "A single DNS resource record."
+    }
+  }
+}

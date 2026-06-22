@@ -1,0 +1,115 @@
+{
+  "lexicon": 1,
+  "id": "at.marque.partner.checkAvailability",
+  "description": "Check availability and pricing for a batch of domains, for partner integrations.",
+  "defs": {
+    "main": {
+      "type": "query",
+      "output": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "results"
+          ],
+          "properties": {
+            "results": {
+              "type": "array",
+              "items": {
+                "ref": "#result",
+                "type": "ref"
+              },
+              "description": "One result per domain, in request order; blank entries are skipped."
+            }
+          }
+        },
+        "encoding": "application/json"
+      },
+      "parameters": {
+        "type": "params",
+        "required": [
+          "domains"
+        ],
+        "properties": {
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 253
+            },
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Fully qualified domain names to check, e.g. example.com."
+          }
+        }
+      },
+      "description": "Check up to 500 domains at once. Call it proxied through the user's PDS (atproto-proxy: did:web:marque.at#marque_registrar) with an at.marque.partnerApi-scoped token. Each result carries its own error field, so a single bad domain does not fail the batch. Prices are in whole US dollars and are indicative; the binding amount is set when createCheckout builds the Stripe session. Premium domains are flagged with isPremium and priced via premiumPrice."
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "domain",
+        "available"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Per-domain failure reason when the domain could not be checked or priced, e.g. invalid format, unsupported TLD, or not available via the registrar. When set, the pricing fields are absent or zero."
+        },
+        "price": {
+          "type": "integer",
+          "description": "Registration price per year, in whole US dollars. Absent for unavailable or errored domains."
+        },
+        "domain": {
+          "type": "string",
+          "maxLength": 253,
+          "description": "The fully qualified domain name that was checked, lowercased."
+        },
+        "status": {
+          "type": "string",
+          "description": "Registry status of the domain: free (available), premium (available at a premium price), or active (already registered, not available). Absent when the domain could not be checked (see error).",
+          "knownValues": [
+            "free",
+            "premium",
+            "active"
+          ]
+        },
+        "available": {
+          "type": "boolean",
+          "description": "Whether the domain can be registered now. True when status is free or premium."
+        },
+        "isPremium": {
+          "type": "boolean",
+          "description": "Whether this is a premium domain, priced individually by the registry rather than at the standard TLD price."
+        },
+        "maxPeriod": {
+          "type": "integer",
+          "description": "Maximum registration period in years for this TLD."
+        },
+        "minPeriod": {
+          "type": "integer",
+          "description": "Minimum registration period in years for this TLD."
+        },
+        "renewPrice": {
+          "type": "integer",
+          "description": "Renewal price per year, in whole US dollars."
+        },
+        "premiumPrice": {
+          "type": "integer",
+          "description": "Premium registration price, in whole US dollars, when isPremium is true."
+        },
+        "transferPrice": {
+          "type": "integer",
+          "description": "Transfer price, in whole US dollars. 0 when transferring this TLD does not cost a registration period."
+        },
+        "transferAddsYear": {
+          "type": "boolean",
+          "description": "Whether transferring this TLD adds a year of registration (and so is charged)."
+        },
+        "whoisPrivacyAllowed": {
+          "type": "boolean",
+          "description": "Whether WHOIS privacy can be enabled for this TLD at registration."
+        }
+      }
+    }
+  }
+}

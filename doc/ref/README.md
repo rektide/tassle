@@ -43,6 +43,15 @@ Tassle's own lexicons live in [`lexicons/`](../../lexicons/) at the repository r
 - **pds.ls:** [https://pds.ls/did:plc:grodm6zgmudwmhy3uyzoagaf](https://pds.ls/did:plc:grodm6zgmudwmhy3uyzoagaf)
 - **Note:** Only record-bearing schemas and `defs.json` files are included; the `get*.json` / `list*.json` XRPC query lexicons are intentionally skipped.
 
+### marque.at
+
+- **Publishing DID:** [`did:plc:nckosudltxrtrjkt4zz4jy5y`](https://lexicon.garden/identity/did:plc:nckosudltxrtrjkt4zz4jy5y) — handle `@marque.at`
+- **Base URL (fetched from):** `com.atproto.lexicon.schema` records on PDS `https://margin.cafe` — no static JSON mirror exists (`marque.at/lexicons/<NSID>.json` returns 404).
+- **Developer docs:** [https://marque.at](https://marque.at)
+- **lexicon.garden identity:** [https://lexicon.garden/identity/did:plc:nckosudltxrtrjkt4zz4jy5y](https://lexicon.garden/identity/did:plc:nckosudltxrtrjkt4zz4jy5y)
+- **pds.ls:** [https://pds.ls/did:plc:nckosudltxrtrjkt4zz4jy5y](https://pds.ls/did:plc:nckosudltxrtrjkt4zz4jy5y)
+- **Note:** DID↔handle binding confirmed via DNS TXT on both `_atproto.marque.at` and `_lexicon.marque.at` (both resolve to this DID). Publishes lexicons **only** via `com.atproto.lexicon.schema` records on its PDS (`margin.cafe`); there is no static mirror. All 10 files were reconstructed from the PDS records and normalized to the standard `{lexicon, id, description?, defs}` layout (the wrapping `$type` field is stripped). The namespace covers domain registration (`at.marque.domain`), DNS zone + DNSSEC management (`at.marque.dns` and its `getRecords` / `getDsRecords` queries), a partner/reseller checkout API (`at.marque.partner.*`, Stripe-based), and two auth permission-sets (`authFull`, `partnerApi`).
+
 ## Files
 
 | File | Source | NSID | Description | Notes |
@@ -107,6 +116,16 @@ Tassle's own lexicons live in [`lexicons/`](../../lexicons/) at the repository r
 | [`pub.layers.resource.templateComposition.json`](pub.layers.resource.templateComposition.json) | [layers.pub](https://layers.pub) | `pub.layers.resource.templateComposition` | A composition of templates (sequence, tree, or other structure). Used for mul… |  |
 | [`pub.layers.segmentation.defs.json`](pub.layers.segmentation.defs.json) | [layers.pub](https://layers.pub) | `pub.layers.segmentation.defs` | _(shared type definitions; no description)_ |  |
 | [`pub.layers.segmentation.segmentation.json`](pub.layers.segmentation.segmentation.json) | [layers.pub](https://layers.pub) | `pub.layers.segmentation.segmentation` | A segmentation record that binds one or more tokenizations to an expression. … |  |
+| [`at.marque.authFull.json`](at.marque.authFull.json) | [marque.at](https://marque.at) | `at.marque.authFull` | (permission-set; no description) |  |
+| [`at.marque.dns.getDsRecords.json`](at.marque.dns.getDsRecords.json) | [marque.at](https://marque.at) | `at.marque.dns.getDsRecords` | Get the DNSSEC DS records for a managed zone. |  |
+| [`at.marque.dns.getRecords.json`](at.marque.dns.getRecords.json) | [marque.at](https://marque.at) | `at.marque.dns.getRecords` | Get the active DNS records for a managed zone. |  |
+| [`at.marque.dns.json`](at.marque.dns.json) | [marque.at](https://marque.at) | `at.marque.dns` | DNS zone records for a domain where Marque handles the nameservers. Stored in… |  |
+| [`at.marque.domain.json`](at.marque.domain.json) | [marque.at](https://marque.at) | `at.marque.domain` | A domain registration managed by Marque. Stored in the user's repository. |  |
+| [`at.marque.partner.checkAvailability.json`](at.marque.partner.checkAvailability.json) | [marque.at](https://marque.at) | `at.marque.partner.checkAvailability` | Check availability and pricing for a batch of domains, for partner integrations. |  |
+| [`at.marque.partner.createCheckout.json`](at.marque.partner.createCheckout.json) | [marque.at](https://marque.at) | `at.marque.partner.createCheckout` | Create a hosted Stripe Checkout session to register one or more domains for t… |  |
+| [`at.marque.partner.getOrder.json`](at.marque.partner.getOrder.json) | [marque.at](https://marque.at) | `at.marque.partner.getOrder` | Get the status of a partner checkout order and the resulting domain details. |  |
+| [`at.marque.partner.listPricing.json`](at.marque.partner.listPricing.json) | [marque.at](https://marque.at) | `at.marque.partner.listPricing` | List the TLDs Marque offers and their prices, for partner integrations. |  |
+| [`at.marque.partnerApi.json`](at.marque.partnerApi.json) | [marque.at](https://marque.at) | `at.marque.partnerApi` | (permission-set; no description) |  |
 
 ## Known data quality issues
 
