@@ -1,0 +1,89 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.account.tokenPatronage",
+  "description": "Records a patronage rebate: a periodic distribution of treasury balance back to an active member in proportion to their patronage (consumer spending + provider earnings) during the rebate period. Written by the exchange to its own PDS when the distribution fires. One record per (recipient, period) pair \u2014 the exchange MUST NOT distribute twice for the same (recipient, period). Direct analog of REI's annual member dividend or a credit union's quarterly capital credit: every term is visible, the math is the same for every member, and the distribution is rule-based rather than discretionary. Receipts of work + this record together let a member reconstruct every CC their balance has touched.",
+  "defs": {
+    "main": {
+      "key": "tid",
+      "type": "record",
+      "record": {
+        "type": "object",
+        "required": [
+          "exchange",
+          "recipient",
+          "period",
+          "patronageScore",
+          "totalPatronage",
+          "tokensCredited",
+          "treasuryBefore",
+          "policy",
+          "createdAt"
+        ],
+        "properties": {
+          "period": {
+            "ref": "#period",
+            "type": "ref",
+            "description": "Rebate period [start, end). Receipts whose `completedAt` falls in this window contributed to the patronage tally."
+          },
+          "policy": {
+            "ref": "com.atproto.repo.strongRef",
+            "type": "ref",
+            "description": "Strong-ref to the exchangePolicy in effect at distribution time. Pins `patronageDistribution.fractionBps` + `treasuryDid` so the rebate math is reproducible offline."
+          },
+          "exchange": {
+            "type": "string",
+            "format": "did",
+            "description": "Exchange DID. MUST equal the repo this record is published in."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "recipient": {
+            "type": "string",
+            "format": "did",
+            "description": "DID receiving the patronage rebate."
+          },
+          "patronageScore": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "This recipient's patronage during the period \u2014 tokens spent as requester PLUS tokens earned as provider. Self-loop receipts count once (the doc's `selfLoop.feeWaived` already handles the fee carve-out)."
+          },
+          "tokensCredited": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Tokens debited from the treasury and credited to the recipient."
+          },
+          "totalPatronage": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Sum of all participating DIDs' patronage scores during the period. Lets a verifier reproduce the rebate share: `tokensCredited = floor(treasuryBefore * fractionBps / 10000 * patronageScore / totalPatronage)`."
+          },
+          "treasuryBefore": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Treasury balance immediately before this distribution period fired. Pinned for audit so verifiers can sum the per-recipient `tokensCredited` and confirm it equals `floor(treasuryBefore * fractionBps / 10000)` modulo rounding."
+          }
+        }
+      }
+    },
+    "period": {
+      "type": "object",
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "end": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "start": {
+          "type": "string",
+          "format": "datetime"
+        }
+      },
+      "description": "Half-open interval [start, end). Closed-loop cocore.dev uses calendar months in UTC by default."
+    }
+  }
+}

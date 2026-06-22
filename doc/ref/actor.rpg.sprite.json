@@ -1,0 +1,109 @@
+{
+  "lexicon": 1,
+  "id": "actor.rpg.sprite",
+  "description": "A sprite sheet for an RPG character avatar.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A user's RPG character sprite. Single-record user asset stored on the user's PDS.",
+      "key": "literal:self",
+      "record": {
+        "type": "object",
+        "required": ["spriteSheet", "createdAt"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "maxGraphemes": 50,
+            "description": "Display name for the character (optional, can differ from Bluesky display name)"
+          },
+          "spriteSheet": {
+            "type": "blob",
+            "accept": ["image/png"],
+            "maxSize": 10000000,
+            "description": "The sprite sheet image (PNG only). Max 10MB."
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "description": "Number of rows in the sprite sheet (typically 4 for directional sprites: down, left, right, up)"
+          },
+          "columns": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "description": "Number of columns per animation cycle"
+          },
+          "frames": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64,
+            "description": "Total number of animation frames"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "description": "Total width of the sprite sheet in pixels"
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "description": "Total height of the sprite sheet in pixels"
+          },
+          "frameWidth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 512,
+            "description": "Width of a single frame in pixels (if not auto-calculated from width/columns)"
+          },
+          "frameHeight": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 512,
+            "description": "Height of a single frame in pixels (if not auto-calculated from height/rows)"
+          },
+          "animationSpeed": {
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 2000,
+            "description": "Milliseconds per frame for animation playback. Defaults to 200 if omitted."
+          },
+          "source": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT-URI of the generator record this sprite was composed from, if any (e.g. at://did:plc:xxx/actor.rpg.generator/self)"
+          },
+          "isCustom": {
+            "type": "boolean",
+            "description": "True when this sprite was directly uploaded or drawn by the user (not composed or recomposed by the actor.rpg.generator pipeline). When set, tools such as the theatre will not recompose this sprite from generator layers."
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 32,
+            "maxGraphemes": 32,
+            "description": "Optional tag indicating how this sprite was generated. Known values: 'minecraft' (converted from a Minecraft skin via the rpg.actor Minecraft Spriter)."
+          },
+          "minecraftName": {
+            "type": "string",
+            "maxLength": 64,
+            "maxGraphemes": 64,
+            "description": "The Minecraft username or UUID this sprite was generated from. Only set when origin is 'minecraft'."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When this record was first created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When this record was last modified"
+          }
+        }
+      }
+    }
+  }
+}

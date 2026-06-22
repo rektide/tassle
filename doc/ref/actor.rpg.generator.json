@@ -1,0 +1,214 @@
+{
+  "lexicon": 1,
+  "id": "actor.rpg.generator",
+  "description": "Generator metadata and decomposed layers for a sprite built with the rpg.actor sprite generator.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Stores the individual recolored layers and configuration used to build a sprite via the generator. Enables recomposition by third-party tools (e.g. adding items/overlays) without the full generator pipeline. Single-record user asset stored on the user's PDS.",
+      "key": "literal:self",
+            "type": "string",
+            "maxLength": 20,
+            "description": "Body type used (e.g. 'male', 'female')."
+          },
+          "skin": {
+            "type": "object",
+            "description": "Skin configuration.",
+            "properties": {
+              "tone": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Gradient skin tone index."
+              },
+              "mode": {
+                "type": "string",
+                "maxLength": 10,
+                "description": "'gradient' or 'custom'."
+              },
+              "hex": {
+                "type": "string",
+                "maxLength": 7,
+                "description": "Custom skin hex color (if mode is custom)."
+              }
+            }
+          },
+          "eyes": {
+            "type": "object",
+            "description": "Eye color configuration.",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "maxLength": 10,
+                "description": "'gradient' or 'custom'."
+              },
+              "tone": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Gradient eye tone index."
+              },
+              "hex": {
+                "type": "string",
+                "maxLength": 7,
+                "description": "Custom eye hex color."
+              }
+            }
+          },
+          "layers": {
+            "type": "array",
+            "description": "Ordered array of recolored layer images, back-to-front. Body is always index 0. Each layer may also carry the suppression/class metadata needed for external recomposition.",
+            "maxLength": 20,
+            "items": {
+              "type": "object",
+              "required": ["id", "blob"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 30,
+                  "description": "Layer category identifier. Valid values: body, undies, feet, bottoms, tops, clothHands, necklaces, hair, bangs, beard, hind, facial, glasses, ears, headwear, lefthand, righthand, costume."
+                },
+                "blob": {
+                  "type": "blob",
+                  "accept": ["image/png"],
+                  "maxSize": 1000000,
+                  "description": "The recolored layer PNG."
+                },
+                "assetName": {
+                  "type": "string",
+                  "maxLength": 100,
+                  "description": "Generator asset filename (e.g. '001_basic_short')."
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 100,
+                  "description": "Human-readable name derived from the asset filename."
+                },
+                "colors": {
+                  "type": "object",
+                  "description": "Color selections applied to this layer. Only channels defined by the asset's colorway are included.",
+                  "properties": {
+                    "main": { "type": "string", "maxLength": 7 },
+                    "sub1": { "type": "string", "maxLength": 7 },
+                    "sub2": { "type": "string", "maxLength": 7 },
+                    "sub3": { "type": "string", "maxLength": 7 }
+                  }
+                },
+                "subtractMask": {
+                  "type": "blob",
+                  "accept": ["image/png"],
+                  "maxSize": 50000,
+                  "description": "Binary mask PNG. Opaque black pixels erase the composite below this layer before it is drawn. Extracted from the asset's colorway black regions at save time."
+                },
+                "behindRows": {
+                  "type": "array",
+                  "description": "Sprite-sheet row indices (0-3) where this layer should composite behind the body (destination-over). Row 0=down, 1=left, 2=right, 3=up. Omit for normal source-over on all rows.",
+                  "maxLength": 4,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  }
+                },
+                "suppress": {
+                  "type": "object",
+                  "description": "Suppression rules applied by this layer.",
+                  "properties": {
+                    "layers": {
+                      "type": "array",
+                      "description": "Layer IDs hidden when this layer is active.",
+                      "maxLength": 20,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 30
+                      }
+                    },
+                    "classes": {
+                      "type": "array",
+                      "description": "Class identifiers hidden when this layer is active.",
+                      "maxLength": 20,
+                      "items": {
+                        "type": "string",
+                        "maxLength": 90
+                      }
+                    }
+                  }
+                },
+                "layerClass": {
+                  "type": "string",
+                  "maxLength": 90,
+                  "description": "Class tag assigned to this layer (format <category>.<name>)."
+                },
+                "suppressAs": {
+                  "type": "object",
+                  "description": "Replacement art and metadata used when this layer is suppressed.",
+                  "properties": {
+                    "assetName": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 100
+                    },
+                    "blob": {
+                      "type": "blob",
+                      "accept": ["image/png"],
+                      "maxSize": 1000000
+                    },
+                    "subtractMask": {
+                      "type": "blob",
+                      "accept": ["image/png"],
+                      "maxSize": 50000
+                    },
+                    "colors": {
+                      "type": "object",
+                      "properties": {
+                        "main": { "type": "string", "maxLength": 7 },
+                        "sub1": { "type": "string", "maxLength": 7 },
+                        "sub2": { "type": "string", "maxLength": 7 },
+                        "sub3": { "type": "string", "maxLength": 7 }
+                      }
+                    },
+                    "behindRows": {
+                      "type": "array",
+                      "maxLength": 4,
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      }
+                    }
+                  }
+                },
+                "disabled": {
+                  "type": "boolean",
+                  "description": "When true, this layer is excluded from compositing and rendering. Omit or set false to render normally. Layers are rendered by default — this field only needs to be written when explicitly hiding a layer."
+                }
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "description": "Freeform item identifiers applied on top of the sprite (e.g. 'popcorn').",
+            "maxLength": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 50
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When this record was first created."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When this record was last modified."
+          }
+        }
+      }
+    }
+  }
+}

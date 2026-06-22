@@ -1,0 +1,59 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.account.profile",
+  "description": "A user's cocore-side profile. Auto-provisioned at first sign-in from the user's Bluesky public profile (so they don't see an empty card on first visit), then editable from /account. Independent from any bsky.app profile — the user can change their cocore display name or avatar without affecting their bsky one. One record per DID; the upsert flow uses rkey=`self` to keep it that way.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "record": {
+        "type": "object",
+        "required": [
+          "createdAt"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Optional human-readable name. When absent, consumers fall back to the bsky public-profile displayName, then the handle, then the DID."
+          },
+          "bio": {
+            "type": "string",
+            "maxLength": 2560,
+            "description": "Optional free-form bio text. Plain text only; no markdown rendering today."
+          },
+          "avatar": {
+            "type": "blob",
+            "accept": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ],
+            "maxSize": 2000000,
+            "description": "Avatar image stored as an atproto blob on the user's PDS. Preferred over `avatarUrl` when present; consumers should resolve it via `com.atproto.sync.getBlob` against the owning PDS."
+          },
+          "avatarUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "description": "Legacy avatar URL, retained for portability of records provisioned before the `avatar` blob field existed (typically the bsky CDN URL captured at first sign-in). Writers should prefer `avatar`; readers should fall back to this only when `avatar` is absent."
+          },
+          "handle": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Display-only mirror of the user's bsky handle at provision time. Authoritative handle resolution still goes through PLC; this field exists so dashboards can render `@handle` without a PLC round-trip on every page load."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Last edit time. Absent on the originally-provisioned record."
+          }
+        }
+      }
+    }
+  }
+}

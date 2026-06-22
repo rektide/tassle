@@ -1,0 +1,52 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.exchangeAttestation",
+  "description": "An exchange's self-published statement of operating posture: software commit, public signing key fingerprint, fee policy in effect, audit posture. The provider/requester analog of `dev.cocore.compute.attestation` for the exchange role. Settlements MAY strong-ref the active attestation so verifiers can pin which exchange-software / signing-key combination produced the record.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "exchange",
+          "policy",
+          "softwareVersion",
+          "signingKeyFingerprint",
+          "createdAt"
+        ],
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "format": "did",
+            "description": "Exchange DID. MUST equal the repo this record is published in."
+          },
+          "policy": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.exchangePolicy this attestation covers."
+          },
+          "softwareVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Identifier for the exchange-side software running. Free-form; e.g. 'cocore-services@v0.3.2 (commit a1b2c3d)'. Lets verifiers match settlements to a specific build."
+          },
+          "signingKeyFingerprint": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Fingerprint of the public key the exchange signs settlements with. Should match the verificationMethod publicKeyMultibase in the exchange's did document."
+          },
+          "auditPosture": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Human-readable note about how the exchange is run (e.g. 'single-tenant on Railway, no third-party access, source on github.com/cocore/services'). Out-of-band trust signal."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

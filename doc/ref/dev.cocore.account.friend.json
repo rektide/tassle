@@ -1,0 +1,39 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.account.friend",
+  "description": "A one-way declaration that the publishing DID trusts the subject DID enough to route private (friends-only) compute jobs to them. Friending is *not* mutual and *not* a permission grant for the subject \u2014 it's the friender's own routing preference. The subject does not need to consent, sign anything, or even be aware. Published to the friender's PDS; multiple records for the same subject are tolerated (the rkey is `tid`) but the console deduplicates on upsert so steady state is one record per (friender, subject). The friends-only chat-completions endpoint reads these records to constrain the advisor's pickFor candidate set.",
+  "defs": {
+    "main": {
+      "key": "tid",
+      "type": "record",
+      "record": {
+        "type": "object",
+        "required": [
+          "subject",
+          "createdAt"
+        ],
+        "properties": {
+          "note": {
+            "type": "string",
+            "maxLength": 1024,
+            "description": "Optional free-form note the friender attaches to remind themselves who this DID is or why they trusted them. Plain text; never shown to the subject \u2014 this is the friender's own private label."
+          },
+          "subject": {
+            "type": "string",
+            "format": "did",
+            "description": "The DID the friender is extending trust to. MUST be a syntactically-valid DID (did:plc:\u2026 or did:web:\u2026). Resolved-to-handle at write time but the DID is the authoritative identifier \u2014 a subject who later changes their handle is still the same friend."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "subjectHandle": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Display-only mirror of the subject's bsky handle at friend-time. Captured so dashboards can render `@handle` without paying a PLC round-trip for every friend on every page load. Authoritative handle resolution still goes through PLC; a stale value here is OK."
+          }
+        }
+      }
+    }
+  }
+}

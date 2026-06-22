@@ -1,0 +1,128 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.defs",
+  "description": "Shared type definitions for dev.cocore.compute.* records.",
+  "defs": {
+    "money": {
+      "type": "object",
+      "description": "An amount of value, in integer minor units of a named currency. No floats. ISO 4217 codes are preferred; uppercase three-or-more-letter codes are accepted for non-fiat (e.g. XBT, XSAT, USDC).",
+      "required": [
+        "amount",
+        "currency"
+      ],
+      "properties": {
+        "amount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Integer minor units (e.g. cents for USD)."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 8,
+          "description": "Uppercase currency code."
+        }
+      }
+    },
+    "tokenCounts": {
+      "type": "object",
+      "description": "Token counts associated with a unit of work.",
+      "required": [
+        "in",
+        "out"
+      ],
+      "properties": {
+        "in": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "out": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "modelPrice": {
+      "type": "object",
+      "description": "A provider's offered price for a single model.",
+      "required": [
+        "modelId",
+        "inputPricePerMTok",
+        "outputPricePerMTok",
+        "currency"
+      ],
+      "properties": {
+        "modelId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "inputPricePerMTok": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Integer minor units per 1,000,000 input tokens."
+        },
+        "outputPricePerMTok": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Integer minor units per 1,000,000 output tokens."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 8
+        }
+      }
+    },
+    "tokenRate": {
+      "type": "object",
+      "description": "A model-agnostic per-token rate. Same shape as modelPrice without modelId. Used by an exchange to express a uniform rate that applies across providers/models. A receipt's price.amount is auditable against this rate as roughly `inputPricePerMTok * tokens.in / 1e6 + outputPricePerMTok * tokens.out / 1e6`, modulo a small floor for very short jobs.",
+      "required": [
+        "inputPricePerMTok",
+        "outputPricePerMTok",
+        "currency"
+      ],
+      "properties": {
+        "inputPricePerMTok": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Integer minor units per 1,000,000 input tokens."
+        },
+        "outputPricePerMTok": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Integer minor units per 1,000,000 output tokens."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 8
+        }
+      }
+    },
+    "trustLevel": {
+      "type": "string",
+      "description": "How strongly the provider's environment is attested.",
+      "knownValues": [
+        "self-attested",
+        "hardware-attested"
+      ]
+    },
+    "tier": {
+      "type": "string",
+      "description": "Confidentiality tier of a unit of work — whether the prompt was provably handled only inside a measured, signed binary the owner cannot read. Distinct from `trustLevel` (which describes how the environment is attested) because a hardware-attested machine can still run a best-effort engine. A verifier MUST recompute this from evidence and never trust a self-asserted value: `attested-confidential` REQUIRES a verified Apple MDA chain bound to the signing key, a known-good measured `cdHash`, the hardened-runtime posture booleans (sip && hardenedRuntime && libraryValidation && !getTaskAllow && secureBoot), and a fresh enclave-signed session key; anything weaker is `best-effort`. Absent is equivalent to `best-effort` for pre-2026-06 readers.",
+      "knownValues": [
+        "attested-confidential",
+        "best-effort"
+      ]
+    },
+    "settlementStatus": {
+      "type": "string",
+      "description": "Lifecycle state of a settlement record.",
+      "knownValues": [
+        "settled",
+        "refunded",
+        "disputed"
+      ]
+    }
+  }
+}

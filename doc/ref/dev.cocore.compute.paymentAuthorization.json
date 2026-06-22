@@ -1,0 +1,61 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.paymentAuthorization",
+  "description": "A requester's signed authorization permitting a named exchange to charge them up to a ceiling for a specific job. Published in the requester's repo before any work runs. Settlement records strong-ref this authorization to prove consent.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "exchange",
+          "ceiling",
+          "scope",
+          "nonce",
+          "expiresAt",
+          "createdAt"
+        ],
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the exchange authorized to charge."
+          },
+          "ceiling": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#money",
+            "description": "Maximum amount the exchange may charge under this authorization."
+          },
+          "scope": {
+            "type": "string",
+            "knownValues": [
+              "singleJob",
+              "session"
+            ],
+            "description": "singleJob: authorization is consumed by a single matching receipt. session: a bounded set of jobs may share this authorization until expiresAt."
+          },
+          "sessionBudget": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#money",
+            "description": "When scope=session, total cumulative charges across all settlements under this authorization MUST NOT exceed sessionBudget. Ignored when scope=singleJob."
+          },
+          "nonce": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32,
+            "description": "16 random bytes, hex-encoded. Replay protection: any settlement re-using a consumed nonce is invalid."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

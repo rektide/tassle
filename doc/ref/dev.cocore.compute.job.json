@@ -1,0 +1,96 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.job",
+  "description": "A request for computational work. Published by the requester in their own repo before the work runs, so the provider has something to commit a receipt against.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "model",
+          "inputCommitment",
+          "maxTokensOut",
+          "priceCeiling",
+          "acceptedTrustLevel",
+          "paymentAuthorization",
+          "nonce",
+          "expiresAt",
+          "createdAt"
+        ],
+        "properties": {
+          "model": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Opaque model identifier the requester wants the provider to honor."
+          },
+          "inputCommitment": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "description": "SHA-256 hex of the encrypted prompt bytes the provider will decrypt. The plaintext prompt is never on-chain."
+          },
+          "inputCipherURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional URL where the encrypted prompt blob can be fetched. May be a PDS blob (at://...) or any other content-addressed URL. The commitment is what matters; this is a convenience pointer."
+          },
+          "maxTokensOut": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000
+          },
+          "priceCeiling": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#money",
+            "description": "Maximum price the requester will accept for this job. The provider's receipt MUST list a price <= this ceiling, else the receipt is invalid."
+          },
+          "acceptedProviders": {
+            "type": "array",
+            "maxLength": 64,
+            "items": {
+              "type": "string",
+              "format": "did"
+            },
+            "description": "Specific provider DIDs allowed to serve this job. Empty/absent means any provider that meets acceptedTrustLevel."
+          },
+          "acceptedTrustLevel": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#trustLevel",
+            "description": "Minimum trust level the requester will accept from a provider serving this job."
+          },
+          "acceptedExchanges": {
+            "type": "array",
+            "maxLength": 16,
+            "items": {
+              "type": "string",
+              "format": "did"
+            },
+            "description": "Exchange DIDs allowed to settle this job. MUST be non-empty in practice; the named paymentAuthorization MUST cover one of these."
+          },
+          "paymentAuthorization": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to a dev.cocore.compute.paymentAuthorization record in the same repo, naming an exchange and a ceiling >= this job's priceCeiling."
+          },
+          "nonce": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32,
+            "description": "16 random bytes, hex-encoded. Replay protection."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Provider must complete by this time. Receipts whose completedAt > expiresAt are invalid."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

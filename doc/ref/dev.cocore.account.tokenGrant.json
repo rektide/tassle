@@ -1,0 +1,47 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.account.tokenGrant",
+  "description": "Records that an exchange has issued its one-time signup token grant to a recipient DID. Written by the exchange to its own PDS on the first balance event for a given DID \u2014 receipt as either side, top-up, or admission check. Issued exactly once per (exchange, recipient) pair. A consumer reconstructing balances offline starts each DID at this grant amount; absence of a tokenGrant record means the DID has never interacted with the exchange.",
+  "defs": {
+    "main": {
+      "key": "tid",
+      "type": "record",
+      "record": {
+        "type": "object",
+        "required": [
+          "exchange",
+          "recipient",
+          "amount",
+          "policy",
+          "createdAt"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Tokens credited. Equal to the `tokenGrant` field of the policy in effect at issuance time."
+          },
+          "policy": {
+            "ref": "com.atproto.repo.strongRef",
+            "type": "ref",
+            "description": "Strong-ref to the exchangePolicy in effect when the grant was issued. Auditors verify `amount` against the policy's `tokenGrant`."
+          },
+          "exchange": {
+            "type": "string",
+            "format": "did",
+            "description": "Exchange DID. MUST equal the repo this record is published in."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "recipient": {
+            "type": "string",
+            "format": "did",
+            "description": "The DID receiving the grant."
+          }
+        }
+      }
+    }
+  }
+}

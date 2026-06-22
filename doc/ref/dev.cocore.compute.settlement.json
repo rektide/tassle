@@ -1,0 +1,84 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.settlement",
+  "description": "An exchange's signed proof of payment for a receipt. Published by the exchange in its own repo. Strong-refs both the receipt being settled and the requester's payment authorization, so the full chain is independently verifiable.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "receipt",
+          "requesterAuthorization",
+          "amountCharged",
+          "providerPayout",
+          "exchangeFee",
+          "processorReference",
+          "status",
+          "settledAt"
+        ],
+        "properties": {
+          "receipt": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.receipt being settled."
+          },
+          "requesterAuthorization": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.paymentAuthorization in the requester's repo. Verifiers MUST check it names this exchange's DID and that ceiling >= amountCharged."
+          },
+          "amountCharged": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#money",
+            "description": "Amount charged to the requester. MUST equal receipt.price for status=settled."
+          },
+          "providerPayout": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#money",
+            "description": "Amount paid out to the provider after fees."
+          },
+          "exchangeFee": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#money",
+            "description": "Exchange's retained fee. amountCharged = providerPayout + exchangeFee."
+          },
+          "processorReference": {
+            "type": "bytes",
+            "maxLength": 1024,
+            "description": "Opaque processor transaction id (e.g. Stripe PaymentIntent id), encrypted to the involved parties (requester, provider, exchange) so the public record does not leak processor metadata. Verifiers without keys treat this as opaque."
+          },
+          "status": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#settlementStatus"
+          },
+          "refundOf": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "When status=refunded, strong-ref to the prior settled settlement record this refund reverses."
+          },
+          "policy": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.exchangePolicy this settlement was computed under. Lets a verifier re-run the fee math against the same policy that produced the record."
+          },
+          "exchangeAttestation": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.exchangeAttestation pinning the software / signing-key combination that produced this settlement."
+          },
+          "sig": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "ES256 signature (base64url, no padding) over the canonical JSON of every other field. Verified against the verificationMethod publicKeyMultibase in the exchange's did document. Optional for v0.3.x exchanges that haven't enabled signing; required for trust-tier=hardware-attested exchanges."
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

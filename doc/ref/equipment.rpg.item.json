@@ -1,0 +1,151 @@
+{
+  "lexicon": 1,
+  "id": "equipment.rpg.item",
+  "description": "A player's owned item, accepted from a provider's give record. Lives on the player's PDS.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An item in the player's inventory. Self-contained with all data needed for rendering and display. The give URI and assetCid enable verification against the provider's attestation. Each record is one item.",
+      "key": "any",
+      "record": {
+        "type": "object",
+        "required": ["item", "title", "give", "provider", "acceptedAt"],
+        "properties": {
+          "item": {
+            "type": "string",
+            "maxLength": 50,
+            "description": "Item identifier matching the give record (e.g. 'popcorn', 'theatre_shirt')."
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "Item kind. 'layer' for sprite-generator wearables (requires category + asset). For non-wearable inventory items, use any descriptive type string such as 'badge', 'potion', 'map', 'key', 'ticket', etc. This value is shown as the item's type label in the player's inventory. Defaults to 'layer' if omitted."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 30,
+            "description": "Generator layer category for 'layer' items (e.g. 'tops', 'righthand'). Ignored for 'inventory' items."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Display name for the item."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Flavour text or description."
+          },
+          "give": {
+            "type": "string",
+            "format": "at-uri",
+            "description": "AT URI of the equipment.rpg.give record on the provider's PDS."
+          },
+          "provider": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the provider who gave this item."
+          },
+          "asset": {
+            "type": "blob",
+            "accept": ["image/png"],
+            "description": "The item's sprite layer artwork (144x192 PNG). Required for 'layer' items, optional for 'inventory' items."
+          },
+          "icon": {
+            "type": "blob",
+            "accept": ["image/png"],
+            "description": "Small standalone icon for the item (e.g. 64x64 PNG). Used in inventory displays and profile panels."
+          },
+          "colorway": {
+            "type": "blob",
+            "accept": ["image/png"],
+            "description": "Colorway map (_c) for the asset. A 144x192 PNG with sentinel-colored pixels indicating recolorable regions. Required for 'layer' items that support recoloring."
+          },
+          "channels": {
+            "type": "array",
+            "maxLength": 8,
+            "description": "Color channels defined by this item's colorway. Each entry names a recolorable region and declares its sentinel color and optional default.",
+            "items": {
+              "type": "object",
+              "required": ["name", "color"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 20,
+                  "description": "Channel identifier (e.g. 'main', 'sub1', 'brim', 'ribbon')."
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 7,
+                  "description": "Sentinel hex color in the colorway map for this channel (e.g. '#0000FF' for blue)."
+                },
+                "defaultColor": {
+                  "type": "string",
+                  "maxLength": 7,
+                  "description": "Suggested default hex color for this channel in the player's color picker."
+                }
+              }
+            }
+          },
+          "behindRows": {
+            "type": "array",
+            "description": "Sprite-sheet row indices (0-3) where this layer composites behind the body via destination-over blending. Row 0=down, 1=left, 2=right, 3=up. Omit for normal source-over on all rows.",
+            "maxLength": 4,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          },
+          "suppressLayers": {
+            "type": "array",
+            "description": "Layer IDs that should be hidden while this item is equipped (e.g. a hat suppressing hair and bangs).",
+            "maxLength": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 30
+            }
+          },
+          "suppressClasses": {
+            "type": "array",
+            "description": "Fit-class identifiers that should be hidden while this item is equipped (e.g. hide all items tagged hair.*).",
+            "maxLength": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 90
+            }
+          },
+          "fitClass": {
+            "type": "string",
+            "maxLength": 90,
+            "description": "Fit-class tag for this item (format <category>.<name>) used by class-based suppression."
+          },
+          "suppressAs": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "When this item is suppressed, render this same-category item name instead (e.g. replace pigtails with basic short)."
+          },
+          "assetCid": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "CID of the canonical asset or icon blob. Must match the give record's assetCid for verification."
+          },
+          "stats": {
+            "type": "object",
+            "description": "Item properties copied from the give record at acceptance time."
+          },
+          "context": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Origin description copied from the give record."
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the player accepted this item."
+          }
+        }
+      }
+    }
+  }
+}

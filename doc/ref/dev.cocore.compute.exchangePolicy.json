@@ -1,0 +1,190 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.exchangePolicy",
+  "description": "An exchange's published terms of service. Records every parameter that affects how this exchange computes settlements and maintains per-DID token balances: fee schedule, supported currencies, self-loop rules, processor identifiers, and the token-accounting parameters (onboarding grant, balance floor, weekly refresh, monthly patronage distribution, treasury identity). A settlement record strong-refs the active policy so verifiers can re-derive the payout numbers offline. Policies are immutable per-record; the exchange publishes a new record when terms change and updates `active=false` on the prior one.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "exchange",
+          "fee",
+          "supportedCurrencies",
+          "selfLoop",
+          "createdAt"
+        ],
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "format": "did",
+            "description": "Exchange DID. MUST equal the repo this record is published in."
+          },
+          "fee": {
+            "type": "ref",
+            "ref": "#feeSchedule",
+            "description": "Per-receipt fee. `fee.bps` is the fraction of each receipt's token cost routed to the treasury account instead of the provider (conservation 95/5 by default with `bps: 500`). The treasury accumulates these fees and redistributes them as patronage rebates on `patronageDistribution.cadenceDays`. `fee.currency` names the unit the fee schedule is denominated in."
+          },
+          "tokenRate": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#tokenRate",
+            "description": "Uniform per-token rate the exchange asserts for jobs it settles. CANONICAL: providers settling through this exchange MUST price receipts at this rate, ignoring their own `dev.cocore.compute.provider.priceList`. Verifiers MAY reject receipts whose `price.amount` diverges from `tokenRate.inputPricePerMTok * tokens.in / 1e6 + tokenRate.outputPricePerMTok * tokens.out / 1e6` beyond a one-minor-unit floor. The provider's priceList is a denormalization for client display today; a future lexicon revision will introduce a per-receipt provider-set override (with the exchange's permission), at which point priceList becomes authoritative again. Optional only for pre-2026-05 policies, where the provider's priceList was canonical."
+          },
+          "supportedCurrencies": {
+            "type": "array",
+            "minLength": 1,
+            "maxLength": 32,
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 8
+            },
+            "description": "ISO 4217 (or XBT/XSAT-style) currency codes the exchange will settle in."
+          },
+          "selfLoop": {
+            "type": "ref",
+            "ref": "#selfLoopRule",
+            "description": "How the exchange handles jobs where requester DID == provider DID."
+          },
+          "processor": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Identifier for the settlement backend the exchange runs (e.g. 'closed-loop', 'usdc-base'). Useful as a hint to clients that need to know whether settlement is internal or external."
+          },
+          "termsUri": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to a human-readable Terms of Service / Privacy Policy for this exchange. Pinned with `termsVersion`; clients prompt the user for re-acceptance whenever the active policy's `termsVersion` no longer matches the version on the user's most recent dev.cocore.compute.termsAcceptance."
+          },
+          "termsVersion": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "Version string for the terms-of-service text at `termsUri`. Bumping this triggers re-acceptance prompts in clients. Compared as a literal equality string; semantic versioning is a convention, not a requirement."
+          },
+          "tokenGrant": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Tokens granted to a DID on first interaction with this exchange. Idempotent per DID: the exchange MUST issue the grant exactly once and MUST be able to prove which DIDs have already received it (typically via a `dev.cocore.account.tokenGrant` record per recipient). Set to 0 to disable grants. cocore.dev sets this to 1_000_000."
+          },
+          "tokenFloor": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Minimum token balance a DID must hold post-dispatch for the exchange to accept a new job. The admission check is `balance - job.priceCeiling.tokensEquivalent >= tokenFloor`. Prevents a user from dispatching jobs that would zero out their balance, which keeps the failure mode 'wait for the next refresh' rather than 'mid-job settlement bounced'. cocore.dev sets this to 100_000."
+          },
+          "treasuryDid": {
+            "type": "string",
+            "format": "did",
+            "description": "The DID whose token balance accumulates the per-receipt fee (5% by default) and from which patronage rebates are distributed. Defaults to the exchange's own DID (`exchange`) when unset, which matches the convention of a cooperative whose treasury IS the exchange's own balance sheet."
+          },
+          "weeklyRefresh": {
+            "type": "ref",
+            "ref": "#refreshRule",
+            "description": "Optional 'use-it-to-keep-it' refresh that lazily issues `amountPerDid` tokens to active DIDs every `cadenceMinutes`. The refresh only fires when the DID touches the network (receipt as either side, balance read, governance act) — dormant DIDs accrue nothing. Sized so a member who actively uses the system stays roughly at the dignity floor; sized so the aggregate mint roughly matches the new-compute capacity coming online. Set to absent to disable."
+          },
+          "patronageDistribution": {
+            "type": "ref",
+            "ref": "#patronageRule",
+            "description": "Optional periodic distribution of treasury balance back to active members in proportion to their patronage (consumer spending + provider earnings) during the period. Direct analog of REI's dividend and Rochdale-tradition patronage rebates. Set to absent to disable."
+          },
+          "active": {
+            "type": "boolean",
+            "default": true,
+            "description": "Soft-delete: false means a newer policy supersedes this one. Settlements signed against an inactive policy are still valid for receipts that arrived before the policy flipped."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    },
+    "feeSchedule": {
+      "type": "object",
+      "required": [
+        "bps",
+        "minMinor",
+        "currency"
+      ],
+      "description": "Linear fee model: max(amountMinor * bps / 10000, minMinor).",
+      "properties": {
+        "bps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Basis points (1/10000) retained by the exchange. 500 = 5%."
+        },
+        "minMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Floor on the fee in integer minor units. 0 means there is no floor."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 8,
+          "description": "Currency the fee schedule is denominated in."
+        }
+      }
+    },
+    "selfLoopRule": {
+      "type": "object",
+      "required": [
+        "feeWaived"
+      ],
+      "description": "What happens when the same DID owns the requester job and the receipt's provider field — e.g., a user running an inference on their own machine via the exchange.",
+      "properties": {
+        "feeWaived": {
+          "type": "boolean",
+          "description": "If true, the exchange takes no fee on self-loop jobs. The settlement still gets published as an audit trail."
+        },
+        "minMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional facilitation floor — the exchange may still take a small flat amount to cover its operating cost. Ignored when feeWaived is true."
+        }
+      }
+    },
+    "refreshRule": {
+      "type": "object",
+      "required": [
+        "amountPerDid",
+        "cadenceMinutes"
+      ],
+      "description": "Periodic refresh: amount + cadence.",
+      "properties": {
+        "amountPerDid": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tokens credited to a DID per refresh tick. cocore.dev: 70_000 (~7% of the 1M-token onboarding grant)."
+        },
+        "cadenceMinutes": {
+          "type": "integer",
+          "minimum": 60,
+          "description": "Minimum minutes between refreshes for a given DID. cocore.dev: 10_080 (7 days)."
+        }
+      }
+    },
+    "patronageRule": {
+      "type": "object",
+      "required": [
+        "fractionBps",
+        "cadenceDays"
+      ],
+      "description": "Periodic distribution of treasury balance to active members in proportion to patronage during the period.",
+      "properties": {
+        "fractionBps": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Basis points of the treasury balance distributed at each tick. Remainder is retained as operating reserve. cocore.dev: 8000 (80% distributed, 20% retained)."
+        },
+        "cadenceDays": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Days between distribution ticks. cocore.dev: 30."
+        }
+      }
+    }
+  }
+}

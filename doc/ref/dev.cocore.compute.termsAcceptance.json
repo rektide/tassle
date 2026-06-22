@@ -1,0 +1,61 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.termsAcceptance",
+  "description": "A user's affirmative acceptance of an exchange's terms of service / privacy policy. Published on the user's PDS so the record is portable + auditable + survives the user disconnecting from any one exchange. Clients prompt for re-acceptance whenever the active exchange policy's `termsVersion` doesn't match the version on the user's most recent acceptance for that exchange.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "exchange",
+          "policy",
+          "termsVersion",
+          "termsUri",
+          "acceptedAt"
+        ],
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the exchange whose terms the user is accepting."
+          },
+          "policy": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.exchangePolicy that was active at acceptance time. The policy itself carries fee schedule + self-loop rules; the acceptance pins the human-readable terms via the policy's termsUri + termsVersion."
+          },
+          "termsVersion": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "Version string of the human-readable terms accepted. Copied from the policy at acceptance time so the acceptance is self-contained even if the policy is later updated."
+          },
+          "termsUri": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL of the terms-of-service text the user actually saw. Snapshotted from the policy."
+          },
+          "userAgent": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Optional user-agent string from the client at acceptance time. Useful for forensics; not required."
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "attestation": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.exchangeAttestation whose `signingKeyFingerprint` identifies the key that produced `sig`. Lets a verifier resolve the exchange's signing key and check `sig` without trusting the exchange live. Optional for back-compat with pre-signing acceptances; populated going forward."
+          },
+          "sig": {
+            "type": "string",
+            "description": "Exchange's ES256 signature (base64url, raw R||S) over the canonical bytes of this record with `sig` removed — the same integer-only, sorted-key canonical form used for receipts and settlements. This is the cocore attestation that the acceptance was witnessed and countersigned by the exchange, not merely written by the user. Optional for back-compat; populated going forward."
+          }
+        }
+      }
+    }
+  }
+}

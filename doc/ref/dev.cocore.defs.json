@@ -1,0 +1,116 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.defs",
+  "defs": {
+    "activityStat": {
+      "type": "object",
+      "required": [
+        "requests",
+        "tokens"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "integer"
+        },
+        "requests": {
+          "type": "integer"
+        }
+      },
+      "description": "Request + token counts within a single time window."
+    },
+    "indexedRecord": {
+      "type": "object",
+      "required": [
+        "uri",
+        "cid",
+        "collection",
+        "repo",
+        "rkey",
+        "body"
+      ],
+      "properties": {
+        "cid": {
+          "type": "string",
+          "format": "cid"
+        },
+        "uri": {
+          "type": "string",
+          "format": "at-uri"
+        },
+        "body": {
+          "type": "unknown",
+          "description": "The lexicon record JSON. Validate it against the NSID in `collection`."
+        },
+        "repo": {
+          "type": "string",
+          "format": "did"
+        },
+        "rkey": {
+          "type": "string"
+        },
+        "indexedAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "collection": {
+          "type": "string",
+          "format": "nsid"
+        }
+      },
+      "description": "An AT Protocol record as indexed by the AppView from the firehose. The AppView is a cache; the record on the provider's PDS remains the source of truth. `body` is the raw lexicon record JSON for the record at `uri`."
+    },
+    "verifyFinding": {
+      "type": "object",
+      "required": [
+        "severity",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ],
+          "type": "string"
+        }
+      },
+      "description": "A single structural, cryptographic, or hardware-attestation finding produced while verifying a record. A finding with severity `error` means the verification failed."
+    },
+    "activityWindows": {
+      "type": "object",
+      "required": [
+        "hour",
+        "day",
+        "week",
+        "month"
+      ],
+      "properties": {
+        "day": {
+          "ref": "dev.cocore.defs#activityStat",
+          "type": "ref"
+        },
+        "hour": {
+          "ref": "dev.cocore.defs#activityStat",
+          "type": "ref"
+        },
+        "week": {
+          "ref": "dev.cocore.defs#activityStat",
+          "type": "ref"
+        },
+        "month": {
+          "ref": "dev.cocore.defs#activityStat",
+          "type": "ref"
+        }
+      },
+      "description": "Activity rolled up across the four standard windows: last hour, day (24h), week (7d), and month (30d)."
+    }
+  }
+}

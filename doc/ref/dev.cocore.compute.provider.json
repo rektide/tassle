@@ -1,0 +1,204 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.provider",
+  "description": "A compute provider's public profile. One record per physical machine. The DID owning the record is the provider's billable identity; the same DID may own multiple provider records (one per machine).",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "machineLabel",
+          "chip",
+          "ramGB",
+          "supportedModels",
+          "priceList",
+          "encryptionPubKey",
+          "attestationPubKey",
+          "trustLevel",
+          "createdAt"
+        ],
+        "properties": {
+          "machineLabel": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Human-readable name for this machine, e.g. 'MacBook Pro M3 Max #1'."
+          },
+          "chip": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Hardware identifier, e.g. 'Apple M3 Max'."
+          },
+          "ramGB": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "gpuCores": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Reported GPU core count, when applicable."
+          },
+          "memoryBandwidthGBs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Reported memory bandwidth in GB/s, when applicable."
+          },
+          "cpuCores": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Total CPU core count (logical = physical for Apple Silicon)."
+          },
+          "pCores": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Apple Silicon performance-core count, when applicable."
+          },
+          "eCores": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Apple Silicon efficiency-core count, when applicable."
+          },
+          "modelIdentifier": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Apple model code, e.g. 'Macmini9,1' or 'Mac15,3'. Stable across OS updates and useful for hardware-class matching."
+          },
+          "os": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Operating system + version, e.g. 'macOS 14.5.1'. Helpful for capability-based matchmaking (e.g. CoreML / MLX feature support)."
+          },
+          "supportedModels": {
+            "type": "array",
+            "minLength": 1,
+            "maxLength": 256,
+            "items": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "description": "Opaque model identifiers honored by this provider."
+          },
+          "desiredModels": {
+            "type": "array",
+            "maxLength": 256,
+            "items": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "description": "Model identifiers the OWNER wants this machine to load, set from a management UI (e.g. the console's per-machine model picker). The agent reconciles toward it: on serve start it loads this set instead of its local default, and while running it restarts to reload when this set changes. Distinct from `supportedModels`, which is what actually loaded (a model that won't fit RAM stays in `desiredModels` but never appears in `supportedModels`). Owner-written, agent-preserved; absent means the agent uses its local config. Additive / optional — pre-2026-06 agents ignore it."
+          },
+          "priceList": {
+            "type": "array",
+            "minLength": 1,
+            "maxLength": 256,
+            "items": {
+              "type": "ref",
+              "ref": "dev.cocore.compute.defs#modelPrice"
+            },
+            "description": "Per-model rates the provider advertises. INFORMATIONAL since 2026-05: the active `dev.cocore.compute.exchangePolicy.tokenRate` is canonical for any provider settling through that exchange — providers MUST price receipts at the exchange's tokenRate and SHOULD denormalize the same rate into every priceList entry so the on-PDS view is internally consistent. A future lexicon revision will introduce a per-receipt provider-set override (gated on the exchange's permission), at which point priceList becomes authoritative again. Held required for backward compat with pre-2026-05 readers."
+          },
+          "encryptionPubKey": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "X25519 public key (base64) used to wrap requests to this provider."
+          },
+          "attestationPubKey": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "P-256 public key (base64) bound to this machine's Secure Enclave. Used to verify attestation and receipt signatures. Doubles as the stable per-machine fingerprint: the SE keypair is generated once at first agent boot and survives reboots / re-pairs / OS updates, so two records with the same `attestationPubKey` describe the same physical machine. Agents reuse the rkey of any existing record with this same key (and delete duplicates) instead of creating a fresh provider record per `serve` invocation, so the on-PDS view stays one record per machine."
+          },
+          "trustLevel": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#trustLevel"
+          },
+          "tier": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#tier",
+            "description": "The highest confidentiality tier this machine can serve, advertised so requesters and matchmakers can pre-filter. ADVISORY: a requester demanding `attested-confidential` MUST still verify the per-job attestation + session handshake and fail closed; this field only avoids routing confidential jobs to machines that cannot serve them. A machine earns `attested-confidential` here only when it runs the measured native engine under a hardware-attested posture. This is the AGENT-published ACHIEVED tier, derived from evidence (never self-declared); see `desiredTier` for the owner's intent. Optional / additive; absent equivalent to `best-effort`."
+          },
+          "desiredTier": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#tier",
+            "description": "The confidentiality tier the OWNER has opted this machine into, set from a management UI (the console / tray 'Upgrade security' action). Mirrors `desiredModels`: owner-written INTENT, the agent reconciles toward it (e.g. switches to the measured native engine and earns the hardware-attested posture). Setting `attested-confidential` NEVER fakes the achieved state — the agent only publishes the higher `tier`/`trustLevel` once it actually earns them, and a machine that can't (e.g. not a native build) stays best-effort with a surfaced reason. Absent / `best-effort` means the owner has not opted into confidential and the machine serves exactly as before — opting in is the only thing that changes anything. Owner-written, agent-preserved. Optional / additive; pre-0.9.19 agents ignore it."
+          },
+          "acceptedExchanges": {
+            "type": "array",
+            "maxLength": 64,
+            "items": {
+              "type": "string",
+              "format": "did"
+            },
+            "description": "Exchange DIDs this provider will accept settlement from. Empty/absent means any exchange is acceptable."
+          },
+          "contactEndpoint": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL of the advisor / matchmaking service this provider currently uses. Federable; may change without invalidating prior receipts."
+          },
+          "active": {
+            "type": "boolean",
+            "default": true,
+            "description": "Soft delete: false means the machine is retired and should not be matched."
+          },
+          "provisioning": {
+            "type": "boolean",
+            "description": "True while the agent is still coming up — it publishes this record immediately on serve start (so the machine appears right away) but before its inference engine has finished loading. The agent re-publishes with this false (or absent) once the engine is ready and it has connected to its matchmaker. Consumers SHOULD show such a machine as 'provisioning' and SHOULD NOT route jobs to it. Absence is equivalent to false."
+          },
+          "serving": {
+            "type": "boolean",
+            "description": "Liveness flag. The agent sets this true while its serve loop is up, and publishes false on graceful shutdown (it receives SIGTERM when quit/paused/bounced or its schedule window closes), so consumers can show the machine as 'offline' the moment it stops serving rather than leaving it looking idle. Absence means unknown — treat as NOT offline for backward-compat with pre-2026-06 records that never set it. (An ungraceful stop — crash / power loss — can't publish false; a future lastSeenAt heartbeat will cover that case.)"
+          },
+          "payoutsEnabled": {
+            "type": "boolean",
+            "description": "True iff the provider has completed payout onboarding with at least one exchange and that exchange has confirmed it can transfer funds to them. Matchmakers SHOULD filter paid jobs away from providers where this is false; self-loop jobs (requester == provider) and free-tier jobs are unaffected. Absence is equivalent to false. The exchange asserts this from its own side via the corresponding paymentAccount record; this field exists so consumers don't have to do a second lookup to know whether the provider can be paid."
+          },
+          "binaryVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Version string of the agent binary that wrote this record (e.g. `0.3.4`). Stamped on every `cocore agent serve` startup, so the record reflects the freshest deploy. Operators / dashboards use this to spot machines that haven't been updated to a release with a known fix. Optional / additive — pre-2026-05 records won't carry it."
+          },
+          "engineFault": {
+            "type": "object",
+            "description": "Present when the agent could not bring its configured inference engine online after exhausting its startup recovery attempts. The machine still appears (and may still serve the no-op `stub` engine), but it will NOT be routed real inference jobs because its `supportedModels` does not include the configured model. Consumers SHOULD surface this to the operator as a fault with remediation guidance. Absence means the engine loaded cleanly (the agent clears this field on every healthy serve). Additive / optional — pre-2026-06 readers ignore it.",
+            "required": [
+              "code",
+              "message",
+              "at"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "Machine-readable fault class: `model-load-failed` (the inference subprocess never became ready), `venv-missing` (the Python environment is absent or incomplete), or `no-home` (the agent could not locate its state directory)."
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 600,
+                "description": "Human-readable, content-safe summary with remediation guidance. Never contains prompt or completion bytes (faults are recorded before any job is served)."
+              },
+              "models": {
+                "type": "array",
+                "maxLength": 256,
+                "items": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "description": "The configured model identifiers that failed to load."
+              },
+              "at": {
+                "type": "string",
+                "format": "datetime",
+                "description": "When the agent gave up and recorded the fault."
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

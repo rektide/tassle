@@ -1,0 +1,58 @@
+{
+  "lexicon": 1,
+  "id": "actor.rpg.master",
+  "description": "A game master's validation of a player's RPG data for a specific system. One record per player per system per GM.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "description": "A master record validating one player's stats for one system. Multiple GMs can validate the same player.",
+      "record": {
+        "type": "object",
+        "required": ["player", "system", "createdAt"],
+        "properties": {
+          "player": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the player this record validates"
+          },
+          "system": {
+            "type": "string",
+            "maxLength": 50,
+            "description": "The stat system being validated (e.g. 'dnd', 'reverie', 'rmmz')"
+          },
+          "campaign": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Name of the campaign this validation relates to"
+          },
+          "snapshotScope": {
+            "type": "string",
+            "maxLength": 20,
+            "knownValues": ["none", "custom", "full"],
+            "description": "What portions of stats are validated. 'none' = inherent trust (always valid), 'custom' = selected fields only, 'full' = all fields must match. Defaults to 'full' if omitted."
+          },
+          "stats": {
+            "type": "unknown",
+            "description": "Snapshot of the player's stats for this system. Omitted when snapshotScope is 'none'."
+          },
+          "spriteCid": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "CID of the approved sprite blob (optional)"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When this record was created"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When this record was last modified"
+          }
+        }
+      }
+    }
+  }
+}

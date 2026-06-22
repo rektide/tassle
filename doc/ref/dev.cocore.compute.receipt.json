@@ -1,0 +1,141 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.receipt",
+  "description": "A signed receipt of a single completed compute job. Published by the provider in its own repo. Strong-refs the requester's job and the active attestation. Carries an additional Secure-Enclave-bound signature so it remains verifiable across PDS migrations.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "job",
+          "requester",
+          "model",
+          "inputCommitment",
+          "outputCommitment",
+          "tokens",
+          "startedAt",
+          "completedAt",
+          "price",
+          "attestation",
+          "enclaveSignature"
+        ],
+        "properties": {
+          "job": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the requester's dev.cocore.compute.job record."
+          },
+          "requester": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the requester. Denormalized from the job record for indexer convenience; MUST equal the DID owning the job record."
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "inputCommitment": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "description": "MUST equal job.inputCommitment."
+          },
+          "outputCommitment": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "description": "SHA-256 hex over the plaintext output bytes — the decrypted result the requester receives. (The earlier 'encrypted output' wording was a doc error; the provider has always committed to the plaintext, which is what a requester can verify after decrypting. Use outputCipherCommitment to commit to the encrypted bytes on the wire.)"
+          },
+          "outputCipherCommitment": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "description": "Optional SHA-256 hex over the EXACT encrypted bytes delivered to the requester (the sealed reply). Lets a requester confirm the ciphertext they received is the one the provider's enclaveSignature commits to — defends against an intermediary swapping the delivered bytes. Covered by enclaveSignature like every other field."
+          },
+          "sessionKeyCommitment": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "description": "Optional SHA-256 hex over (ephemeralPubKey || sessionNonce) — the per-job ephemeral X25519 key the requester sealed the input to, bound to the request nonce. Present when the job ran under the forward-secret confidential handshake (the enclave minted a fresh ephemeral key, enclave-signed it against the requester's nonce, and the requester sealed to that key after verifying it). Lets a requester prove after the fact that its prompt was sealed to a key the measured enclave controlled for this job, not the long-lived encryptionPubKey. Covered by enclaveSignature."
+          },
+          "sessionNonce": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 64,
+            "description": "Optional lowercase hex of the fresh requester nonce that the ephemeral session key was bound to (the freshness challenge for this job). Pairs with sessionKeyCommitment. Covered by enclaveSignature."
+          },
+          "params": {
+            "type": "ref",
+            "ref": "#generationParams",
+            "description": "Optional record of the sampling parameters the provider committed to for this job. Integer-only (canonical JSON forbids floats): temperature/top_p are carried as integer milliunits. Covered by enclaveSignature, so a requester can prove the provider claimed these settings."
+          },
+          "outputCipherURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional URL where the encrypted output lives."
+          },
+          "tokens": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#tokenCounts"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "price": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#money",
+            "description": "MUST be <= job.priceCeiling. Currency MUST match job.priceCeiling.currency."
+          },
+          "attestation": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to a dev.cocore.compute.attestation record published by this provider. completedAt MUST fall within [attestedAt, expiresAt] of that attestation."
+          },
+          "enclaveSignature": {
+            "type": "bytes",
+            "maxLength": 256,
+            "description": "Secure Enclave P-256 signature (DER) over a sorted-key canonical JSON of every other field in this record. Verified against the publicKey of the strong-reffed attestation. This binding survives PDS migration: the repo-commit signature changes when keys rotate, but the enclaveSignature does not."
+          },
+          "tier": {
+            "type": "ref",
+            "ref": "dev.cocore.compute.defs#tier",
+            "description": "The confidentiality tier this job actually ran under. Set by the provider to `attested-confidential` only when the input was sealed to a verified, enclave-bound ephemeral session key AND served by a measured native engine under a hardware-attested posture; otherwise `best-effort`. A requester recomputes this from the receipt's attestation + sessionKeyCommitment rather than trusting the field. Optional / additive; absent equivalent to `best-effort`."
+          }
+        }
+      }
+    },
+    "generationParams": {
+      "type": "object",
+      "description": "Sampling parameters committed to in a receipt. Integer-only because the canonical signing form forbids floats — temperature and top_p are carried as milliunits (value × 1000, e.g. temperature 0.7 -> 700).",
+      "properties": {
+        "maxTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Max output tokens requested for this job."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "RNG seed, when the provider ran with a fixed seed (enables reproducibility claims)."
+        },
+        "temperatureMilli": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sampling temperature × 1000 (e.g. 0.7 -> 700). Omitted when the provider used the model default."
+        },
+        "topPMilli": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "Nucleus sampling top_p × 1000 (e.g. 0.95 -> 950). Omitted when the provider used the model default."
+        }
+      }
+    }
+  }
+}

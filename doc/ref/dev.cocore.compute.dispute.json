@@ -1,0 +1,137 @@
+{
+  "lexicon": 1,
+  "id": "dev.cocore.compute.dispute",
+  "description": "An exchange-signed adjudication of a complaint about a settled receipt. Published in the exchange's repo. The exchange's DID is the only DID permitted to publish a record at this NSID for a given settlement; any record at this NSID outside the exchange's repo is invalid by construction. The dispute lifecycle is open->resolved (terminal); resolution carries the outcome the exchange has already enacted (e.g. a refund settlement) and a signed rationale. Verifiers reading a settlement see status=disputed when an open dispute exists, and a paired settlement of status=refunded with `refundOf` pointing at the original when the outcome warranted a refund.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": [
+          "settlement",
+          "exchange",
+          "raisedBy",
+          "raisedAt",
+          "reason",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "settlement": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong-ref to the dev.cocore.compute.settlement under dispute. Verifiers MUST resolve this to confirm both sides reference the same charge."
+          },
+          "exchange": {
+            "type": "string",
+            "format": "did",
+            "description": "Exchange DID. MUST equal the repo this record is published in. Adjudication is the exchange's prerogative; only the exchange that signed the settlement may sign its dispute."
+          },
+          "raisedBy": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the party who raised the complaint. Typically the requester (charge dispute) or the provider (non-payment claim). The exchange itself MAY raise a dispute when it detects a problem (e.g. processor chargeback fired before the requester reached out)."
+          },
+          "raisedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the complaint was first received. May predate `createdAt` (this record is published when the exchange opens or resolves the case, which can be after intake)."
+          },
+          "reason": {
+            "type": "ref",
+            "ref": "#disputeReason",
+            "description": "Why the dispute was raised. Free-form rationale plus an enum bucket for matchmaking / analytics."
+          },
+          "status": {
+            "type": "string",
+            "knownValues": [
+              "open",
+              "resolved"
+            ],
+            "description": "Lifecycle state. The exchange opens the dispute (`open`) when intake is complete; once adjudicated, the same record is updated in place to `resolved` with outcome populated. Records at this NSID with status=open and no `outcome` are valid by construction; status=resolved without `outcome` is invalid."
+          },
+          "outcome": {
+            "type": "ref",
+            "ref": "#disputeOutcome",
+            "description": "Required when status=resolved. Captures the verdict and any compensating settlement record."
+          },
+          "evidenceCid": {
+            "type": "string",
+            "format": "cid",
+            "description": "Optional CID of the encrypted evidence bundle the exchange relied on (request/response logs, customer correspondence, processor chargeback metadata). Encrypted to the exchange + parties; opaque to public verifiers."
+          },
+          "sig": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "ES256 signature (base64url, no padding) over the canonical JSON of every other field. Verified against the same verificationMethod that signs settlements for this exchange. Required for trust-tier=hardware-attested exchanges; optional in v0.3.x as we roll out signing across all records."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    },
+    "disputeReason": {
+      "type": "object",
+      "required": [
+        "category"
+      ],
+      "description": "Bucketed reason plus free-form detail. Buckets exist so the AppView can index disputes; detail is for the operator's own audit.",
+      "properties": {
+        "category": {
+          "type": "string",
+          "knownValues": [
+            "fraud",
+            "non-delivery",
+            "quality-failure",
+            "processor-chargeback",
+            "duplicate-charge",
+            "other"
+          ],
+          "description": "Bucket the dispute fits into. `processor-chargeback` is reserved for cases where the card network fired the chargeback ahead of any direct complaint."
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Operator-supplied free-form detail. Public; do not include personally identifying information."
+        }
+      }
+    },
+    "disputeOutcome": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "decidedAt"
+      ],
+      "description": "Exchange's verdict and any side-effects. The compensating refund (if any) is published as its own dev.cocore.compute.settlement with status=refunded and refundOf pointing at the original; this object strong-refs that record so verifiers don't need to scan.",
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "knownValues": [
+            "refund-full",
+            "refund-partial",
+            "uphold-charge",
+            "forfeit-payout"
+          ],
+          "description": "What happened. `refund-full` and `refund-partial` reverse value to the requester; `uphold-charge` keeps the original settlement intact; `forfeit-payout` keeps the requester's funds with the exchange but withholds the provider payout."
+        },
+        "refundSettlement": {
+          "type": "ref",
+          "ref": "com.atproto.repo.strongRef",
+          "description": "When verdict is refund-*, strong-ref to the dev.cocore.compute.settlement record (status=refunded) the exchange published as the compensating action. Required when the verdict involves a refund."
+        },
+        "rationale": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Exchange's plain-English explanation. Public; bind it carefully — this is the audit trail when the same parties dispute future charges."
+        },
+        "decidedAt": {
+          "type": "string",
+          "format": "datetime"
+        }
+      }
+    }
+  }
+}
