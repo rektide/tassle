@@ -1,0 +1,22 @@
+[package]
+name = "tassle-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Tassle CLI — Mint Nodes, Tass, etc. (Rust)"
+
+[[bin]]
+name = "tassle"
+path = "src/main.rs"
+
+[dependencies]
+tassle-lexicons = { path = "../tassle-lexicons" }
+jacquard-common = { git = "https://github.com/rsform/jacquard.git" }
+jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
+clap = { version = "~4.4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+miette = { version = "7", features = ["fancy"] }
+chrono = "0.4"

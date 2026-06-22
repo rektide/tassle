@@ -2544,6 +2544,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tassle-cli"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "jacquard-common",
+ "jacquard-lexicon",
+ "miette",
+ "serde",
+ "serde_json",
+ "tassle-lexicons",
+]
+
+[[package]]
 name = "tassle-codegen"
 version = "0.1.0"
 dependencies = [
