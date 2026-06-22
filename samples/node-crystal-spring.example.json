@@ -1,0 +1,10 @@
+{
+  "name": "Crystal Spring",
+  "rating": 3,
+  "description": "A clear spring deep in the old forest; the water hums faintly to those who can hear.",
+  "location": "Old-growth forest, three miles north of the caern",
+  "ambientQuintessence": 15,
+  "resonance": "dynamic",
+  "tassForm": "a smooth river-stone, warm to the touch",
+  "createdAt": "2026-06-21T12:00:00.000Z"
+}

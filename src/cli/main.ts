@@ -10,12 +10,13 @@ import mint from "../commands/mint.ts";
 import tassilize from "../commands/tassilize.ts";
 import meditate from "../commands/meditate.ts";
 import enervate from "../commands/enervate.ts";
+import samples from "../commands/samples.ts";
 
 const entry = {
 	name: "tassle",
 	description:
 		"Tassle — Mage: The Ascension quintessence/tass energy ledger on atproto (rpg.actor)",
-	run: () => {
+		run: () => {
 		console.log("tassle: an energy ledger for rpg.actor mages");
 		console.log("\nCommands:");
 		console.log("  login <handle>   authenticate via OAuth");
@@ -26,6 +27,7 @@ const entry = {
 		console.log("  tassilize        crystallize quintessence into tass");
 		console.log("  meditate         draw quintessence from a node");
 		console.log("  enervate         drain tass");
+		console.log("  samples          generate example records into samples/");
 	},
 };
 
@@ -41,16 +43,17 @@ export async function runCli(argv: string[]): Promise<void> {
 			// Wire the validation-error renderer so missing required args print
 			// a clean usage message instead of throwing an AggregateError stack.
 			renderValidationErrors,
-			subCommands: {
-				login,
-				logout,
-				whoami,
-				sheet,
-				mint,
-				tassilize,
-				meditate,
-				enervate,
-			},
+		subCommands: {
+			login,
+			logout,
+			whoami,
+			sheet,
+			mint,
+			tassilize,
+			meditate,
+			enervate,
+			samples,
+		},
 		});
 	} catch (err) {
 		// gunshi renders validation errors via renderValidationErrors above,
