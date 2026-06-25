@@ -1,0 +1,128 @@
+{
+  "lexicon": 1,
+  "id": "dev.keytrace.claim",
+  "defs": {
+    "main": {
+      "key": "tid",
+      "type": "record",
+      "record": {
+        "type": "object",
+        "required": [
+          "type",
+          "claimUri",
+          "identity",
+          "sigs",
+          "createdAt"
+        ],
+        "properties": {
+          "sigs": {
+            "type": "array",
+            "items": {
+              "ref": "dev.keytrace.signature#main",
+              "type": "ref"
+            },
+            "description": "Cryptographic attestation signatures from verification services, for example from @keytrace.dev. These are optional, and so you can pass an empty array. Keytrace will place its attestation signature in the claim here so that the library @keytrace/claims can be used by external developers to not have to implement their own verification logic."
+          },
+          "type": {
+            "type": "string",
+            "description": "The claim type identifier",
+            "knownValues": [
+              "github",
+              "dns",
+              "activitypub",
+              "bsky",
+              "npm",
+              "tangled",
+              "pgp",
+              "twitter",
+              "linkedin",
+              "instagram",
+              "reddit",
+              "hackernews"
+            ]
+          },
+          "nonce": {
+            "type": "string",
+            "description": "Random one-time value embedded in the challenge text posted to the external service. Used by verifiers to confirm the proof was created specifically for this claim session. Keytrace itself does not use this, but other services making claims may require it for their verification process.",
+            "maxGraphemes": 128
+          },
+          "status": {
+            "type": "string",
+            "description": "Current verification status of this claim. Absent on legacy records, treated as 'verified'.",
+            "knownValues": [
+              "verified",
+              "failed",
+              "retracted"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Optional user-provided label for this claim"
+          },
+          "claimUri": {
+            "type": "string",
+            "description": "The identity claim URI (e.g., for github: https://gist.github.com/username/id, dns:example.com)"
+          },
+          "failedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp when the claim last failed re-verification or was retracted"
+          },
+          "identity": {
+            "ref": "#identity",
+            "type": "ref",
+            "description": "Structured data about the claimed identity, derived from the claimUri and knowledge inside the verification process. This is not the raw claim data, but a normalized set of fields that can be used for display and more."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Datetime when this claim was created (ISO 8601)."
+          },
+          "prerelease": {
+            "type": "boolean",
+            "description": "Whether this claim was created during the prerelease/alpha period"
+          },
+          "retractedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Datetime when this claim was retracted. Present only if the claim has been retracted (ISO 8601)."
+          },
+          "lastVerifiedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp of the most recent successful re-verification by the system"
+          }
+        }
+      },
+      "description": "An identity claim linking this DID to an external account"
+    },
+    "identity": {
+      "type": "object",
+      "required": [
+        "subject"
+      ],
+      "properties": {
+        "subject": {
+          "type": "string",
+          "description": "Primary identifier (username, domain, handle, etc.)"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Avatar/profile image URL"
+        },
+        "profileUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Profile page URL"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name if different from subject"
+        }
+      },
+      "description": "Generic identity data for the claimed account"
+    }
+  }
+}

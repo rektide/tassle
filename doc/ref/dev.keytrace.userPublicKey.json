@@ -1,0 +1,66 @@
+{
+  "lexicon": 1,
+  "id": "dev.keytrace.userPublicKey",
+  "defs": {
+    "main": {
+      "key": "tid",
+      "type": "record",
+      "record": {
+        "type": "object",
+        "required": [
+          "keyType",
+          "publicKeyArmored",
+          "createdAt"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Human-readable label for this key (e.g., 'work laptop', 'signing key').",
+            "maxGraphemes": 128
+          },
+          "comment": {
+            "type": "string",
+            "description": "Optional comment or description.",
+            "maxGraphemes": 512
+          },
+          "keyType": {
+            "type": "string",
+            "description": "Format of the public key.",
+            "knownValues": [
+              "pgp",
+              "ssh-ed25519",
+              "ssh-ecdsa"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Datetime when this key was created (ISO 8601)."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Datetime when this key expires (ISO 8601)."
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "Key fingerprint.",
+            "maxGraphemes": 256
+          },
+          "retractedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Datetime when this key was retracted. Present only if the key has been retracted (ISO 8601)."
+          },
+          "publicKeyArmored": {
+            "type": "string",
+            "maxLength": 16384,
+            "description": "Full public key in standard text armored format.",
+            "maxGraphemes": 16384
+          }
+        }
+      },
+      "description": "A user-published public key."
+    }
+  }
+}

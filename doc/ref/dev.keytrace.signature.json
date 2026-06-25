@@ -1,0 +1,54 @@
+{
+  "lexicon": 1,
+  "id": "dev.keytrace.signature",
+  "defs": {
+    "main": {
+      "type": "object",
+      "required": [
+        "kid",
+        "src",
+        "signedAt",
+        "attestation",
+        "signedFields"
+      ],
+      "properties": {
+        "kid": {
+          "type": "string",
+          "description": "Key identifier (e.g., date in YYYY-MM-DD format)."
+        },
+        "src": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT URI reference to the signing key record published by the verification service (e.g., at://did:plc:serviceaccount/dev.keytrace.serverPublicKey/2024-01-15)."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Optional comment or description.",
+          "maxGraphemes": 512
+        },
+        "signedAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "Datetime when the signature was created (ISO 8601)."
+        },
+        "attestation": {
+          "type": "string",
+          "description": "The cryptographic signature (base64-encoded)."
+        },
+        "retractedAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "Datetime when this signature was retracted. Present only if the signature has been retracted (ISO 8601)."
+        },
+        "signedFields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Ordered list of field names included in the signed payload (e.g., ['did', 'subject', 'type', 'verifiedAt'])"
+        }
+      },
+      "description": "A cryptographic signature attesting to a claim"
+    }
+  }
+}

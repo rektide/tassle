@@ -52,6 +52,16 @@ Tassle's own lexicons live in [`lexicons/`](../../lexicons/) at the repository r
 - **pds.ls:** [https://pds.ls/did:plc:nckosudltxrtrjkt4zz4jy5y](https://pds.ls/did:plc:nckosudltxrtrjkt4zz4jy5y)
 - **Note:** DID↔handle binding confirmed via DNS TXT on both `_atproto.marque.at` and `_lexicon.marque.at` (both resolve to this DID). Publishes lexicons **only** via `com.atproto.lexicon.schema` records on its PDS (`margin.cafe`); there is no static mirror. All 10 files were reconstructed from the PDS records and normalized to the standard `{lexicon, id, description?, defs}` layout (the wrapping `$type` field is stripped). The namespace covers domain registration (`at.marque.domain`), DNS zone + DNSSEC management (`at.marque.dns` and its `getRecords` / `getDsRecords` queries), a partner/reseller checkout API (`at.marque.partner.*`, Stripe-based), and two auth permission-sets (`authFull`, `partnerApi`).
 
+### keytrace.dev
+
+- **Publishing DID:** [`did:plc:hcwfdlmprcc335oixyfsw7u3`](https://lexicon.garden/identity/did:plc:hcwfdlmprcc335oixyfsw7u3) — handle `@keytrace.dev`
+- **Base URL (fetched from):** `com.atproto.lexicon.schema` records on PDS `https://chalciporus.us-west.host.bsky.network` — no static JSON mirror (`keytrace.dev/lexicons/<NSID>.json` returns 404).
+- **Source repo:** [orta/keytrace](https://github.com/orta/keytrace) (GitHub) · lexicons at [`packages/lexicon/lexicons`](https://github.com/orta/keytrace/tree/main/packages/lexicon) · npm [`@keytrace/lexicon`](https://www.npmjs.com/package/@keytrace/lexicon) / [`@keytrace/claims`](https://www.npmjs.com/package/@keytrace/claims) / [`@keytrace/runner`](https://www.npmjs.com/package/@keytrace/runner)
+- **Developer docs:** [https://keytrace.dev/developers](https://keytrace.dev/developers) · [introducing-keytrace](https://keytrace.dev/blog/introducing-keytrace)
+- **lexicon.garden identity:** [https://lexicon.garden/identity/did:plc:hcwfdlmprcc335oixyfsw7u3](https://lexicon.garden/identity/did:plc:hcwfdlmprcc335oixyfsw7u3)
+- **pds.ls:** [https://pds.ls/did:plc:hcwfdlmprcc335oixyfsw7u3](https://pds.ls/did:plc:hcwfdlmprcc335oixyfsw7u3)
+- **Note:** DID↔handle binding confirmed via DNS TXT on both `_atproto.keytrace.dev` and `_lexicon.keytrace.dev` (both resolve to this DID). Publishes lexicons via `com.atproto.lexicon.schema` PDS records (no static mirror). 6 of 7 files were pulled from the PDS; `dev.keytrace.reverseLookup` (an XRPC query) exists in the GitHub source but is **not yet published** on the PDS, so it was sourced from GitHub and is flagged in the table below. All files normalized to `{lexicon, id, description?, defs}` (PDS `$type` stripped; PDS and GitHub bodies are byte-identical apart from `$type`). keytrace is an identity-verification service: a user posts a `claim` linking their DID to an external account (github/dns/npm/activitypub/bsky/tangled), a verification **service** publishes a JWK signing key (`serverPublicKey`) and embeds a `signature` attestation into the claim's `sigs[]`; third parties verify by resolving the sig's `src` to the server key and checking the base64 `attestation` over `signedFields` (library: `@keytrace/claims`). Separately, users can self-sign `statement` records with their own `userPublicKey` (PGP).
+
 ## Files
 
 | File | Source | NSID | Description | Notes |
@@ -126,6 +136,13 @@ Tassle's own lexicons live in [`lexicons/`](../../lexicons/) at the repository r
 | [`at.marque.partner.getOrder.json`](at.marque.partner.getOrder.json) | [marque.at](https://marque.at) | `at.marque.partner.getOrder` | Get the status of a partner checkout order and the resulting domain details. |  |
 | [`at.marque.partner.listPricing.json`](at.marque.partner.listPricing.json) | [marque.at](https://marque.at) | `at.marque.partner.listPricing` | List the TLDs Marque offers and their prices, for partner integrations. |  |
 | [`at.marque.partnerApi.json`](at.marque.partnerApi.json) | [marque.at](https://marque.at) | `at.marque.partnerApi` | (permission-set; no description) |  |
+| [`dev.keytrace.claim.json`](dev.keytrace.claim.json) | [keytrace.dev](https://keytrace.dev) | `dev.keytrace.claim` | An identity claim linking this DID to an external account |  |
+| [`dev.keytrace.profile.json`](dev.keytrace.profile.json) | [keytrace.dev](https://keytrace.dev) | `dev.keytrace.profile` | Keytrace profile settings. Singleton record stored in the user's ATProto repo. |  |
+| [`dev.keytrace.reverseLookup.json`](dev.keytrace.reverseLookup.json) | [keytrace.dev](https://keytrace.dev) | `dev.keytrace.reverseLookup` | Find the ATProto DIDs (and the at-uris of their keytrace claim records) that … | Source-only — in [GitHub repo](https://github.com/orta/keytrace) but not published on PDS |
+| [`dev.keytrace.serverPublicKey.json`](dev.keytrace.serverPublicKey.json) | [keytrace.dev](https://keytrace.dev) | `dev.keytrace.serverPublicKey` | A signing key for claim attestations. It effectively hosts a JWK on a user's … |  |
+| [`dev.keytrace.signature.json`](dev.keytrace.signature.json) | [keytrace.dev](https://keytrace.dev) | `dev.keytrace.signature` | A cryptographic signature attesting to a claim |  |
+| [`dev.keytrace.statement.json`](dev.keytrace.statement.json) | [keytrace.dev](https://keytrace.dev) | `dev.keytrace.statement` | A public statement signed by one of the user's own published public keys (dev… |  |
+| [`dev.keytrace.userPublicKey.json`](dev.keytrace.userPublicKey.json) | [keytrace.dev](https://keytrace.dev) | `dev.keytrace.userPublicKey` | A user-published public key. |  |
 
 ## Known data quality issues
 
