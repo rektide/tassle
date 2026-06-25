@@ -874,3 +874,303 @@ A thin acceptance record that ties a reality to its master records. Not strictly
 
 - [`doc/ref/actor.rpg.master.json`](../ref/actor.rpg.master.json) — the voucher pattern that `com.superbfowle.tass.reality` extends
 - [`lexicons/com.superbfowle.tass.resonance.json`](../../lexicons/com.superbfowle.tass.resonance.json) — tassle's existing lexicon that uses `defs.main` plus named sub-defs (`resonanceValue`, `resonanceProfile`)
+
+---
+
+# Resonance design — round 4 (synthesis: reality as persona, attestation via keytrace)
+
+Round 4 drives the Reality/Master question to a decision, adds the keytrace.dev attestation pattern as the cosign mechanism, and notes node roleSlots + the mage self-attestation meta point.
+
+## The decision: Reality IS a `pub.layers.persona.persona`
+
+After round 3's three options (A: persona + per-mage master records, B: master + persona fields, C: embed both), the constraints the user surfaced make the answer clear:
+
+> *"records have to be a single lexicon type, that there's no cheat codes around that"*
+> *"i really want to use existing lexicon entries, not define our own"*
+> *"ideally we should kind of shoehorn our work into persona"*
+
+Option C is out (records are single-`$type`). Option B is out (would force defining a new collection). Option A wins: **Reality is a `pub.layers.persona.persona` record. Period.** No new tassle collection for the authority. The persona lexicon has all the structural fields we need.
+
+### What the Reality persona record looks like
+
+Every field in this is from `pub.layers.persona.persona` — no tassle additions:
+
+```json
+{
+  "$type": "pub.layers.persona.persona",
+  "name": "The Tuesday Chronicles",
+  "description": "My home Mage chronicle, Tuesday nights, Reverie-compatible crossover.",
+  "domain": "custom",
+  "domainUri": "at://did:plc:kwgllf365cwmxbnxitx4pjdj/pub.layers.graph.graphNode/<rpg-cosmology-node>",
+  "kind": "expert-panel",
+  "parentRef": null,
+  "ontologyRefs": [
+    "at://did:plc:com-superbfowle-tass-authority/pub.layers.ontology.ontology/<mage-cosmology-rkey>",
+    "at://did:plc:com-superbfowle-tass-authority/pub.layers.ontology.ontology/<reverie-cosmology-rkey>"
+  ],
+  "guidelines": "Paradox per 5 overage. Quintessence cap = Avatar × 5. Reverie crossovers permitted with mutual attestation.",
+  "guidelinesFormat": "markdown",
+  "knowledgeRefs": [
+    { "source": "custom", "identifier": "mage-revised", "uri": "https://whitewolf.fandom.com/wiki/Mage:_The_Ascension", "label": "Mage Revised" }
+  ],
+  "features": { "entries": [
+    { "key": "system", "value": "mage" },
+    { "key": "paradoxRule", "value": "backlash-per-5" },
+    { "key": "quintessenceCap", "value": "avatar-rating-times-five" }
+  ] },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+The `system: "mage"` tag goes in `features` (denormalized fast-filter; the canonical source of truth is `ontologyRefs`). Everything else uses the persona lexicon's intended fields directly. **One account can publish many of these** — three Mage chronicles, a Reverie campaign, etc. — each as a separate persona record.
+
+### What about features being nested ugly?
+
+The user pushed back on the `features: { entries: [{key, value}] }` wrap. Two answers:
+
+1. **It's not just for reality** — features is the universal extension mechanism on every layers.pub record. Not "for reality"; for every record that needs schema-extension. The wrap exists in layers.pub probably for per-entry typing reasons (each entry can have a typed value).
+
+2. **The wrap is the cost of using `pub.layers.persona.persona` directly.** If we want flat `features: { foo: "bar" }` we have to either (a) propose a `flatFeatureMap` upstream to layers.pub, or (b) define a new tassle-local collection (which we just ruled out for the reality). Take the wrap on reality records; consider tassle-flat features for action records (`tassilize`/`meditate`/`enervate`) where we already own the lexicon.
+
+### Verifying: yes, masters are just atproto DIDs
+
+The user asked to verify: *"different realities could respect/vouch/approve/mint multiple masters (which i think/i hope are just atproto DID's? please help verify)"*. **Confirmed**: an atproto DID is just an identity. There is no "master certificate" or "master record" required to be a master. The status of "being a master in this reality" comes from the reality appointing the DID — not from any record the master holds.
+
+A master is just a DID. To *be* a master in a reality, that DID must be appointed by the reality via an edge record (see next section). The appointment is what makes them a master; their identity is just their DID.
+
+## The appointment pattern: masters via `pub.layers.graph.graphEdge`
+
+Reality → master appointment is a typed graph edge. The reality persona (source) authorizes a DID (target) as a master. Uses existing layers.pub graphEdge lexicon — no new collection.
+
+```json
+{
+  "$type": "pub.layers.graph.graphEdge",
+  "source": { "recordRef": "at://did:plc:reality-authority/pub.layers.persona.persona/<rkey>" },
+  "target": { "recordRef": "at://did:plc:storyteller-did/actor.rpg.stats/self" },
+  "edgeType": "authorizes",
+  "label": "master-appointment",
+  "confidence": 1000,
+  "properties": { "entries": [
+    { "key": "roles", "value": "voucher,item-minter,spell-authorizer" },
+    { "key": "validFrom", "value": "2026-06-21T20:00:00Z" }
+  ] },
+  "metadata": { "author": "did:plc:reality-authority", "tool": "tassle", "createdAt": "2026-06-21T20:00:00Z" },
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+Notes:
+- `edgeType: "authorizes"` is in graphEdge's knownValues list (`"authorizes"` is not — but `"custom"` is, so use `edgeType: "custom"` with `edgeTypeUri` pointing at a published "master-appointment" typeDef, OR use `label: "master-appointment"` for an informal but readable form). Locked in: use `edgeType: "custom"` + `label: "master-appointment"` for v1; if we publish a formal typeDef for the appointment relation later, switch to `edgeTypeUri`.
+- `target` uses `recordRef` to point at the master's `actor.rpg.stats/self` — every atproto actor has one of these, so it's a stable identity handle.
+- `properties` carries roles (what kinds of things this master is authorized to do) and validity window.
+- One reality can publish many appointment edges (one per master). One DID can be a master in many realities (each reality publishes its own appointment edge).
+
+### What masters do once appointed
+
+A master, in a reality, has authority to:
+
+1. **Voucher for mages**: publish `actor.rpg.master` records (existing rpg.actor lexicon!) for mages they accept. The `campaign` field should match the reality's name for queryability.
+2. **Mint items**: publish `equipment.rpg.give` records (existing rpg.actor lexicon!) to issue Tass or other inventory items to mages.
+3. **Authorize spell casting / item usage**: cosign action records via the keytrace attestation pattern (below).
+4. **Modify the reality**: edit the reality persona's `guidelines`, `ontologyRefs`, etc. (since the master DID is "in" the reality, though strictly speaking only the reality's publishing DID can edit it — so the master's modifications happen via the reality's publishing infrastructure, not directly).
+
+### What mages do *not* get
+
+The user was explicit: *"mages DO NOT get master roles"*. Mages are players. They own their own `actor.rpg.stats` sheet. They can publish their own action records (`tassilize`/`meditate`/`enervate`) and self-attest via the keytrace PGP pattern. They cannot voucher for other mages, mint items, or authorize reality-level state changes.
+
+A mage that wants to *also* be a master has a separate DID for the master role (or the same DID with a master appointment edge from the reality — the appointment is what matters, not the mage's other identity).
+
+## The cosign pattern: `dev.keytrace.signature` on action records
+
+This is where keytrace.dev unlocks the whole thing. The pattern, mapped to tassle:
+
+1. **Reality publishes its signing key** as a `dev.keytrace.serverPublicKey` record (existing keytrace lexicon). This JWK is the "official stamp" of the reality.
+2. **Each appointed master publishes their own signing key** as a `dev.keytrace.serverPublicKey` record (same lexicon, different DID). The master's signature is recognized as "vouched for by master X in reality Y" because of the appointment edge.
+3. **Every action record** (`tassilize`/`meditate`/`enervate`) gains a `sigs` field — an array of `dev.keytrace.signature` objects (existing keytrace lexicon, embedded in the action record's `$type`).
+4. **A signature carries `signedFields[]`** so an authority can vouch for specific fields only: "I cosign that this meditation drew 3 quintessence from this Node, but I do not vouch for the resonance profile the mage claimed."
+5. **Verification** is the keytrace pattern: resolve `signature.src` → the signing key, check JWK validity window, check the key belongs to a recognized authority (via the appointment chain), verify the cryptographic attestation over `signedFields`.
+
+Sample action record with cosigns:
+
+```json
+{
+  "$type": "com.superbfowle.tass.meditate",
+  "actor": "did:plc:mage-jane",
+  "sheet": "at://did:plc:mage-jane/actor.rpg.stats/mage",
+  "node": "at://did:plc:some-node-authority/com.superbfowle.tass.node/<rkey>",
+  "amount": 3,
+  "sigs": [
+    {
+      "kid": "2026-06-21",
+      "src": "at://did:plc:mage-jane/dev.keytrace.userPublicKey/main",
+      "signedAt": "2026-06-21T20:00:00Z",
+      "attestation": "<base64 PGP signature by the mage over signedFields>",
+      "signedFields": ["actor", "node", "amount", "createdAt"]
+    },
+    {
+      "kid": "2026-06-21",
+      "src": "at://did:plc:master-x/dev.keytrace.serverPublicKey/2026-06-21",
+      "comment": "verified at table; amount matches Node rating",
+      "signedAt": "2026-06-21T21:30:00Z",
+      "attestation": "<base64 JWK signature by master over signedFields>",
+      "signedFields": ["actor", "node", "amount"]
+    }
+  ],
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+This record has TWO cosigns: the mage's self-attestation (PGP, via their `userPublicKey`) and master X's verification (JWK, via their `serverPublicKey`). Consumers see both; trust accumulates with each additional recognized cosign.
+
+## Mages as their own masters (the meta point, attested)
+
+The user's meta-observation: *"mage of all games is a game where mages are their own master, where they beget. especially if they have matter 3 and or other spheres."*
+
+The cosign pattern models this beautifully. In Mage: The Ascension, mages don't need permission to act — they need acceptance from consensus reality. The mechanical translation:
+
+- **Every action a mage publishes is valid by default.** A record signed only by the mage's own PGP key is a self-attested working. It exists, it's cryptographically traceable to the mage, no permission was required.
+- **Trust accumulates via cosigns from recognized authorities.** A self-attested record has weight 1 (the mage's own). A master-cosigned record has weight 2 (mage + master). A reality-directly-cosigned record has the highest weight.
+- **"Taint" for unapproved mages is the absence of cosigns from recognized authorities.** A mage doing many workings that no master has cosigned is a mage whose actions are technically valid but socially suspect — exactly the Mage lore of a rogue / Hollow One / orphan mage operating outside Tradition consensus.
+- **A Matter 3+ mage "begetting"** is mechanically: that mage has accumulated enough trust (cosigns from peers, from established mages, from a reality) that their self-attestations carry meaningful weight on their own. They have *become* an authority through accumulated reputation, not through appointment.
+
+No master role needed for this. The mage is just publishing records; the cosign graph tells the trust story.
+
+## Node roleSlots for meditation
+
+The user: *"i think a node should maybe be able to express roleSlots on itself that people/persona can meditate at? each of these practitioners can be meditating."*
+
+This brings roleSlot back in — not for rituals (as round 2 deferred), but for **Node meditation capacity**. A Node declares how many Mages can meditate at it simultaneously, in what roles.
+
+Proposal: add a `slots` field to `com.superbfowle.tass.node`, using a tassle-local slot shape inspired by `pub.layers.ontology.defs#roleSlot`:
+
+```json
+{
+  "$type": "com.superbfowle.tass.node",
+  "name": "The Silver Spring",
+  "rating": 3,
+  "ambientQuintessence": 12,
+  "resonance": { /* ... */ },
+  "slots": [
+    {
+      "roleName": "primary-meditator",
+      "capacity": 1,
+      "required": true,
+      "description": "The Mage actively drawing quintessence from the Node."
+    },
+    {
+      "roleName": "secondary-meditator",
+      "capacity": 2,
+      "required": false,
+      "description": "Additional Mages in attendance; limited draw."
+    },
+    {
+      "roleName": "witness",
+      "capacity": 4,
+      "required": false,
+      "description": "Observers; no draw but contribute to resonance attunement."
+    }
+  ],
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+Each `com.superbfowle.tass.meditate` action record references the slot it's filling:
+
+```json
+{
+  "$type": "com.superbfowle.tass.meditate",
+  "actor": "did:plc:mage-jane",
+  "node": "at://.../com.superbfowle.tass.node/<rkey>",
+  "slot": "primary-meditator",
+  "amount": 3,
+  "sigs": [ /* ... */ ],
+  "createdAt": "2026-06-21T20:00:00Z"
+}
+```
+
+This is lighter than the full `pub.layers.ontology.defs#roleSlot` machinery (no `fillerTypeRefs`, no `constraints` DSL) but uses the same conceptual shape. A Node with empty `slots` falls back to the current "anyone can meditate, no capacity limit" behavior for back-compat.
+
+## The complete picture (the data model, reworked)
+
+Every record type involved, with which existing lexicon it uses:
+
+```mermaid
+flowchart TD
+  subgraph "Existing layers.pub"
+    Persona["pub.layers.persona.persona<br/>(the Reality)"]
+    Ontology["pub.layers.ontology.ontology<br/>(the Cosmology)"]
+    TypeDef["pub.layers.ontology.typeDef<br/>(canonical types)"]
+    GraphEdge["pub.layers.graph.graphEdge<br/>(appointments + cosigns + opposedTo)"]
+  end
+
+  subgraph "Existing rpg.actor"
+    Stats["actor.rpg.stats/mage<br/>(the Mage sheet)"]
+    Master["actor.rpg.master<br/>(per-mage voucher)"]
+    Give["equipment.rpg.give<br/>(item issuance)"]
+    Item["equipment.rpg.item<br/>(player-owned item)"]
+  end
+
+  subgraph "Existing keytrace.dev"
+    ServerKey["dev.keytrace.serverPublicKey<br/>(reality/master signing key)"]
+    UserKey["dev.keytrace.userPublicKey<br/>(mage PGP key)"]
+    Sig["dev.keytrace.signature<br/>(cosign attestation)"]
+    Statement["dev.keytrace.statement<br/>(self-signed claim)"]
+  end
+
+  subgraph "Tassle-owned"
+    Node["com.superbfowle.tass.node<br/>(with slots field)"]
+    Action["com.superbfowle.tass.{tassilize,<br/>meditate, enervate}<br/>(with sigs field)"]
+    Form["com.superbfowle.tass.form"]
+    Resonance["com.superbfowle.tass.resonance"]
+  end
+
+  Persona -- "ontologyRefs" --> Ontology
+  Ontology -- "has" --> TypeDef
+  Persona -- "appoints via graphEdge" --> Master
+  Master -- "publishes" --> Master
+  Master -- "publishes" --> Give
+  Master -. vouchers for .-> Stats
+  Give -- "accepted as" --> Item
+  Persona -- "publishes" --> ServerKey
+  Master -- "publishes" --> ServerKey
+  Stats -- "publishes" --> UserKey
+  Stats -- "publishes" --> Action
+  Stats -- "publishes" --> Statement
+  Action -- "embeds sigs[]" --> Sig
+  Sig -- "src" --> ServerKey
+  Sig -- "src (PGP)" --> UserKey
+  Action -- "references" --> Node
+  Node -- "characterized by" --> Resonance
+  Item -- "characterized by" --> Form
+```
+
+**Zero new tassle lexicons for the authority/attestation/cosign model.** Tassle owns only the action records, the node, the form registry, and the resonance canonicals. Everything else is existing infrastructure.
+
+## Open questions (round 4)
+
+1. **Should the reality persona's `domain` field use `"custom"` plus a `domainUri` to a published "rpg-cosmology" graphNode, or should we propose `"rpg"` / `"game-cosmology"` to layers.pub upstream?** The latter gives a non-`custom` slot but requires an upstream contribution.
+
+2. **The `edgeType` for appointment — `"custom"` + `label: "master-appointment"` informally, or publish a formal typeDef and use `edgeTypeUri`?** Formal is cleaner; informal is less schema surface for v1.
+
+3. **Should action records' `sigs` field be a tassle-local def, or should we contribute `sigs` upstream as a generic "carries keytrace signatures" def usable by any record?** Upstream contribution would make the cosign pattern reusable beyond tassle.
+
+4. **What's the verification library story?** The keytrace pattern needs the [`@keytrace/claims`](https://www.npmjs.com/package/@keytrace/claims) library or equivalent to verify. Tassle's CLI / appview will need to bundle this. Is there a TypeScript-only / browser-friendly implementation?
+
+5. **Cosign expiry / retraction.** Keytrace's signature record has `retractedAt`. A master who later disagrees with a working they cosigned can retract. How does this propagate? The signature's `src` still resolves; the consumer checks `retractedAt` and down-weights.
+
+6. **Should the reality persona publish a `com.superbfowle.tass.canonicalSet` corpus record (the layers.pub corpus pattern from round 1) declaring its review rules, or are the persona's `guidelines` + `features` enough?** The corpus pattern gives formal `annotationDesign` (redundancy, adjudication, qualityCriteria) which is overkill for v1.
+
+7. **Does the canonical tassle authority use the existing tassle project DID, a new DID, or a `did:web:tass.superbfowle.com`?** A `did:web` tied to the project domain is more portable than a `did:plc`.
+
+8. **The `actor.rpg.master.campaign` field matching the reality persona's `name` for queryability — should tassle enforce this, or rely on convention?** Enforced is cleaner but requires tassle tooling in the loop on every master record publication.
+
+9. **Self-attestation reputation — is there a numeric score?** Some appviews might want a "trust score" for a mage based on number and weight of cosigns. Or is the qualitative "look at the cosign graph" answer sufficient?
+
+10. **What happens to legacy `com.superbfowle.tass.resonance` records when the cosmology/typeDef split lands?** Migration script that reads each canonical and emits a `pub.layers.ontology.typeDef` record?
+
+## See also (round 4 additions)
+
+- [`doc/ref/dev.keytrace.signature.json`](../ref/dev.keytrace.signature.json) — the cosign shape (`kid`, `src`, `signedFields`, `attestation`, `retractedAt`)
+- [`doc/ref/dev.keytrace.serverPublicKey.json`](../ref/dev.keytrace.serverPublicKey.json) — the JWK publishing pattern for authorities
+- [`doc/ref/pub.layers.persona.persona.json`](../ref/pub.layers.persona.persona.json) — the persona shape that the Reality uses directly
+- [`doc/ref/pub.layers.graph.graphEdge.json`](../ref/pub.layers.graph.graphEdge.json) — the edge shape for appointments, cosigns, and opposedTo relations
