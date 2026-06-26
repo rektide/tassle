@@ -1174,3 +1174,163 @@ flowchart TD
 - [`doc/ref/dev.keytrace.serverPublicKey.json`](../ref/dev.keytrace.serverPublicKey.json) — the JWK publishing pattern for authorities
 - [`doc/ref/pub.layers.persona.persona.json`](../ref/pub.layers.persona.persona.json) — the persona shape that the Reality uses directly
 - [`doc/ref/pub.layers.graph.graphEdge.json`](../ref/pub.layers.graph.graphEdge.json) — the edge shape for appointments, cosigns, and opposedTo relations
+
+---
+
+# Resonance design — round 5 (v0 pragmatism, slots, domainUri)
+
+Round 5 backs off from the round-4 cosign elaboration to clarify what v0 actually needs, then resolves the slots question (use `pub.layers.ontology.defs#roleSlot` directly), and tightens up `domainUri`.
+
+## v0 strategy: master records only, no attestation yet
+
+The user: *"i think initially we can kind of just have master records and not need anything attested, that we just keep a LSM composing all the masters together and that that basically makes up our actual reality, that the character sheet more or less just reflects that."*
+
+**v0 is the master-LSM reality.** Concretely:
+
+- The reality is **implicit**, not a published persona record yet. It's the *join* of all `actor.rpg.master` records published by masters the operator trusts.
+- The trusted-masters set is a **configuration constant** in the v0 tool (a list of DIDs the operator accepts as authorities). No graphEdge appointment records published; no reality persona record published. Just "these are the masters I trust; their master records compose my reality".
+- An LSM (log-structured merge) over master records gives the working set: each master record vouches for one mage's state at a point in time; merging across masters and across time produces the current reality view.
+- The Mage's `actor.rpg.stats/mage` sheet **reflects** this — the mage writes their own sheet, the masters write master records vouching for sheet state, the LSM view is what the reality currently believes.
+- No cosigns, no signatures, no keytrace integration. Those land in v1+ when the master set grows large enough that authenticating master records matters.
+
+What this means for the lexicon work:
+
+- **v0 collections needed**: just the existing `com.superbfowle.tass.{node,form,resonance,tassilize,meditate,enervate}` plus `actor.rpg.master` (existing rpg.actor). No `pub.layers.persona.persona` reality records published in v0. No graphEdge appointment records. No keytrace key records or signatures.
+- **v0 tool work**: a CLI that reads a trusted-masters DID list from config, fetches their published `actor.rpg.master` records via the firehose or `listRecords`, merges them into an LSM view, and answers queries against that view.
+
+The round-4 design (persona reality, graphEdge appointments, keytrace cosigns) is the **target architecture for v1+**. v0 is the working subset that gets tassle bootstrapped.
+
+### Areas of interest deferred past v0
+
+- **Tass acceptance records** (the round-3 `com.superbfowle.tass.acceptance` idea) — the user liked it but doesn't need it in v0. Relevant when mages start exchanging Tass with each other in peer-to-peer patterns the master set doesn't directly mediate.
+- **Equipment issuance via XRPC** — the round-4 design assumed rpg.actor might have an XRPC for masters issuing `equipment.rpg.give` items. The subagent verified rpg.actor publishes only 6 lexicons (no XRPC surface); the `/api/*` endpoints on rpg.actor are plain HTTP REST on the web app, not atproto XRPCs. So equipment issuance for tassle means masters publishing `equipment.rpg.give` records directly to their own PDS via standard `com.atproto.repo.createRecord` — no XRPC needed. Add to areas-of-interest when we want a richer master CLI.
+- **Cosigns via keytrace** — round-4 + the attestation comparison doc cover this; needs the master set to grow past trivial size before it pays for itself.
+
+## Reminder: where slots came from
+
+The user asked to be reminded. Slots originally surfaced in two places:
+
+1. **layers.pub defines `pub.layers.ontology.defs#roleSlot`** as a reusable shape ([`doc/ref/pub.layers.ontology.defs.json`](../ref/pub.layers.ontology.defs.json)). It's a frame-semantics concept: a `roleSlot` is a named position in a `situation-type` typeDef (Agent, Patient, Theme, ARG0). The slot has `fillerTypeRefs` constraining what entity types can fill it, plus optional `constraints` (a DSL), `required`, `defaultValue`. layers.pub uses these for linguistic annotation frameworks.
+
+2. **The user proposed applying the pattern to Nodes** in the round-3→4 conversation: *"i think a node should maybe be able to express roleSlots on itself that people/persona can meditate at? each of these practitioners can be meditating."* I added a `slots` field to `com.superbfowle.tass.node` in round 4 using a simplified shape.
+
+The simplification in round 4 dropped `fillerTypeRefs`, `constraints`, `knowledgeRefs`, `features` — keeping only `roleName`, `capacity`, `required`, `description`. The user's round-5 question: should we just use the full `pub.layers.ontology.defs#roleSlot` directly instead of defining our own simpler shape?
+
+## Slots comparison: layers.pub roleSlot vs tassle-local slots
+
+| Concern | `pub.layers.ontology.defs#roleSlot` (existing) | tassle-local simplified `slots` (round 4) |
+| --- | --- | --- |
+| Where it lives | Inside a `pub.layers.ontology.typeDef` of `typeKind: situation-type` | Inside a `com.superbfowle.tass.node` record directly |
+| Fields | `roleName`, `roleDescription`, `fillerTypeRefs[]`, `collectionRef`, `required`, `defaultValue`, `constraints[]`, `knowledgeRefs[]`, `features` | `roleName`, `description`, `capacity`, `required` |
+| Type constraints | First-class (`fillerTypeRefs` pointing at typeDefs; e.g. "only Mages with Arete ≥ 5") | None (any DID can fill any slot) |
+| Capacity | Not modeled (it's one roleSlot per filled position; capacity = N roleSlot records with the same `roleName`) | Explicit integer field on the slot |
+| Predicates/constraints | Full DSL via `pub.layers.defs#constraint` (`expression`, `expressionFormat`, `scope`, `context`) | None |
+| Source citation | `knowledgeRefs[]` per slot | Not modeled |
+| Where to put it for a Node | Requires a separate `pub.layers.ontology.typeDef` situation-type record per Node, with the roleSlots in `allowedRoles`. The Node record itself just references the typeDef. | Inline in the Node record |
+
+### Two design options for v1
+
+**Option α (use layers.pub roleSlot directly)**: a Node references a separately published `pub.layers.ontology.typeDef` situation-type that defines the meditation roles for that Node.
+
+```mermaid
+flowchart LR
+  Node["com.superbfowle.tass.node"]
+  TypeDef["pub.layers.ontology.typeDef<br/>name: 'Meditation at the Silver Spring'<br/>typeKind: situation-type"]
+  Slot1["roleSlot<br/>roleName: primary-meditator<br/>fillerTypeRefs: [Mage with Arete >= 1]<br/>required: true"]
+  Slot2["roleSlot<br/>roleName: witness<br/>fillerTypeRefs: [Mage]<br/>required: false"]
+
+  Node -- "sessionTypeDefRef" --> TypeDef
+  TypeDef -- "allowedRoles" --> Slot1
+  TypeDef -- "allowedRoles" --> Slot2
+```
+
+A meditation action record points at the typeDef and fills a role: `{sessionTypeDefRef, role: "primary-meditator", actor: did:plc:mage}`.
+
+**Pros**: maximum reuse; first-class type constraints ("only Mages with Prime ≥ 2 can fill this slot"); slots are independently versionable from the Node; aligns with the round-4 ontology discipline.
+**Cons**: two records per Node (the Node itself + its session typeDef); every Node needs its own typeDef or a shared one; heavier schema for v1.
+
+**Option β (tassle-local simplified slots inline)**: the round-4 design — a `slots` field directly on the Node record with a simplified shape.
+
+```mermaid
+flowchart LR
+  Node["com.superbfowle.tass.node<br/>slots: [...]<br/>"]
+  Slot1["{ roleName: 'primary-meditator',<br/>capacity: 1, required: true }"]
+  Slot2["{ roleName: 'witness',<br/>capacity: 4, required: false }"]
+
+  Node -- "slots[0]" --> Slot1
+  Node -- "slots[1]" --> Slot2
+```
+
+**Pros**: one record per Node; lighter schema; explicit `capacity` field (which roleSlot models only via N records); fits v0/v1 better.
+**Cons**: no first-class type constraints (any DID can fill); doesn't get the layers.pub ontology machinery; tassle-specific extension.
+
+**Recommendation**: **Option β for v1**, with a documented migration path to Option α when first-class constraints are needed. Reasoning: in v0/v1 we don't actually need type constraints on slot fillers — any mage can attempt any meditation slot, and the master cosigns (or doesn't) based on whether they meet the requirements. The constraint enforcement is *social* (master cosignature), not *schema-level*. Type constraints in the schema would be a parallel enforcement mechanism that adds complexity without obvious v1 value.
+
+When tassle grows to where slot-filler constraints should be machine-enforced (e.g. tournament play where only verified Arete-5 mages can fill certain slots), migrate to Option α: define a `situation-type` typeDef per Node, move the slot definitions into `allowedRoles`, drop the inline `slots` field.
+
+## The Matter 3+ clarification
+
+The user surfaced an important correction: *"in the matter 3+ mage position, that mage still needs to go through a reality or a master to cast a spell, which needs to be attested to by a master. the master will then give the mage actor the item, via existing xrpc in rpg.actor."*
+
+This refines the round-4 framing. Self-attestation does NOT replace master authorization for actual spellcasting — it covers only the low-stakes self-published action records. The mechanics:
+
+- **Meditation, tassilize at a Node, journal entries, observations** — a mage self-attests. Useful but low-stakes; trust accumulates via cosigns.
+- **Actual spellcasting, item minting, reality-modifying workings** — requires a master's cosignature to be "real" in the chronicle. Without the master cosign, the action is a hollow claim.
+- **Master gives the mage an item** — when a working produces a Tass object (or other inventory item), the master publishes an `equipment.rpg.give` record (existing rpg.actor) and the mage accepts it by publishing a matching `equipment.rpg.item` record. The paired-record pattern from round 1.
+
+(The subagent verified rpg.actor publishes no XRPC for this; the `/api/*` endpoints on the web app are plain HTTP REST. So "via existing xrpc in rpg.actor" is more accurately "via the existing paired-record pattern that rpg.actor defines" — the master writes a give record, the mage writes an item record, full stop. No XRPC method involved.)
+
+The round-4 cosign model accommodates this naturally:
+
+- A spellcasting action record is published by the mage with their self-attestation in `sigs[]`.
+- The master publishes a separate record (a graphEdge with `edgeType: "supports"`, or equivalently adds a signature entry to the action's `sigs[]` if the master has write access to the action's repo — they don't, so the graphEdge pattern applies).
+- The item-issuance is a separate paired record set, not part of the spellcasting action record itself.
+
+So the layered trust model is:
+
+1. **Self-attested only** → claim, not reality. Useful for journals, observations, low-stakes actions.
+2. **Master-cosigned** → reality-accepted. The working happened, the items are real, the sheet updates are valid.
+3. **Reality-directly-cosigned** → highest weight. The reality persona itself (not just one of its masters) vouches for this.
+
+Matter 3+ mages don't escape this — they still need master cosignature for actual workings. What changes with their accumulated power is that *their self-attestations are taken more seriously by other masters* (informal social weight, not a schema-level change). They might also be appointed as masters themselves, at which point they cosign others' work.
+
+## Resolving `domainUri`
+
+The user: *"i noticed you made the domainUri be a graphNode... are there other more specific options that might be better? that feels ultra-generic. maybe we don't use atproto at all but some canonical tassle uri/url? maybe? being on proto would be good too though."*
+
+Agreed — `pub.layers.graph.graphNode` is too generic. The field's purpose (per layers.pub) is "AT-URI of the domain definition node. Community-expandable via knowledge graph." For tassle the *domain* is "RPG cosmology" or more specifically "Mage: the Ascension cosmology". Options, in order of decreasing atproto-ness:
+
+| Option | Example | Pros | Cons |
+| --- | --- | --- | --- |
+| **A. URL to a canonical tassle page** | `https://tass.superbfowle.com/cosmologies/mage` | Simple, stable, human-readable, no atproto dependency for metadata | Not atproto; if tassle's domain moves, all reality records break their `domainUri` |
+| **B. `did:web:tass.superbfowle.com` URL** | `did:web:tass.superbfowle.com/cosmologies/mage` | Atproto-native; portable with the project's DID | Requires publishing a did:web document for tassle; opaque to non-atproto tools |
+| **C. Atproto record (typed)** | `at://did:web:tass.superbfowle.com/pub.layers.eprint.eprint/<rkey>` pointing at a published "Mage source-book" record | Atproto-native AND typed (eprint is a citation record); fits the round-4 source-citation pattern | Heaviest; requires publishing eprint records for every cosmology |
+| **D. The cosmology's own `ontology` record** | `at://did:plc:<authority>/pub.layers.ontology.ontology/<mage-rkey>` | Most precise — points at the actual cosmology definition | Redundant with `ontologyRefs[]` (which already points there); `domainUri` should be the *category* (RPG cosmology in general), `ontologyRefs` is the *specific cosmology* (Mage) |
+| **E. `pub.layers.graph.graphNode` with a more specific `nodeType`** | graphNode record with `nodeType: "custom"` + `label: "RPG cosmology domain"` | What the field is nominally for | Still requires publishing a graphNode record just to be the domain referent |
+
+**Recommendation**: **Option A in v0** (a stable canonical URL), with a documented migration to **Option C in v1+** (a published eprint record citing the source book). Reasoning:
+
+- v0 doesn't have a publishing authority set up; a URL is trivial.
+- The URL points to a page that *describes* the cosmology (Mage: the Ascension, what spheres it has, etc.) — pure metadata, no need for atproto infrastructure.
+- When v1+ publishes cosmology records, the URL is replaced by an eprint at-uri that cites the actual source book (Mage Revised, M20) — that gives the chronicle arbiter a verifiable provenance chain per round-1's source-citation idea.
+- `domain` stays `"custom"` because the layers.pub `domain` enum doesn't have a good RPG slot. Optionally contribute `"rpg"` or `"game-cosmology"` upstream to layers.pub (round-2 question 5).
+
+The "domain" (the category — RPG) and the "domainUri" (the specific instance — Mage Revised) split is now clean: domain is a slug for the broad field, domainUri is the citation into that field.
+
+## Open questions (round 5)
+
+1. **Slot migration story.** When v1 ships with inline slots (Option β) and we later want Option α (typed roleSlots), what's the migration path? Probably: a script that reads each Node's `slots[]` and emits a `pub.layers.ontology.typeDef` situation-type record, then rewrites the Node to drop the inline field. Should this be documented now or deferred?
+
+2. **What about equipment issuance as a cosign-eligible action?** When a master publishes an `equipment.rpg.give` to mint an item, should that give record itself carry `sigs[]` from the reality (so consumers can verify the master was authorized by the reality at the time of issuance)? Or is the appointment edge enough?
+
+3. **Should `com.superbfowle.tass.mediate.slot` move to a separate collection?** Right now (round 4) each meditation action record references the slot it's filling as a string field. If multiple meditations need to coordinate (e.g. "three mages filling the three slots of one Node simultaneously"), do we need a "session" record that groups them? Or is temporal + Node + slot-key enough to reconstruct sessions?
+
+4. **v0 trusted-masters config — what does the LSM actually look like?** The user described it as "a LSM composing all the masters together". Concrete: a sorted-string-table over (publisher-DID, player-DID, system, createdAt) → master record, with tombstones for revocations? Or just a simple `Map<player-DID, latest-master-record>`?
+
+5. **When does a mage need a cosign vs not?** The Matter 3+ clarification says spellcasting needs master cosign. Where's the line? Is it "anything that consumes quintessence" needs cosign, or "anything that produces an item" needs cosign, or "anything the chronicle cares about tracking"?
+
+## See also (round 5 additions)
+
+- [`doc/discovery/attestation.md`](attestation.md) — the full attestation comparison (keytrace, co/core, atproto-attestation) referenced by round 4's cosign pattern
+- [`doc/ref/atproto-attestation.notes.md`](../ref/atproto-attestation.notes.md) — schema notes for the atproto-attestation crate (no lexicon JSON exists upstream)
+- [`doc/ref/pub.layers.ontology.defs.json`](../ref/pub.layers.ontology.defs.json) — the `#roleSlot` shape compared against tassle-local slots above
