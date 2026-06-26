@@ -13,7 +13,7 @@ Plus: generated fluent **builders**, runtime lexicon **validation**, KDL-driven 
 
 ## Where it helps tassle
 
-The planned **Rust codegen for CI** path is where jacquard shines. Compared to atrium's lexgen:
+The **Rust product CLI + codegen** path is where jacquard shines. Compared to atrium's lexgen:
 
 | Need | atrium lexgen | jacquard-lexgen |
 |------|---------------|-----------------|
@@ -38,10 +38,10 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
 3. **CBOR output mode** (deferred) — `Data::to_dag_cbor()` is one call. We get the wire format for free if we add a Rust side.
 4. **Strong refs** — tassle's lexicon ideas doc flags that cross-record refs are bare AT-URIs (no CID). Jacquard's `Cid<S>` + `CidLink` types are the canonical upgrade path.
 
-## Where it does NOT help
+## Where it is still rough
 
-- **The TypeScript CLI** — jacquard is Rust-only. The current `src/cli/*`, `src/auth/*`, `src/atproto/*` benefit zero directly. Could compile to WASM and call from Bun, but that's heavy.
-- **The hedystia web server** — Bun/TS. Same. (`jacquard-axum` exists but only matters if we replaced hedystia with axum, which contradicts the stated direction.)
+- **Legacy TypeScript code** — jacquard is Rust-only. The current `src/cli/*`, `src/auth/*`, `src/atproto/*` are useful as behavior references during the port, but do not benefit directly.
+- **Future hedystia web server** — Bun/TS will need either its own atproto path or a Rust service boundary. `jacquard-axum` is relevant if we expose Rust-side XRPC/appview APIs.
 - **Reading rpg.actor's loose sheet** — their JSON shape doesn't match their own lexicon cleanly (Capitalized keys, `Force` singular). `RawData`/`Data` help, but no library fixes that the upstream is loose.
 
 ## Trade-offs
@@ -57,7 +57,7 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
 
 ## Recommendation for tassle
 
-**Use jacquard instead of atrium's lexgen** for the Rust codegen-for-CI track. Specifically:
+**Use jacquard as the Rust atproto toolkit and lexicon/codegen path.** Specifically:
 
 1. **Workspace layout** (`crates/` at project root):
    ```
@@ -81,9 +81,11 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
 
 3. **CI step**: `cargo run -p tassle-codegen && git diff --exit-code crates/tassle-lexicons/` — fails if generated types drifted from lexicons.
 
-4. **Do NOT** migrate the TS CLI to Rust. Keep hedystia/gunshi. The Rust crate is purely a type-validation artifact (and a future beachhead if we ever need high-perf ingestion).
+4. **Make the Rust CLI primary.** The TypeScript CLI stays as a legacy/reference implementation while OAuth and write flows are ported.
 
-5. **For CBOR output mode** (deferred): when we get there, the cleanest path is to shell out to a small Rust binary that uses jacquard's `Data` to encode. Avoids pulling CBOR libs into the TS dep tree.
+5. **Use Jacquard's public client/XRPC path before raw HTTP.** `BasicClient`, `XrpcClient::send`, and `jacquard_common::xrpc::atproto` cover public reads like `listRecords`/`getRecord`; add direct `reqwest` only for a concrete gap.
+
+6. **For CBOR output mode**: the Rust CLI already owns this path and can emit DAG-CBOR without involving TypeScript.
 
 ## Open questions
 

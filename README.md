@@ -24,18 +24,19 @@ Records published to act on the energy ledger. Each is its own collection under 
 
 ## Status
 
-CLI-only, MVP reads + writes work end-to-end against a real atproto PDS. Web server (hedystia) is deferred; see **Deferred** below.
+Rust/Jacquard is now the primary CLI path. The older TypeScript CLI remains in-tree as a working reference for OAuth and mutation flows while those features move to Rust.
 
 | Capability | Status |
 |---|---|
-| OAuth loopback login (`tassle login`) | ✅ |
-| Read mage sheet from `actor.rpg.stats/self` (case-tolerant) | ✅ |
-| Public-agent fallback for `sheet` (no login needed) | ✅ |
-| Mint nodes | ✅ |
-| Publish tassilize / meditate / enervate records | ✅ |
-| Fluent builders for all record types | ✅ |
+| Rust clap CLI (`crates/tassle-cli`) | ✅ primary |
+| Rust Jacquard public XRPC read (`repo list`) | ✅ |
+| Rust generated builders for tassle lexicons | ✅ |
+| Rust sample generator (`samples`) | ✅ |
+| TypeScript OAuth loopback login and writes | ✅ legacy/reference |
+| Read mage sheet from `actor.rpg.stats/self` in TS | ✅ legacy/reference |
 | Lexicons authored under `com.superbfowle.tass.*` | ✅ |
-| Sample file generator (`tassle samples`) | ✅ |
+| Rust `mage stats` | ⏳ next |
+| Rust OAuth/write commands | ⏳ next |
 | Hedystia web server (reuses auth core) | ⏳ deferred |
 | Ontology restructure (per `pub.layers.ontology`) | ⏳ design discussion |
 | CBOR output mode | ⏳ deferred |
@@ -45,71 +46,56 @@ CLI-only, MVP reads + writes work end-to-end against a real atproto PDS. Web ser
 # Install
 
 ```bash
-pnpm install
+cd crates
+cargo build -p tassle-cli
 ```
 
-Requires Node 22+ for native TypeScript type stripping. No build step for development — run `node ./tassle.ts` directly.
+The active CLI is the Rust binary in `crates/tassle-cli`. Run it from the Rust workspace with `cargo run -p tassle-cli -- ...`.
+
+The legacy TypeScript CLI still requires `pnpm install` and Node 22+ if you need to compare behavior while porting OAuth/write paths.
 
 # Quick start
 
 ```bash
-# Display your mage character sheet (works without login — your sheet is public)
-node ./tassle.ts sheet
+cd crates
 
-# Log in (opens browser for OAuth loopback)
-node ./tassle.ts login jauntywk.bsky.social
-node ./tassle.ts whoami
+# Public-read a live rpg.actor collection through Jacquard XRPC
+cargo run -p tassle-cli -- repo list actor.rpg.stats --repo jauntywk.bsky.social
 
-# Mint a Node — a place where quintessence gathers
-node ./tassle.ts mint "Crystal Spring" -r 3 -R dynamic -f "a smooth river-stone"
-# → ✓ minted Node "Crystal Spring" (rating 3, 15q ambient)
-#   at://did:plc:.../com.superbfowle.tass.node/3xyz...
+# Generate a Node record as validated JSON
+cargo run -p tassle-cli -- generate node "Crystal Spring" -r 3 -R dynamic -t "a smooth river-stone"
 
-# Crystallize some of that into tass
-node ./tassle.ts tassilize at://did:plc:.../com.superbfowle.tass.node/3xyz 5 -f "a silver coin"
-
-# Spend the tass
-node ./tassle.ts enervate at://did:plc:.../com.superbfowle.tass.tassilize/<rkey> 2 -p "Lock the door"
-
-# Generate example records into samples/
-node ./tassle.ts samples
+# Generate example records into samples/ from Rust builders
+cargo run -p tassle-cli -- samples
 ```
 
 # Commands
 
-| Command | Description |
+| Rust command | Description |
 |---|---|
-| `login <handle>` | OAuth loopback login (opens browser) |
-| `logout` | Clear stored session |
-| `whoami` | Show current authenticated user |
-| `sheet` | Read your Mage: The Ascension sheet (`actor.rpg.stats/self`) |
-| `mint <name> -r <rating>` | Mint a Node |
-| `tassilize <node> <q>` | Crystallize quintessence into tass at a Node |
-| `meditate <node> <amount>` | Pull quintessence from a Node's ambiance |
-| `enervate <tass> <amount>` | Drain/expend tass |
-| `samples` | Regenerate example records into `samples/` |
+| `auth login <did-or-handle>` | Save a local profile/default actor; OAuth tokens come later |
+| `auth set <key>` / `auth set <key=value>` | Read or write a dotted key in the active profile TOML fragment |
+| `mage stats` / `mage list` | Read normalized Mage stats from `actor.rpg.stats/mage`, fallback to `self.mage` |
+| `self stats` / `self list` | Inspect `actor.rpg.stats/self` aggregate contents |
+| `repo list <collection> --repo <did-or-handle>` | Public-list records from an actor's PDS using Jacquard XRPC |
+| `generate node <name> -r <rating>` | Generate and validate a Node record as JSON or DAG-CBOR |
+| `samples` | Regenerate example records into `samples/` from Rust builders |
 
-All commands take `-j/--json` for machine-readable output. Run `<cmd> --help` for full args.
+Run `<cmd> --help` for full args. The older TypeScript commands (`login`, `sheet`, `mint`, `tassilize`, `meditate`, `enervate`) are the behavior reference while Rust parity lands.
+
+Rust profile defaults are stored as TOML fragments under `${XDG_CONFIG_HOME:-~/.config}/tassle/config.toml.d/`. `auth login` currently resolves and stores the profile DID/PDS only; it does not perform OAuth yet.
 
 # Architecture
 
 ```
 tassle/
-├── tassle.ts                      # bin entry; main-module check → src/cli/main.ts
-├── src/
-│   ├── cli/main.ts                # gunshi router (9 commands)
-│   ├── auth/                      # SHARED auth core (CLI today, hedystia later)
-│   │   ├── client.ts              # NodeOAuthClient factory
-│   │   ├── profile.ts             # ClientProfile: loopbackProfile | webProfile
-│   │   ├── agent.ts               # login flow + restore → Agent + publicAgent
-│   │   ├── scopes.ts              # OAuth scope list
-│   │   └── stores/file-store.ts   # file-backed state/session/AuthInfo stores
-│   ├── atproto/
-│   │   ├── mage-sheet.ts          # case-tolerant reader for actor.rpg.stats/self mage block
-│   │   ├── pds.ts                 # listRecords/putRecord wrappers
-│   │   └── tass.ts                # fluent builders: node(), tassilize(), meditate(), enervate()
-│   ├── commands/                  # one gunshi command per file
-│   └── samples/generate.ts        # uses builders to generate example records
+├── crates/
+│   ├── Cargo.toml                 # Rust workspace
+│   ├── tassle-cli/                # primary clap/Jacquard CLI
+│   ├── tassle-lexicons/           # generated Rust lexicon types/builders
+│   ├── tassle-codegen/            # Jacquard codegen wrapper
+│   └── tassle-validate/           # schema validation helper
+├── src/                           # legacy TypeScript CLI/reference implementation
 ├── lexicons/                      # canonical lexicon JSON (data-driven schema declarations)
 │   ├── com.superbfowle.tass.node.json
 │   ├── com.superbfowle.tass.tassilize.json
@@ -216,14 +202,19 @@ Records are currently written with `validate: false` on the PDS — lexicons are
 # Development
 
 ```bash
+cd crates
+cargo check -p tassle-cli
+cargo run -p tassle-cli -- repo list actor.rpg.stats --repo jauntywk.bsky.social
+
+# Legacy TypeScript reference path:
 pnpm check      # concurrently runs typecheck (tsgo) + lint (oxlint)
 pnpm fix        # concurrently runs format (oxfmt) + lint --fix (oxlint)
 pnpm test       # vitest (no tests yet)
 ```
 
-Toolchain: gunshi (CLI), `@atproto/api` + `@atproto/oauth-client-node` (atproto), `@atproto/common-web` (TID rkeys), oxfmt/oxlint (format/lint), tsgo (typecheck), tsdown (bundle for npm), vitest (test), concurrently (script composition).
+Rust toolchain: clap v4 derive, Jacquard for atproto/XRPC, generated `tassle-lexicons` builders, `miette` for diagnostics, `tokio` for async runtime.
 
-TypeScript with type stripping — `allowImportingTsExtensions`, `noEmit`, run `.ts` files directly via `node ./tassle.ts`. No build step in dev; build artifacts are only for npm package distribution.
+Legacy TypeScript toolchain: gunshi, `@atproto/api`, `@atproto/oauth-client-node`, oxfmt/oxlint, tsgo, tsdown, vitest, concurrently.
 
 # Inspirations
 
