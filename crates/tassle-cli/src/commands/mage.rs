@@ -97,6 +97,7 @@ struct StatsSummary {
 struct NormalizedMageStats {
     arete: Option<i64>,
     willpower: Option<i64>,
+    willpower_temporary: Option<i64>,
     quintessence: Option<i64>,
     paradox: Option<i64>,
     spheres: BTreeMap<String, i64>,
@@ -274,13 +275,30 @@ fn number_field(obj: &serde_json::Map<String, Value>, names: &[&str]) -> Option<
     names.iter().find_map(|name| obj.get(*name)?.as_i64())
 }
 
+fn willpower_field(obj: &serde_json::Map<String, Value>) -> Option<i64> {
+    number_field(obj, &["willpower", "Willpower"]).or_else(|| {
+        obj.get("willpower")?
+            .as_object()?
+            .get("permanent")?
+            .as_i64()
+    })
+}
+
+fn willpower_temporary_field(obj: &serde_json::Map<String, Value>) -> Option<i64> {
+    obj.get("willpower")?
+        .as_object()?
+        .get("temporary")?
+        .as_i64()
+}
+
 fn normalize_mage(raw: &Value) -> miette::Result<NormalizedMageStats> {
     let obj = raw
         .as_object()
         .ok_or_else(|| miette::miette!("mage stats payload is not an object"))?;
     let mut missing = Vec::new();
     let arete = number_field(obj, &["arete", "Arete"]);
-    let willpower = number_field(obj, &["willpower", "Willpower"]);
+    let willpower = willpower_field(obj);
+    let willpower_temporary = willpower_temporary_field(obj);
     let quintessence = number_field(obj, &["quintessence", "Quintessence"]);
     let paradox = number_field(obj, &["paradox", "Paradox"]);
 
@@ -321,6 +339,7 @@ fn normalize_mage(raw: &Value) -> miette::Result<NormalizedMageStats> {
     Ok(NormalizedMageStats {
         arete,
         willpower,
+        willpower_temporary,
         quintessence,
         paradox,
         spheres,
@@ -436,6 +455,9 @@ fn print_record(output: &StatsOutput) {
     if let Some(mage) = &output.mage {
         println!("  arete:        {}", display_opt(mage.arete));
         println!("  willpower:    {}", display_opt(mage.willpower));
+        if let Some(temporary) = mage.willpower_temporary {
+            println!("  temp willpower: {temporary}");
+        }
         println!("  quintessence: {}", display_opt(mage.quintessence));
         println!("  paradox:      {}", display_opt(mage.paradox));
         println!("  spheres:");
