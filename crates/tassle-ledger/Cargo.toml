@@ -1,0 +1,17 @@
+[package]
+name = "tassle-ledger"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Per-DID ledger store for Tassle (fjall-backed, lazy-open handle pool)."
+
+[dependencies]
+fjall = "3.1.5"
+moka = { version = "0.12", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+tempfile = "3"
