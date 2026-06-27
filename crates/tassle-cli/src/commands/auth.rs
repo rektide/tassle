@@ -153,7 +153,10 @@ async fn login(args: LoginArgs) -> miette::Result<ExitCode> {
     let profile = profile_config::save_profile(&did, handle.as_deref(), &pds)?;
 
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&profile).into_diagnostic()?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&profile).into_diagnostic()?
+        );
     } else {
         println!("saved tassle profile");
         println!("  did:  {}", profile.did);

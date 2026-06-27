@@ -2,8 +2,8 @@
 
 use crate::commands::OutputFormat;
 use clap::Args;
-use jacquard_common::types::datetime::Datetime;
 use jacquard_common::DefaultStr;
+use jacquard_common::types::datetime::Datetime;
 use jacquard_lexicon::schema::LexiconSchema;
 use std::process::ExitCode;
 use tassle_lexicons::com_superbfowle::tass::node::Node;

@@ -3,7 +3,7 @@ use miette::IntoDiagnostic;
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
-use toml_edit::{value, DocumentMut, Item, Table};
+use toml_edit::{DocumentMut, Item, Table, value};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

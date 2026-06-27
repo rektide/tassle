@@ -1,5 +1,5 @@
-use clap::{Args, Subcommand};
 use crate::profile_config;
+use clap::{Args, Subcommand};
 use jacquard::client::BasicClient;
 use jacquard::identity::resolver::IdentityResolver;
 use jacquard_common::types::ident::AtIdentifier;
@@ -71,22 +71,21 @@ fn rkey_from_uri(uri: &str) -> &str {
     uri.rsplit('/').next().unwrap_or(uri)
 }
 
-async fn resolve_repo(
-    client: &BasicClient,
-    repo: &str,
-) -> miette::Result<(AtIdentifier, String)> {
+async fn resolve_repo(client: &BasicClient, repo: &str) -> miette::Result<(AtIdentifier, String)> {
     let ident: AtIdentifier = AtIdentifier::new_owned(repo).into_diagnostic()?;
     match ident {
         AtIdentifier::Did(did) => {
-            let pds = client.pds_for_did(&did).await.map_err(|err| {
-                miette::miette!("failed to resolve PDS for {repo}: {err}")
-            })?;
+            let pds = client
+                .pds_for_did(&did)
+                .await
+                .map_err(|err| miette::miette!("failed to resolve PDS for {repo}: {err}"))?;
             Ok((AtIdentifier::Did(did), pds.to_string()))
         }
         AtIdentifier::Handle(handle) => {
-            let (did, pds) = client.pds_for_handle(&handle).await.map_err(|err| {
-                miette::miette!("failed to resolve PDS for {repo}: {err}")
-            })?;
+            let (did, pds) = client
+                .pds_for_handle(&handle)
+                .await
+                .map_err(|err| miette::miette!("failed to resolve PDS for {repo}: {err}"))?;
             Ok((AtIdentifier::Did(did), pds.to_string()))
         }
     }
@@ -154,7 +153,10 @@ async fn list(args: ListArgs) -> miette::Result<ExitCode> {
     };
 
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&listed).into_diagnostic()?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&listed).into_diagnostic()?
+        );
     } else {
         println!("{}", listed.collection);
         println!("  repo: {}", listed.repo);

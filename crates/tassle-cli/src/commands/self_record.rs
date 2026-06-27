@@ -147,7 +147,10 @@ async fn stats(args: StatsArgs) -> miette::Result<ExitCode> {
     };
 
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&output).into_diagnostic()?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).into_diagnostic()?
+        );
     } else {
         println!("actor.rpg.stats/self");
         println!("  uri: {}", output.uri);

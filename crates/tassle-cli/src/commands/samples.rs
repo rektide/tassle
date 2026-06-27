@@ -5,16 +5,16 @@
 // Records use a fixed createdAt so diffs are stable across regenerations.
 
 use clap::Args;
+use jacquard_common::DefaultStr;
 use jacquard_common::types::aturi::AtUri;
 use jacquard_common::types::datetime::Datetime;
-use jacquard_common::DefaultStr;
 use miette::IntoDiagnostic;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use tassle_lexicons::com_superbfowle::tass::{
-	enervate::Enervate, meditate::Meditate, node::Node, tassilize::Tassilize,
+    enervate::Enervate, meditate::Meditate, node::Node, tassilize::Tassilize,
 };
 
 /// Placeholder DID for sample at-uris (not a real publisher).
@@ -53,17 +53,24 @@ struct SampleDef {
 fn build_samples() -> miette::Result<Vec<SampleDef>> {
     let node_rkey = "3ksamplesample1";
     let tass_rkey = "3ksamplesample2";
-    let node_uri: AtUri = sample_uri("com.superbfowle.tass.node", node_rkey).parse().into_diagnostic()?;
-    let tass_uri: AtUri = sample_uri("com.superbfowle.tass.tassilize", tass_rkey).parse().into_diagnostic()?;
+    let node_uri: AtUri = sample_uri("com.superbfowle.tass.node", node_rkey)
+        .parse()
+        .into_diagnostic()?;
+    let tass_uri: AtUri = sample_uri("com.superbfowle.tass.tassilize", tass_rkey)
+        .parse()
+        .into_diagnostic()?;
 
     let node = Node::<DefaultStr>::builder()
         .name("Crystal Spring")
         .rating(3)
         .created_at(sample_at())
         .maybe_description(Some(
-            "A clear spring deep in the old forest; the water hums faintly to those who can hear.".into(),
+            "A clear spring deep in the old forest; the water hums faintly to those who can hear."
+                .into(),
         ))
-        .maybe_location(Some("Old-growth forest, three miles north of the caern".into()))
+        .maybe_location(Some(
+            "Old-growth forest, three miles north of the caern".into(),
+        ))
         .maybe_resonance(Some("dynamic".into()))
         .maybe_tass_form(Some("a smooth river-stone, warm to the touch".into()))
         .build();
@@ -136,6 +143,10 @@ pub fn run(args: SamplesArgs) -> miette::Result<ExitCode> {
         eprintln!("  wrote {}", path.display());
     }
 
-    eprintln!("✓ {} samples written to {}", samples.len(), args.out.display());
+    eprintln!(
+        "✓ {} samples written to {}",
+        samples.len(),
+        args.out.display()
+    );
     Ok(ExitCode::SUCCESS)
 }

@@ -4,8 +4,8 @@ pub mod auth;
 pub mod generate;
 pub mod mage;
 pub mod repo;
-pub mod self_record;
 pub mod samples;
+pub mod self_record;
 
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
