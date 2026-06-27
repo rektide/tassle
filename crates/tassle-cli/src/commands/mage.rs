@@ -4,13 +4,15 @@ use jacquard::client::BasicClient;
 use jacquard::identity::resolver::IdentityResolver;
 use jacquard_common::types::ident::AtIdentifier;
 use jacquard_common::types::string::{Nsid, RecordKey};
-use jacquard_common::xrpc::atproto::{GetRecord, GetRecordError, GetRecordOutput};
+use jacquard_common::xrpc::atproto::{GetRecord, GetRecordError, GetRecordOutput, ListRecords};
 use jacquard_common::xrpc::{XrpcClient, XrpcError};
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::process::ExitCode;
+
+const STATS_COLLECTION: &str = "actor.rpg.stats";
 
 #[derive(Args, Debug)]
 pub struct MageArgs {
@@ -20,23 +22,33 @@ pub struct MageArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum MageKind {
-    /// Read Mage stats from actor.rpg.stats, the player's state/history anchor
-    Stats(StatsArgs),
-    /// Alias for `stats`
-    List(StatsArgs),
+    /// List/read actor.rpg.stats records; alias: stats
+    #[command(alias = "stats")]
+    List(ListArgs),
 }
 
 #[derive(Args, Debug)]
-pub struct StatsArgs {
+pub struct ListArgs {
+    /// Stats rkey/system to read (default: mage)
+    pub rkey: Option<String>,
+
     /// Actor DID or handle to read (default: active tassle profile)
     #[arg(short, long)]
     pub actor: Option<String>,
 
-    /// Explicit rkey override for debugging; skips fallback order
-    #[arg(short, long)]
-    pub rkey: Option<String>,
+    /// List all actor.rpg.stats records instead of reading one rkey
+    #[arg(long)]
+    pub all: bool,
 
-    /// Emit normalized JSON with raw source payload
+    /// Maximum records to return with --all
+    #[arg(short, long, default_value_t = 50)]
+    pub limit: i64,
+
+    /// Pagination cursor for --all
+    #[arg(long)]
+    pub cursor: Option<String>,
+
+    /// Emit JSON with raw source payloads
     #[arg(short, long)]
     pub json: bool,
 }
@@ -45,8 +57,19 @@ pub struct StatsArgs {
 #[serde(rename_all = "camelCase")]
 struct StatsOutput {
     source: StatsSource,
-    stats: NormalizedStats,
+    summary: StatsSummary,
+    mage: Option<NormalizedMageStats>,
     raw: Value,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StatsListOutput {
+    repo: String,
+    collection: String,
+    pds: String,
+    cursor: Option<String>,
+    records: Vec<StatsSummary>,
 }
 
 #[derive(Serialize)]
@@ -60,7 +83,18 @@ struct StatsSource {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct NormalizedStats {
+struct StatsSummary {
+    uri: String,
+    cid: Option<String>,
+    rkey: String,
+    shape: String,
+    system: Option<String>,
+    fields: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NormalizedMageStats {
     arete: Option<i64>,
     willpower: Option<i64>,
     quintessence: Option<i64>,
@@ -71,8 +105,7 @@ struct NormalizedStats {
 
 pub async fn run(args: MageArgs) -> miette::Result<ExitCode> {
     match args.kind {
-        MageKind::Stats(args) => stats(args).await,
-        MageKind::List(args) => stats(args).await,
+        MageKind::List(args) => list(args).await,
     }
 }
 
@@ -110,39 +143,138 @@ async fn get_stats_record(
 ) -> miette::Result<Option<GetRecordOutput>> {
     let request = GetRecord {
         repo,
-        collection: Nsid::new_static("actor.rpg.stats").into_diagnostic()?,
+        collection: Nsid::new_static(STATS_COLLECTION).into_diagnostic()?,
         rkey: RecordKey::any_owned(rkey).into_diagnostic()?,
         cid: None,
     };
     let response = client
         .send(request)
         .await
-        .map_err(|err| miette::miette!("getRecord actor.rpg.stats/{rkey} failed: {err}"))?;
+        .map_err(|err| miette::miette!("getRecord {STATS_COLLECTION}/{rkey} failed: {err}"))?;
     match response.into_output() {
         Ok(output) => Ok(Some(output)),
         Err(XrpcError::Xrpc(GetRecordError::RecordNotFound(_))) => Ok(None),
         Err(err) => Err(miette::miette!(
-            "failed to decode actor.rpg.stats/{rkey}: {err}"
+            "failed to decode {STATS_COLLECTION}/{rkey}: {err}"
         )),
     }
+}
+
+async fn list_stats_records(
+    client: &BasicClient,
+    repo: AtIdentifier,
+    args: &ListArgs,
+) -> miette::Result<StatsListOutput> {
+    if args.limit < 1 || args.limit > 100 {
+        miette::bail!("--limit must be between 1 and 100");
+    }
+    let request = ListRecords {
+        repo: repo.clone(),
+        collection: Nsid::new_static(STATS_COLLECTION).into_diagnostic()?,
+        cursor: args.cursor.clone().map(Into::into),
+        limit: Some(args.limit),
+        reverse: None,
+    };
+    let response = client
+        .send(request)
+        .await
+        .map_err(|err| miette::miette!("listRecords {STATS_COLLECTION} failed: {err}"))?;
+    let output = response
+        .into_output()
+        .map_err(|err| miette::miette!("failed to decode listRecords output: {err}"))?;
+    let records = output
+        .records
+        .into_iter()
+        .map(|record| {
+            let value = serde_json::to_value(&record.value).into_diagnostic()?;
+            Ok(summarize_record(
+                record.uri.as_str(),
+                record.cid.as_ref().map(|cid| cid.as_str()),
+                &value,
+            ))
+        })
+        .collect::<miette::Result<Vec<_>>>()?;
+
+    Ok(StatsListOutput {
+        repo: repo.as_str().to_owned(),
+        collection: STATS_COLLECTION.to_owned(),
+        pds: client.base_uri().await.to_string(),
+        cursor: output.cursor.map(|cursor| cursor.to_string()),
+        records,
+    })
+}
+
+fn rkey_from_uri(uri: &str) -> &str {
+    uri.rsplit('/').next().unwrap_or(uri)
 }
 
 fn object<'a>(value: &'a Value, field: &str) -> Option<&'a serde_json::Map<String, Value>> {
     value.get(field)?.as_object()
 }
 
-fn extract_mage(value: &Value, rkey: &str) -> Option<(Value, String)> {
-    if rkey == "mage" && value.get("system")?.as_str()? == "mage" {
-        return Some((value.get("data")?.clone(), "per-system-envelope".to_owned()));
+fn fields(value: &Value) -> Vec<String> {
+    value
+        .as_object()
+        .map(|object| object.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+fn stats_payload(value: &Value, rkey: &str) -> (Option<Value>, String, Option<String>) {
+    if let Some(system) = value.get("system").and_then(Value::as_str) {
+        if let Some(data) = value.get("data") {
+            return (
+                Some(data.clone()),
+                "per-system-envelope".to_owned(),
+                Some(system.to_owned()),
+            );
+        }
     }
-    object(value, "mage").map(|mage| (Value::Object(mage.clone()), "legacy-self-inline".to_owned()))
+
+    if rkey == "self" {
+        return (None, "legacy-self-aggregate".to_owned(), None);
+    }
+
+    if let Some(system) = object(value, rkey) {
+        return (
+            Some(Value::Object(system.clone())),
+            "legacy-inline-system".to_owned(),
+            Some(rkey.to_owned()),
+        );
+    }
+
+    (None, "unknown".to_owned(), None)
+}
+
+fn summarize_record(uri: &str, cid: Option<&str>, value: &Value) -> StatsSummary {
+    let rkey = rkey_from_uri(uri).to_owned();
+    let (payload, shape, system) = stats_payload(value, &rkey);
+    let summary_fields = payload
+        .as_ref()
+        .map(fields)
+        .unwrap_or_else(|| fields(value));
+    StatsSummary {
+        uri: uri.to_owned(),
+        cid: cid.map(ToOwned::to_owned),
+        rkey,
+        shape,
+        system,
+        fields: summary_fields,
+    }
+}
+
+fn extract_mage(value: &Value, rkey: &str) -> Option<Value> {
+    let (payload, _, system) = stats_payload(value, rkey);
+    match (payload, system.as_deref()) {
+        (Some(payload), Some("mage")) => Some(payload),
+        _ => object(value, "mage").map(|mage| Value::Object(mage.clone())),
+    }
 }
 
 fn number_field(obj: &serde_json::Map<String, Value>, names: &[&str]) -> Option<i64> {
     names.iter().find_map(|name| obj.get(*name)?.as_i64())
 }
 
-fn normalize_stats(raw: &Value) -> miette::Result<NormalizedStats> {
+fn normalize_mage(raw: &Value) -> miette::Result<NormalizedMageStats> {
     let obj = raw
         .as_object()
         .ok_or_else(|| miette::miette!("mage stats payload is not an object"))?;
@@ -175,7 +307,10 @@ fn normalize_stats(raw: &Value) -> miette::Result<NormalizedStats> {
         ("spirit", ["spirit", "Spirit", ""]),
         ("time", ["time", "Time", ""]),
     ] {
-        let aliases = aliases.into_iter().filter(|alias| !alias.is_empty()).collect::<Vec<_>>();
+        let aliases = aliases
+            .into_iter()
+            .filter(|alias| !alias.is_empty())
+            .collect::<Vec<_>>();
         if let Some(value) = number_field(obj, &aliases) {
             spheres.insert(canonical.to_owned(), value);
         } else {
@@ -183,7 +318,7 @@ fn normalize_stats(raw: &Value) -> miette::Result<NormalizedStats> {
         }
     }
 
-    Ok(NormalizedStats {
+    Ok(NormalizedMageStats {
         arete,
         willpower,
         quintessence,
@@ -193,17 +328,41 @@ fn normalize_stats(raw: &Value) -> miette::Result<NormalizedStats> {
     })
 }
 
-async fn stats(args: StatsArgs) -> miette::Result<ExitCode> {
+async fn list(args: ListArgs) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
-    let (repo, pds) = resolve_actor(&client, args.actor).await?;
+    let (repo, pds) = resolve_actor(&client, args.actor.clone()).await?;
     let pds_uri = jacquard_common::deps::fluent_uri::Uri::parse(pds.clone())
         .map_err(|_| miette::miette!("resolved PDS endpoint is not a valid URI: {pds}"))?
         .to_owned();
     client.set_base_uri(pds_uri).await;
 
-    let rkeys = match args.rkey {
-        Some(rkey) => vec![rkey],
-        None => vec!["mage".to_owned(), "self".to_owned()],
+    if args.all {
+        let output = list_stats_records(&client, repo, &args).await?;
+        if args.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&output).into_diagnostic()?
+            );
+        } else {
+            println!("{}", output.collection);
+            println!("  repo: {}", output.repo);
+            println!("  pds:  {}", output.pds);
+            println!("  records: {}", output.records.len());
+            if let Some(cursor) = &output.cursor {
+                println!("  next cursor: {cursor}");
+            }
+            for record in output.records {
+                print_summary(&record);
+            }
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let rkey = args.rkey.clone().unwrap_or_else(|| "mage".to_owned());
+    let rkeys = if rkey == "mage" {
+        vec!["mage".to_owned(), "self".to_owned()]
+    } else {
+        vec![rkey]
     };
 
     for rkey in rkeys {
@@ -211,44 +370,88 @@ async fn stats(args: StatsArgs) -> miette::Result<ExitCode> {
             continue;
         };
         let value = serde_json::to_value(&record.value).into_diagnostic()?;
-        let Some((raw, shape)) = extract_mage(&value, &rkey) else {
-            continue;
+        let summary = summarize_record(
+            record.uri.as_str(),
+            record.cid.as_ref().map(|cid| cid.as_str()),
+            &value,
+        );
+        let raw = if rkey == "mage" || rkey == "self" {
+            extract_mage(&value, &rkey).unwrap_or_else(|| value.clone())
+        } else {
+            stats_payload(&value, &rkey)
+                .0
+                .unwrap_or_else(|| value.clone())
+        };
+        let mage = if summary.system.as_deref() == Some("mage") || rkey == "self" {
+            extract_mage(&value, &rkey)
+                .map(|raw| normalize_mage(&raw))
+                .transpose()?
+        } else {
+            None
         };
         let output = StatsOutput {
             source: StatsSource {
-                uri: record.uri.as_str().to_owned(),
-                cid: record.cid.map(|cid| cid.as_str().to_owned()),
-                rkey,
-                shape,
+                uri: summary.uri.clone(),
+                cid: summary.cid.clone(),
+                rkey: summary.rkey.clone(),
+                shape: summary.shape.clone(),
             },
-            stats: normalize_stats(&raw)?,
+            summary,
+            mage,
             raw,
         };
 
         if args.json {
-            println!("{}", serde_json::to_string_pretty(&output).into_diagnostic()?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&output).into_diagnostic()?
+            );
         } else {
-            println!("Mage stats");
-            println!("  source: {}", output.source.uri);
-            println!("  shape:  {}", output.source.shape);
-            println!("  arete:        {}", display_opt(output.stats.arete));
-            println!("  willpower:    {}", display_opt(output.stats.willpower));
-            println!("  quintessence: {}", display_opt(output.stats.quintessence));
-            println!("  paradox:      {}", display_opt(output.stats.paradox));
-            println!("  spheres:");
-            for (sphere, value) in output.stats.spheres {
-                println!("    {sphere}: {value}");
-            }
-            if !output.stats.missing.is_empty() {
-                println!("  missing: {}", output.stats.missing.join(", "));
-            }
+            print_record(&output);
         }
         return Ok(ExitCode::SUCCESS);
     }
 
-    miette::bail!("no Mage stats found in actor.rpg.stats/mage or self.mage")
+    miette::bail!("no actor.rpg.stats record found for requested rkey")
+}
+
+fn print_summary(record: &StatsSummary) {
+    println!("  {} ({})", record.rkey, record.shape);
+    println!("    uri: {}", record.uri);
+    if let Some(system) = &record.system {
+        println!("    system: {system}");
+    }
+    if !record.fields.is_empty() {
+        println!("    fields: {}", record.fields.join(", "));
+    }
+}
+
+fn print_record(output: &StatsOutput) {
+    println!("actor.rpg.stats/{}", output.source.rkey);
+    println!("  source: {}", output.source.uri);
+    println!("  shape:  {}", output.source.shape);
+    if let Some(system) = &output.summary.system {
+        println!("  system: {system}");
+    }
+    if let Some(mage) = &output.mage {
+        println!("  arete:        {}", display_opt(mage.arete));
+        println!("  willpower:    {}", display_opt(mage.willpower));
+        println!("  quintessence: {}", display_opt(mage.quintessence));
+        println!("  paradox:      {}", display_opt(mage.paradox));
+        println!("  spheres:");
+        for (sphere, value) in &mage.spheres {
+            println!("    {sphere}: {value}");
+        }
+        if !mage.missing.is_empty() {
+            println!("  missing: {}", mage.missing.join(", "));
+        }
+    } else if !output.summary.fields.is_empty() {
+        println!("  fields: {}", output.summary.fields.join(", "));
+    }
 }
 
 fn display_opt(value: Option<i64>) -> String {
-    value.map(|value| value.to_string()).unwrap_or_else(|| "absent".to_owned())
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "absent".to_owned())
 }

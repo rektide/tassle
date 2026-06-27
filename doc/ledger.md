@@ -98,7 +98,7 @@ The ledger work should land as read commands first:
 | `tassle ledger history` | Show ordered ledger events with source/target/amount/purpose and AT-URIs. |
 | `tassle ledger inspect <uri>` | Explain how one Node or Tass balance was derived. |
 
-Top-level aliases can come later if they are genuinely more usable, but the implementation should live under a ledger module so it does not get conflated with `mage stats`.
+Top-level aliases can come later if they are genuinely more usable, but the implementation should live under a ledger module so it does not get conflated with `mage list`.
 
 ## Validation Hook
 
@@ -135,4 +135,4 @@ CEL predicates can then filter event streams or balance rows consistently. CEL p
 - No Storyteller or Reality authority merge.
 - No keytrace signatures.
 - No hidden mutation of `actor.rpg.stats`.
-- No attempt to make `mage stats` a history view.
+- No attempt to make `mage list` / `mage stats` a history view.

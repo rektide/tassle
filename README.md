@@ -35,7 +35,7 @@ Rust/Jacquard is now the primary CLI path. The older TypeScript CLI remains in-t
 | TypeScript OAuth loopback login and writes | ✅ legacy/reference |
 | Read mage sheet from `actor.rpg.stats/self` in TS | ✅ legacy/reference |
 | Lexicons authored under `com.superbfowle.tass.*` | ✅ |
-| Rust `mage stats` | ⏳ next |
+| Rust `mage list` / `mage stats` | ✅ |
 | Rust OAuth/write commands | ⏳ next |
 | Hedystia web server (reuses auth core) | ⏳ deferred |
 | Ontology restructure (per `pub.layers.ontology`) | ⏳ design discussion |
@@ -62,6 +62,12 @@ cd crates
 # Public-read a live rpg.actor collection through Jacquard XRPC
 cargo run -p tassle-cli -- repo list actor.rpg.stats --repo jauntywk.bsky.social
 
+# Read normalized Mage sheet stats from the active profile
+cargo run -p tassle-cli -- mage list
+
+# List every actor.rpg.stats rkey for the active profile
+cargo run -p tassle-cli -- mage list --all
+
 # Generate a Node record as validated JSON
 cargo run -p tassle-cli -- generate node "Crystal Spring" -r 3 -R dynamic -t "a smooth river-stone"
 
@@ -75,7 +81,8 @@ cargo run -p tassle-cli -- samples
 |---|---|
 | `auth login <did-or-handle>` | Save a local profile/default actor; OAuth tokens come later |
 | `auth set <key>` / `auth set <key=value>` | Read or write a dotted key in the active profile TOML fragment |
-| `mage stats` / `mage list` | Read normalized Mage stats from `actor.rpg.stats/mage`, fallback to `self.mage` |
+| `mage list [rkey]` | Read `actor.rpg.stats/<rkey>`; defaults to normalized Mage stats from `actor.rpg.stats/mage`, fallback to `self.mage` |
+| `mage stats` | Alias for `mage list` |
 | `self stats` / `self list` | Inspect `actor.rpg.stats/self` aggregate contents |
 | `repo list <collection> --repo <did-or-handle>` | Public-list records from an actor's PDS using Jacquard XRPC |
 | `generate node <name> -r <rating>` | Generate and validate a Node record as JSON or DAG-CBOR |

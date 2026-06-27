@@ -23,7 +23,7 @@ enum Command {
     Auth(commands::auth::AuthArgs),
     /// Generate records (node, tassilize, etc.) as JSON or CBOR
     Generate(commands::generate::GenerateArgs),
-    /// Mage character sheet and energy-state commands
+    /// Mage character sheet commands
     Mage(commands::mage::MageArgs),
     /// Read public repository records through Jacquard XRPC
     Repo(commands::repo::RepoArgs),
@@ -40,9 +40,7 @@ async fn main() -> miette::Result<ExitCode> {
     match cli.command {
         Command::Auth(args) => commands::auth::run(args).await,
         Command::Generate(args) => match args.kind {
-            commands::generate::GenerateKind::Node(a) => {
-                commands::generate::node::run(a)
-            }
+            commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a),
         },
         Command::Mage(args) => commands::mage::run(args).await,
         Command::Repo(args) => commands::repo::run(args).await,
