@@ -176,6 +176,28 @@ fn set_item(doc: &mut DocumentMut, parts: &[&str], item: Item) {
     }
 }
 
+fn remove_item(doc: &mut DocumentMut, parts: &[&str]) -> bool {
+    if parts.len() == 1 {
+        return doc.remove(parts[0]).is_some();
+    }
+
+    let mut cursor = match doc.get_mut(parts[0]) {
+        Some(item) => item,
+        None => return false,
+    };
+    for part in &parts[1..parts.len() - 1] {
+        cursor = match cursor.get_mut(part) {
+            Some(item) => item,
+            None => return false,
+        };
+    }
+    let last = parts[parts.len() - 1];
+    match cursor.as_table_mut() {
+        Some(table) => table.remove(last).is_some(),
+        None => false,
+    }
+}
+
 fn parse_value(input: &str) -> Item {
     if input.eq_ignore_ascii_case("true") {
         return value(true);
@@ -220,4 +242,19 @@ pub fn write_profile_value(key: &str, value_input: &str) -> miette::Result<(Prof
     let profile = profile_from_doc(profile.path, &doc)
         .ok_or_else(|| miette::miette!("updated profile is incomplete"))?;
     Ok((profile, rendered))
+}
+
+pub fn unset_profile_value(key: &str) -> miette::Result<(Profile, bool)> {
+    let profile = default_profile()?;
+    let mut doc = read_document(&profile.path)?;
+    let parts = dotted_path(key)?;
+    let removed = remove_item(&mut doc, &parts);
+    if removed {
+        doc["updated_at"] = value(now());
+        fs::write(&profile.path, doc.to_string()).into_diagnostic()?;
+    }
+    let doc = read_document(&profile.path)?;
+    let profile = profile_from_doc(profile.path, &doc)
+        .ok_or_else(|| miette::miette!("updated profile is incomplete"))?;
+    Ok((profile, removed))
 }

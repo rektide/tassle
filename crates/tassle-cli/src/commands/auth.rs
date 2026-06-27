@@ -35,6 +35,10 @@ pub struct SetArgs {
     /// Dotted key to read, or key=value to write
     pub assignment: String,
 
+    /// Remove the dotted key from the active profile
+    #[arg(short = 'u', long)]
+    pub unset: bool,
+
     /// Emit machine-readable JSON
     #[arg(short, long)]
     pub json: bool,
@@ -58,6 +62,30 @@ fn set(args: SetArgs) -> miette::Result<ExitCode> {
     let (key, value) = split_assignment(&args.assignment);
     if key.is_empty() {
         miette::bail!("config key is required");
+    }
+    if args.unset && value.is_some() {
+        miette::bail!("--unset expects a key, not key=value");
+    }
+
+    if args.unset {
+        let (profile, removed) = profile_config::unset_profile_value(key)?;
+        if args.json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "profile": profile,
+                    "key": key,
+                    "removed": removed,
+                })
+            );
+        } else if removed {
+            println!("unset {key}");
+            println!("  file: {}", profile.path.display());
+        } else {
+            println!("{key} was already unset");
+            println!("  file: {}", profile.path.display());
+        }
+        return Ok(ExitCode::SUCCESS);
     }
 
     match value {
