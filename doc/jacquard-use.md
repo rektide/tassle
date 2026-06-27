@@ -59,27 +59,28 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
 
 **Use jacquard as the Rust atproto toolkit and lexicon/codegen path.** Specifically:
 
-1. **Workspace layout** (`crates/` at project root):
-   ```
-   crates/
-   ├── Cargo.toml (workspace)
-   ├── tassle-lexicons/         # generated, .gitignore'd or committed?
-   │   └── src/...              # output of jacquard-codegen
-   └── tassle-codegen/          # thin binary wrapping jacquard-lexgen
-       ├── Cargo.toml           # git dep on rsform/jacquard
-       └── src/main.rs          # ~30 lines: read ../lexicons/, write tassle-lexicons/
-   ```
+1. **Workspace layout** (root Cargo workspace):
+    ```
+    Cargo.toml                  # workspace
+    crates/
+    ├── tass-lex-corpus/        # canonical lexicon JSON corpus
+    ├── tassle-lexicons/         # generated, .gitignore'd or committed?
+    │   └── src/...              # output of jacquard-codegen
+    └── tassle-codegen/          # thin binary wrapping jacquard-lexgen
+        ├── Cargo.toml           # git dep on rsform/jacquard
+        └── src/main.rs          # read tass-lex-corpus/lexicons, write tassle-lexicons/
+    ```
 
 2. **A `lexicons.kdl`** at project root:
    ```kdl
    source "tassle" type="path" priority=100 {
-       path "../lexicons"
-       pattern "**/*.json"
-   }
+        path "crates/tass-lex-corpus/lexicons"
+        pattern "**/*.json"
+    }
    ```
    Future: add `source "mage-canonical" type="atproto" { endpoint "did:plc:..." }` when canonical Mage resonances get published.
 
-3. **CI step**: `cargo run -p tassle-codegen && git diff --exit-code crates/tassle-lexicons/` — fails if generated types drifted from lexicons.
+3. **CI step**: `cargo run -p tassle-codegen && git diff --exit-code crates/tassle-lexicons/` — fails if generated types drifted from the corpus.
 
 4. **Make the Rust CLI primary.** The TypeScript CLI stays as a legacy/reference implementation while OAuth and write flows are ported.
 

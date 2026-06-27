@@ -1,9 +1,9 @@
 // tassle-codegen: generate Rust types from Tass lexicons using jacquard.
 //
 // Mirrors jacquard-lexgen's `jacquard-codegen` binary but reads from this
-// repo's lexicons/ dir. Run from the repository root:
+// corpus crate's lexicons/ dir. Run from the repository root:
 //
-//     cargo run -p tassle-codegen -- --input lexicons --output crates/tassle-lexicons/src
+//     cargo run -p tassle-codegen -- --input crates/tass-lex-corpus/lexicons --output crates/tassle-lexicons/src
 //
 // CI uses this to regenerate types and verify they match what's committed.
 
@@ -19,8 +19,8 @@ use std::path::PathBuf;
     about = "Generate Rust types from Tass lexicons"
 )]
 struct Args {
-    /// Directory containing Lexicon JSON files (default: lexicons)
-    #[arg(short = 'i', long, default_value = "lexicons")]
+    /// Directory containing Lexicon JSON files (default: crates/tass-lex-corpus/lexicons)
+    #[arg(short = 'i', long, default_value = "crates/tass-lex-corpus/lexicons")]
     input: PathBuf,
 
     /// Output directory for generated Rust code

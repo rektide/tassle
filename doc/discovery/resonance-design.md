@@ -8,7 +8,7 @@ It ends with open questions. Please push back on anything that feels wrong.
 
 ## The framing observation
 
-Tassle's current resonance lexicon ([`lexicons/com.superbfowle.tass.resonance.json`](../../lexicons/com.superbfowle.tass.resonance.json)) is — read charitably — a degenerate `pub.layers.ontology` instance with one collection and one typeDef kind. Specifically:
+Tassle's current resonance lexicon ([`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json)) is — read charitably — a degenerate `pub.layers.ontology` instance with one collection and one typeDef kind. Specifically:
 
 | tassle today | layers.pub analogue |
 | --- | --- |
@@ -273,7 +273,7 @@ My current lean is Option 3, but the call should turn on how stable layers.pub l
 - [`lexicon-ideas.md`](lexicon-ideas.md) — cross-ecosystem design journal (themes 2, 9, and the integration-path table are most relevant)
 - [`doc/ref/pub.layers.ontology.ontology.json`](../ref/pub.layers.ontology.ontology.json), [`doc/ref/pub.layers.ontology.typeDef.json`](../ref/pub.layers.ontology.typeDef.json), [`doc/ref/pub.layers.ontology.defs.json`](../ref/pub.layers.ontology.defs.json) — source schemas
 - [`doc/ref/pub.layers.corpus.corpus.json`](../ref/pub.layers.corpus.corpus.json), [`doc/ref/pub.layers.corpus.membership.json`](../ref/pub.layers.corpus.membership.json), [`doc/ref/pub.layers.corpus.defs.json`](../ref/pub.layers.corpus.defs.json) — source schemas
-- [`lexicons/com.superbfowle.tass.resonance.json`](../../lexicons/com.superbfowle.tass.resonance.json) — tassle's current resonance schema
+- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json) — tassle's current resonance schema
 
 ---
 
@@ -873,7 +873,7 @@ A thin acceptance record that ties a reality to its master records. Not strictly
 ## See also (round 3 additions)
 
 - [`doc/ref/actor.rpg.master.json`](../ref/actor.rpg.master.json) — the voucher pattern that `com.superbfowle.tass.reality` extends
-- [`lexicons/com.superbfowle.tass.resonance.json`](../../lexicons/com.superbfowle.tass.resonance.json) — tassle's existing lexicon that uses `defs.main` plus named sub-defs (`resonanceValue`, `resonanceProfile`)
+- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json) — tassle's existing lexicon that uses `defs.main` plus named sub-defs (`resonanceValue`, `resonanceProfile`)
 
 ---
 

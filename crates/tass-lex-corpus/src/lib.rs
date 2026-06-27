@@ -9,35 +9,46 @@
 pub struct LexiconDoc {
     /// Lexicon NSID.
     pub nsid: &'static str,
+    /// File name inside [`LEXICON_DIR`].
+    pub file_name: &'static str,
     /// Canonical JSON text.
     pub json: &'static str,
 }
+
+/// Crate-local directory containing canonical lexicon JSON files.
+pub const LEXICON_DIR: &str = "crates/tass-lex-corpus/lexicons";
 
 /// Embedded `com.superbfowle.tass.*` lexicon documents.
 pub const LEXICONS: &[LexiconDoc] = &[
     LexiconDoc {
         nsid: "com.superbfowle.tass.enervate",
-        json: include_str!("../../../lexicons/com.superbfowle.tass.enervate.json"),
+        file_name: "com.superbfowle.tass.enervate.json",
+        json: include_str!("../lexicons/com.superbfowle.tass.enervate.json"),
     },
     LexiconDoc {
         nsid: "com.superbfowle.tass.form",
-        json: include_str!("../../../lexicons/com.superbfowle.tass.form.json"),
+        file_name: "com.superbfowle.tass.form.json",
+        json: include_str!("../lexicons/com.superbfowle.tass.form.json"),
     },
     LexiconDoc {
         nsid: "com.superbfowle.tass.meditate",
-        json: include_str!("../../../lexicons/com.superbfowle.tass.meditate.json"),
+        file_name: "com.superbfowle.tass.meditate.json",
+        json: include_str!("../lexicons/com.superbfowle.tass.meditate.json"),
     },
     LexiconDoc {
         nsid: "com.superbfowle.tass.node",
-        json: include_str!("../../../lexicons/com.superbfowle.tass.node.json"),
+        file_name: "com.superbfowle.tass.node.json",
+        json: include_str!("../lexicons/com.superbfowle.tass.node.json"),
     },
     LexiconDoc {
         nsid: "com.superbfowle.tass.resonance",
-        json: include_str!("../../../lexicons/com.superbfowle.tass.resonance.json"),
+        file_name: "com.superbfowle.tass.resonance.json",
+        json: include_str!("../lexicons/com.superbfowle.tass.resonance.json"),
     },
     LexiconDoc {
         nsid: "com.superbfowle.tass.tassilize",
-        json: include_str!("../../../lexicons/com.superbfowle.tass.tassilize.json"),
+        file_name: "com.superbfowle.tass.tassilize.json",
+        json: include_str!("../lexicons/com.superbfowle.tass.tassilize.json"),
     },
 ];
 
@@ -58,7 +69,9 @@ mod tests {
     #[test]
     fn corpus_contains_tass_lexicons() {
         assert_eq!(LEXICONS.len(), 6);
+        assert_eq!(LEXICON_DIR, "crates/tass-lex-corpus/lexicons");
         assert!(get("com.superbfowle.tass.node").is_some());
+        assert!(iter().all(|doc| doc.file_name.ends_with(".json")));
         assert!(iter().all(|doc| doc.json.contains(doc.nsid)));
     }
 }

@@ -21,7 +21,7 @@ The rpg.actor PDS does not currently expose its lexicons as `com.atproto.lexicon
 
 The `actor.rpg.stats` lexicon is the canonical Mage sheet. Tassle reads and (eventually) mutates the `mage` system key inside it. Per-system rkey records are the current standard: `actor.rpg.stats/mage` is the canonical Mage payload, with the legacy `actor.rpg.stats/self` record kept as a deprecated compatibility mirror. The `mage` system key is one of rpg.actor's reserved native systems (see the [systems reference](https://rpg.actor/systems#mage)), so tassle operates in an officially-supported lane rather than inventing a private convention.
 
-Tassle's own collections live under `com.superbfowle.tass.*` (see [`lexicons/`](../../lexicons/)) and reference this sheet via their `sheet` fields.
+Tassle's own collections live under `com.superbfowle.tass.*` (see [`crates/tass-lex-corpus/lexicons/`](../../crates/tass-lex-corpus/lexicons/)) and reference this sheet via their `sheet` fields.
 
 ## Lexicons in this checkout
 

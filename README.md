@@ -163,19 +163,12 @@ Use `repo list actor.rpg.stats` for broad rpg.actor record browsing. Use `mage s
 ```
 tassle/
 ├── crates/
-│   ├── tass-lex-corpus/           # data-first lexicon JSON corpus accessors
+│   ├── tass-lex-corpus/           # data-first lexicon JSON corpus
 │   ├── tassle-cli/                # primary clap/Jacquard CLI
 │   ├── tassle-lexicons/           # generated Rust lexicon types/builders
 │   ├── tassle-codegen/            # Jacquard codegen wrapper
 │   └── tassle-validate/           # schema validation helper
 ├── src/                           # legacy TypeScript CLI/reference implementation
-├── lexicons/                      # canonical lexicon JSON (data-driven schema declarations)
-│   ├── com.superbfowle.tass.node.json
-│   ├── com.superbfowle.tass.tassilize.json
-│   ├── com.superbfowle.tass.meditate.json
-│   ├── com.superbfowle.tass.enervate.json
-│   ├── com.superbfowle.tass.resonance.json
-│   └── com.superbfowle.tass.form.json
 └── samples/                       # generated example records (regenerable via `tassle samples`)
 ```
 
@@ -284,7 +277,7 @@ pnpm fix        # concurrently runs format (oxfmt) + lint --fix (oxlint)
 pnpm test       # vitest (no tests yet)
 ```
 
-Rust toolchain: root Cargo workspace, clap v4 derive, Jacquard for atproto/XRPC, `tass-lex-corpus` lexicon data, generated `tassle-lexicons` builders, `miette` for diagnostics, `tokio` for async runtime.
+Rust toolchain: root Cargo workspace, clap v4 derive, Jacquard for atproto/XRPC, `tass-lex-corpus` lexicon JSON data, generated `tassle-lexicons` builders, `miette` for diagnostics, `tokio` for async runtime.
 
 Legacy TypeScript toolchain: gunshi, `@atproto/api`, `@atproto/oauth-client-node`, oxfmt/oxlint, tsgo, tsdown, vitest, concurrently.
 
@@ -300,6 +293,6 @@ Legacy TypeScript toolchain: gunshi, `@atproto/api`, `@atproto/oauth-client-node
 - **Ontology restructure** — move resonance to its own authority root (not `com.superbfowle.tass.*`), adopt `pub.layers.ontology` pattern: small per-resonance ontologies (Dynamic, Static, Primordial) instead of one flat vocabulary. Parameterized authority since domains aren't fixed yet (`tass.superbfowle.com`, `resonance.superbfowle.com`, `tassleat.example`, etc.).
 - **CBOR output** — `--output screen|cbor|publish` global flag for canonical publishing workflow. Needs `@atproto/lex-cbor` (or equivalent dag-cbor encoder).
 - **Multi-domain parameterized authority** — env/flag for NSID prefix; placeholder authority tokens (`_tass`, `_resonance`) that resolve later when we have real domains.
-- **True lexicon-driven sample generator** — read `lexicons/*.json`, synthesize records from the schema. Currently the generator is hand-coded against builders.
+- **True lexicon-driven sample generator** — read `crates/tass-lex-corpus/lexicons/*.json`, synthesize records from the schema. Currently the generator is hand-coded against builders.
 - **Mage canonical resonance records** — Dynamic / Static / Primordial / Wyld / Weaver / Wyrm triad. Defined as ontology records once the restructure lands; published by your PDS so other Mage users reference your at-uris.
 - **Wire `#resonanceProfile` into Node/Tassilize** — entities don't yet embed the resonance profile defs; deferred pending the ontology restructure.
