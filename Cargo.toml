@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tass-lex-corpus",
+    "crates/tassle-codegen",
+    "crates/tassle-lexicons",
+    "crates/tassle-validate",
+    "crates/tassle-cli",
+    "crates/tassle-ledger",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/rektide/tassle"
+version = "0.1.0"
+
+[workspace.dependencies]
+# Jacquard crates are not on crates.io; use git deps on rsform/jacquard.
+jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }

@@ -29,6 +29,8 @@ Rust/Jacquard is now the primary CLI path. The older TypeScript CLI remains in-t
 | Capability | Status |
 |---|---|
 | Rust clap CLI (`crates/tassle-cli`) | ✅ primary |
+| Root Rust workspace | ✅ |
+| Lexicon corpus package (`crates/tass-lex-corpus`) | ✅ |
 | Rust Jacquard public XRPC record access (`repo list`) | ✅ |
 | Rust generated builders for tassle lexicons | ✅ |
 | Rust sample generator (`samples`) | ✅ |
@@ -47,19 +49,16 @@ Rust/Jacquard is now the primary CLI path. The older TypeScript CLI remains in-t
 # Install
 
 ```bash
-cd crates
 cargo build -p tassle-cli
 ```
 
-The active CLI is the Rust binary in `crates/tassle-cli`. Run it from the Rust workspace with `cargo run -p tassle-cli -- ...`.
+The active CLI is the Rust binary in `crates/tassle-cli`. Run it from the repository root with `cargo run -p tassle-cli -- ...`.
 
 The legacy TypeScript CLI still requires `pnpm install` and Node 22+ if you need to compare behavior while porting OAuth/write paths.
 
 # Quick start
 
 ```bash
-cd crates
-
 # Public-read a live rpg.actor collection through Jacquard XRPC
 cargo run -p tassle-cli -- repo list actor.rpg.stats --repo jauntywk.bsky.social
 
@@ -164,7 +163,7 @@ Use `repo list actor.rpg.stats` for broad rpg.actor record browsing. Use `mage s
 ```
 tassle/
 ├── crates/
-│   ├── Cargo.toml                 # Rust workspace
+│   ├── tass-lex-corpus/           # data-first lexicon JSON corpus accessors
 │   ├── tassle-cli/                # primary clap/Jacquard CLI
 │   ├── tassle-lexicons/           # generated Rust lexicon types/builders
 │   ├── tassle-codegen/            # Jacquard codegen wrapper
@@ -276,7 +275,6 @@ Records are currently written with `validate: false` on the PDS — lexicons are
 # Development
 
 ```bash
-cd crates
 cargo check -p tassle-cli
 cargo run -p tassle-cli -- repo list actor.rpg.stats --repo jauntywk.bsky.social
 
@@ -286,7 +284,7 @@ pnpm fix        # concurrently runs format (oxfmt) + lint --fix (oxlint)
 pnpm test       # vitest (no tests yet)
 ```
 
-Rust toolchain: clap v4 derive, Jacquard for atproto/XRPC, generated `tassle-lexicons` builders, `miette` for diagnostics, `tokio` for async runtime.
+Rust toolchain: root Cargo workspace, clap v4 derive, Jacquard for atproto/XRPC, `tass-lex-corpus` lexicon data, generated `tassle-lexicons` builders, `miette` for diagnostics, `tokio` for async runtime.
 
 Legacy TypeScript toolchain: gunshi, `@atproto/api`, `@atproto/oauth-client-node`, oxfmt/oxlint, tsgo, tsdown, vitest, concurrently.
 
