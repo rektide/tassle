@@ -6,6 +6,8 @@ The ledger is the derived game-state view over Tassle action records. It is sepa
 
 The first ledger should be boring, local, and recomputable. It reads public records from one actor's PDS, folds them in timestamp order, and reports balances plus anomalies. It does not require an AppView, Storyteller authority, keytrace signatures, or consensus reality.
 
+When the `hydrant` cargo feature is enabled, the local read model should be fed by the embedded Hydrant listener described in [`doc/hedystia-listener-design.md`](/doc/hedystia-listener-design.md). The non-Hydrant CLI can still do direct PDS reads, but the durable service path should use Hydrant cursor replay plus live tailing.
+
 ## Source Collections
 
 The v1 ledger folds these collections:
@@ -40,6 +42,13 @@ LedgerEvent {
 ```
 
 Events are sorted by `createdAt`, then by URI for deterministic ties. Missing or invalid timestamps are anomalies; they should still be displayed, but they should not silently affect balances unless we define a fallback ordering.
+
+There are two independent orderings:
+
+- Hydrant event cursor order controls ingestion, idempotency, and exactly-once local processing.
+- Record `createdAt` order controls the game-state ledger fold.
+
+Bad timestamps should not block cursor progress. Store the record, record an anomaly, advance the cursor after commit, and exclude the event from balance mutation until a fallback rule is deliberately chosen.
 
 The fold outputs:
 
@@ -88,6 +97,68 @@ Initial v1 rules should be visible rather than authoritative:
 - Unknown references are anomalies.
 - Duplicate or conflicting records are shown as records; no resolver hides them.
 
+## Tallying Modes
+
+Useful options:
+
+| Mode | Shape | Tradeoff |
+|---|---|---|
+| Full replay on every read | Read all normalized events and fold in memory. | Most obviously correct, but read cost grows without bound. |
+| Event log plus snapshot | Append normalized events, update a materialized snapshot, and keep enough log to rebuild. | Recommended default: recomputable and fast reads. |
+| Snapshot only | Keep balances and last cursor, discard event log. | Fastest but not acceptable for v1 because anomalies and derivation are not explainable. |
+| Hydrant-only replay | Treat Hydrant's database as the only raw log and rebuild Tassle state from cursor 0. | Good disaster recovery path, but not enough for per-DID locking or local ledger inspection. |
+
+Use event log plus snapshot first. If a snapshot is missing, stale, or version-incompatible, replay that DID's normalized event log to rebuild it. If the normalized log is missing, replay Hydrant from cursor 0 as the slower recovery path.
+
+## Listener Fold
+
+The embedded listener should process Hydrant events like this:
+
+1. Load `lastCursor` from the Tassle service store.
+2. Call `hydrant.subscribe(Some(lastCursor.unwrap_or(0)))` before `hydrant.run()` starts producing live events.
+3. For each event, ignore non-record events unless they affect account activity metadata.
+4. For record events in the source collections, parse `event.record`, build the AT-URI from DID/collection/rkey, and normalize to `LedgerEvent`.
+5. Write the raw event mirror, normalized event, anomalies, balance snapshot update, and new cursor in one durable commit.
+6. If parsing fails, write a parse anomaly and still advance the cursor in the same commit.
+7. On restart, resume from the committed cursor. Hydrant replays missing persisted events before switching to live tailing.
+
+Idempotency keys should include Hydrant event id for ingestion and `uri + cid + kind` for semantic ledger effects. Deletes should become ledger events too, even if v1 only records a tombstone anomaly and leaves historical balances visible.
+
+## Storage Layout
+
+Use a `LedgerStore` trait so the fold does not commit to one physical layout too early.
+
+Recommended first physical layout:
+
+```text
+<data>/hydrant/              # Hydrant database
+<data>/service/              # global listener cursor, jobs, OAuth/session state
+<data>/ledger/<did-key>/     # one fjall database per actor DID
+```
+
+Inside each per-DID ledger database, use partitions/logical buckets like:
+
+```text
+events_by_cursor             # hydrant event id -> normalized LedgerEvent/raw pointer
+events_by_created_at         # createdAt/uri -> event id
+records_latest               # uri -> latest cid/status
+balances                     # node/tass/pattern snapshot rows
+anomalies                    # anomaly id -> anomaly payload
+meta                         # schema version, last folded cursor, last rebuilt timestamp
+```
+
+Per-DID fjall stores are not Fjall's most storage-efficient shape, but they match the domain well: one actor can be locked, snapshotted, deleted, backed up, or rebuilt independently. Bound the cost with lazy-open-on-touch and an LRU of open DID stores so a large network does not keep thousands of journals, file descriptors, and compaction workers active.
+
+Alternative layout to keep available behind the same trait:
+
+| Layout | Why use it | Why not first |
+|---|---|---|
+| One shared fjall DB, DID-prefixed keys | Fewer files, one journal, better storage density. | Coarser locking and weaker per-actor lifecycle story. |
+| One shared fjall DB, partition per DID | Middle ground with some separation. | Still shares journal and may create many partitions. |
+| Per-DID fjall DB | Fine-grained locking, backup, btrfs subvolumes, failure isolation. | More files and open-resource pressure. |
+
+If the data root is on btrfs, a later storage ticket should create each `<data>/ledger/<did-key>/` as a subvolume for cheap snapshots, send/receive, and per-DID quotas. Non-btrfs filesystems should fall back to normal directories.
+
 ## Commands
 
 The ledger work should land as read commands first:
@@ -99,6 +170,8 @@ The ledger work should land as read commands first:
 | `tassle ledger inspect <uri>` | Explain how one Node or Tass balance was derived. |
 
 Top-level aliases can come later if they are genuinely more usable, but the implementation should live under a ledger module so it does not get conflated with `mage list`.
+
+The read commands should work from the materialized ledger store when available. A `--rebuild` flag can force replay from the per-DID event log. A later `--from-hydrant` or maintenance command can rebuild from Hydrant cursor 0 if the Tassle ledger store was deleted.
 
 ## Validation Hook
 
@@ -131,7 +204,7 @@ CEL predicates can then filter event streams or balance rows consistently. CEL p
 
 ## Non-Goals
 
-- No AppView/indexer for v1.
+- No public AppView or consensus indexer for v1. Embedded Hydrant is a local cache/event source.
 - No Storyteller or Reality authority merge.
 - No keytrace signatures.
 - No hidden mutation of `actor.rpg.stats`.
