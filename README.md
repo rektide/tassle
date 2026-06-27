@@ -29,13 +29,14 @@ Rust/Jacquard is now the primary CLI path. The older TypeScript CLI remains in-t
 | Capability | Status |
 |---|---|
 | Rust clap CLI (`crates/tassle-cli`) | ✅ primary |
-| Rust Jacquard public XRPC read (`repo list`) | ✅ |
+| Rust Jacquard public XRPC record access (`repo list`) | ✅ |
 | Rust generated builders for tassle lexicons | ✅ |
 | Rust sample generator (`samples`) | ✅ |
 | TypeScript OAuth loopback login and writes | ✅ legacy/reference |
-| Read mage sheet from `actor.rpg.stats/self` in TS | ✅ legacy/reference |
+| Read Mage data from `actor.rpg.stats/self` in TS | ✅ legacy/reference |
 | Lexicons authored under `com.superbfowle.tass.*` | ✅ |
-| Rust `mage list` / `mage stats` | ✅ |
+| Rust Mage stats read (`mage list` / `mage stats`) | ✅, command shape still settling |
+| CEL filters/projections for read commands | ⏳ next |
 | Rust OAuth/write commands | ⏳ next |
 | Hedystia web server (reuses auth core) | ⏳ deferred |
 | Ontology restructure (per `pub.layers.ontology`) | ⏳ design discussion |
@@ -62,11 +63,11 @@ cd crates
 # Public-read a live rpg.actor collection through Jacquard XRPC
 cargo run -p tassle-cli -- repo list actor.rpg.stats --repo jauntywk.bsky.social
 
-# Read normalized Mage sheet stats from the active profile
-cargo run -p tassle-cli -- mage list
+# Read normalized Mage stats from the active profile
+cargo run -p tassle-cli -- mage stats
 
 # List every actor.rpg.stats rkey for the active profile
-cargo run -p tassle-cli -- mage list --all
+cargo run -p tassle-cli -- repo list actor.rpg.stats
 
 # Generate a Node record as validated JSON
 cargo run -p tassle-cli -- generate node "Crystal Spring" -r 3 -R dynamic -t "a smooth river-stone"
@@ -81,8 +82,8 @@ cargo run -p tassle-cli -- samples
 |---|---|
 | `auth login <did-or-handle>` | Save a local profile/default actor; OAuth tokens come later |
 | `auth set <key>` / `auth set <key=value>` | Read or write a dotted key in the active profile TOML fragment |
-| `mage list [rkey]` | Read `actor.rpg.stats/<rkey>`; defaults to normalized Mage stats from `actor.rpg.stats/mage`, fallback to `self.mage` |
-| `mage stats` | Alias for `mage list` |
+| `mage stats` | Read normalized Mage stats from `actor.rpg.stats/mage`, fallback to `self.mage`; currently aliases through `mage list` while command shape settles |
+| `mage list [rkey]` | Transitional helper for `actor.rpg.stats/<rkey>` reads; broad record access should move to `repo` |
 | `self stats` / `self list` | Inspect `actor.rpg.stats/self` aggregate contents |
 | `repo list <collection> --repo <did-or-handle>` | Public-list records from an actor's PDS using Jacquard XRPC |
 | `generate node <name> -r <rating>` | Generate and validate a Node record as JSON or DAG-CBOR |
@@ -91,6 +92,72 @@ cargo run -p tassle-cli -- samples
 Run `<cmd> --help` for full args. The older TypeScript commands (`login`, `sheet`, `mint`, `tassilize`, `meditate`, `enervate`) are the behavior reference while Rust parity lands.
 
 Rust profile defaults are stored as TOML fragments under `${XDG_CONFIG_HOME:-~/.config}/tassle/config.toml.d/`. `auth login` currently resolves and stores the profile DID/PDS only; it does not perform OAuth yet.
+
+## Command Model
+
+The CLI is split into three layers:
+
+| Layer | Role |
+|---|---|
+| `repo` | Canonical public ATProto record access. It knows about repos, collections, rkeys, cursors, record envelopes, filtering, and selection. |
+| `mage` | Mage-specific interpretation of rpg.actor data. It preconfigures common `repo` reads against `actor.rpg.stats` and normalizes Mage fields, but it should not hide that `actor.rpg.stats` is the canonical source record. |
+| `ledger` | Future derived Tassle energy fold over `com.superbfowle.tass.*` records. It answers balance/history/provenance questions and must stay separate from character stats. |
+
+`actor.rpg.stats` is the rpg.actor term we should keep visible. Avoid adding a separate `sheet` command unless it provides a concrete capability that `repo` plus `mage stats` cannot express.
+
+### Record Access
+
+`repo` should become the one place to browse and query public records:
+
+```bash
+# List records from the active profile's actor.rpg.stats collection
+tassle repo list actor.rpg.stats
+
+# Same collection from an explicit actor
+tassle repo list actor.rpg.stats --repo jauntywk.bsky.social
+
+# Future: filter by record envelope or value fields
+tassle repo list actor.rpg.stats --where 'rkey == "mage"'
+
+# Future: pick result positions after filtering
+tassle repo list actor.rpg.stats --pick '1,3,6-7,-2--1'
+```
+
+A separate `repo get` may not be necessary. Point reads are often just a focused filtered list over the same envelope, and the CLI can still optimize exact rkey filters into `com.atproto.repo.getRecord` internally.
+
+### Filtering And Selection
+
+Read/list commands should produce a stable envelope before display:
+
+```json
+{
+  "uri": "at://...",
+  "cid": "...",
+  "repo": "did:plc:...",
+  "collection": "actor.rpg.stats",
+  "rkey": "mage",
+  "value": {},
+  "normalized": {}
+}
+```
+
+CEL predicates and projections operate on that envelope. Ordinal selectors then pick positions from the resulting ordered list. Selectors should support `1` for the first result, `-1` for the last result, comma-separated picks, and inclusive ranges such as `2-4` or `-2--1`.
+
+`raw` is not currently a separate output mode worth centering. For reads, prefer `--json` envelopes with source `value` and optional `normalized` data when provenance is needed. CBOR is different: it is for generated or publishable record payloads, not for making read output more raw.
+
+### Mage Commands
+
+`mage` should stay explicit about Mage semantics:
+
+```bash
+# Domain view: normalize actor.rpg.stats/mage into useful Mage fields
+tassle mage stats
+
+# Future: compute Mage-specific derived facts from the normalized stats
+tassle mage stats --where 'normalized.spheres.prime >= 3'
+```
+
+Use `repo list actor.rpg.stats` for broad rpg.actor record browsing. Use `mage stats` when the user wants Mage: The Ascension field names, fallback handling, case normalization, or game-specific validation.
 
 # Architecture
 
