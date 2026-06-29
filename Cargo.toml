@@ -23,3 +23,7 @@ jacquard-derive = "0.12"
 jacquard-identity = "0.12"
 jacquard-lexicon = "0.12"
 jacquard-oauth = "0.12"
+# Local path dep — version-aligned on jacquard 0.12. (Note: jac-store-fjall's own
+# [patch.crates-io] for the hydrant fjall fork does NOT carry across the path
+# boundary, so tassle resolves fjall from crates.io — fine for the auth MVP.)
+jac-store-fjall = { path = "../jac-store-fjall" }
