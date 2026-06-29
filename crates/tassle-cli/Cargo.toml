@@ -13,9 +13,9 @@ path = "src/main.rs"
 
 [features]
 default = []
-# Auth/session store backend (jac-store-fjall, fjall + CBOR). Off by default so
-# the base record-generator CLI stays lean; the auth + tassle-app surface uses it.
-auth-store = ["dep:jac-store-fjall"]
+# Auth/session store backend (jac-store-fjall, fjall + CBOR) + interactive
+# password prompt. Off by default so the base record-generator CLI stays lean.
+auth-store = ["dep:jac-store-fjall", "dep:rpassword"]
 
 [dependencies]
 tassle-lexicons = { path = "../tassle-lexicons" }
@@ -24,8 +24,9 @@ jacquard.workspace = true
 jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
 figment2.workspace = true
-# Optional: durable auth-session store. Gated by the `auth-store` feature.
+# Optional: durable auth-session store + interactive login. Gated by `auth-store`.
 jac-store-fjall = { workspace = true, optional = true }
+rpassword = { version = "7", optional = true }
 clap = { version = "~4.4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
