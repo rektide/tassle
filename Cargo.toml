@@ -16,5 +16,10 @@ repository = "https://github.com/rektide/tassle"
 version = "0.1.0"
 
 [workspace.dependencies]
-# Jacquard crates are not on crates.io; use git deps on rsform/jacquard.
-jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
+# Jacquard 0.12 (crates.io) — version-aligned with jac-store-fjall.
+jacquard = { version = "0.12", default-features = false, features = ["api", "cache", "dns"] }
+jacquard-common = "0.12"
+jacquard-derive = "0.12"
+jacquard-identity = "0.12"
+jacquard-lexicon = "0.12"
+jacquard-oauth = "0.12"

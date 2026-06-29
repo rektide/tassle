@@ -13,8 +13,8 @@ path = "src/main.rs"
 
 [dependencies]
 tassle-lexicons = { path = "../tassle-lexicons" }
-jacquard-common = { git = "https://github.com/rsform/jacquard.git" }
-jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
+jacquard-common.workspace = true
+jacquard-lexicon.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 clap = { version = "~4.4", features = ["derive"] }

@@ -16,16 +16,16 @@ default = ["com_superbfowle"]
 com_superbfowle = []
 
 [dependencies]
-jacquard-common = { git = "https://github.com/rsform/jacquard.git" }
-jacquard-derive = { git = "https://github.com/rsform/jacquard.git" }
-jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
+jacquard-common.workspace = true
+jacquard-derive.workspace = true
+jacquard-lexicon.workspace = true
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1"
 chrono = "0.4"
-jacquard-common = { git = "https://github.com/rsform/jacquard.git" }
-jacquard-lexicon = { git = "https://github.com/rsform/jacquard.git" }
+jacquard-common.workspace = true
+jacquard-lexicon.workspace = true
 
 [[example]]
 name = "smoke"
