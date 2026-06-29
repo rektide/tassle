@@ -1,8 +1,9 @@
-//! Data-first corpus of Tass ATProto lexicon documents and examples.
+//! Data-first corpus of Tass ATProto lexicon documents.
 //!
 //! This crate intentionally exposes lexicons as JSON text, not Rust bindings.
 //! Generated bindings, validators, docs, and sample checks should treat this
-//! corpus as their source input.
+//! corpus as their source input. The `samples` feature is enabled by default and
+//! embeds generated example records; disable default features to exclude them.
 
 /// One lexicon document embedded in the corpus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,6 +17,7 @@ pub struct LexiconDoc {
 }
 
 /// One example record embedded in the corpus.
+#[cfg(feature = "samples")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SampleRecord {
     /// File name inside [`SAMPLE_DIR`].
@@ -30,6 +32,7 @@ pub struct SampleRecord {
 pub const LEXICON_DIR: &str = "crates/tass-lex-corpus/lexicons";
 
 /// Crate-local directory containing canonical example record JSON files.
+#[cfg(feature = "samples")]
 pub const SAMPLE_DIR: &str = "crates/tass-lex-corpus/samples";
 
 /// Embedded `com.superbfowle.tass.*` lexicon documents.
@@ -67,6 +70,7 @@ pub const LEXICONS: &[LexiconDoc] = &[
 ];
 
 /// Embedded example records generated from the current Tass builders.
+#[cfg(feature = "samples")]
 pub const SAMPLES: &[SampleRecord] = &[
     SampleRecord {
         file_name: "enervate-spend.example.json",
@@ -96,6 +100,7 @@ pub fn iter() -> impl Iterator<Item = LexiconDoc> {
 }
 
 /// Iterate all embedded example records in deterministic file-name order.
+#[cfg(feature = "samples")]
 pub fn iter_samples() -> impl Iterator<Item = SampleRecord> {
     SAMPLES.iter().copied()
 }
@@ -106,6 +111,7 @@ pub fn get(nsid: &str) -> Option<LexiconDoc> {
 }
 
 /// Return one embedded example record by file name.
+#[cfg(feature = "samples")]
 pub fn get_sample(file_name: &str) -> Option<SampleRecord> {
     SAMPLES
         .iter()
@@ -126,6 +132,7 @@ mod tests {
         assert!(iter().all(|doc| doc.json.contains(doc.nsid)));
     }
 
+    #[cfg(feature = "samples")]
     #[test]
     fn corpus_contains_tass_samples() {
         assert_eq!(SAMPLES.len(), 4);

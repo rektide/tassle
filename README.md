@@ -262,7 +262,7 @@ Records are currently written with `validate: false` on the PDS — lexicons are
 
 # Samples
 
-`crates/tass-lex-corpus/samples/` contains example records generated from the builders via `tassle samples`. Fixed `createdAt` for stable diffs; placeholder DID (`did:plc:samplesamplesamplesample`) since the canonical publisher isn't decided. Four examples cover the full lifecycle: node → tassilize → enervate, plus a meditate.
+`crates/tass-lex-corpus/samples/` contains example records generated from the builders via `tassle samples`. Fixed `createdAt` for stable diffs; placeholder DID (`did:plc:samplesamplesamplesample`) since the canonical publisher isn't decided. Four examples cover the full lifecycle: node → tassilize → enervate, plus a meditate. The corpus crate exposes these through its default-on `samples` feature; disable default features if a consumer only wants lexicon JSON.
 
 # Development
 

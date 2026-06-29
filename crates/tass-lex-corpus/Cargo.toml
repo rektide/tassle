@@ -10,3 +10,7 @@ description = "Data-first corpus of Tass ATProto lexicon JSON documents."
 [lib]
 name = "tass_lex_corpus"
 path = "src/lib.rs"
+
+[features]
+default = ["samples"]
+samples = []
