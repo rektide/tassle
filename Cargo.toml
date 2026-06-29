@@ -27,3 +27,6 @@ jacquard-oauth = "0.12"
 # [patch.crates-io] for the hydrant fjall fork does NOT carry across the path
 # boundary, so tassle resolves fjall from crates.io — fine for the auth MVP.)
 jac-store-fjall = { path = "../jac-store-fjall" }
+# Local fork of figment2 with the ops/DropIns/select_profile_from_config
+# machinery we build the profile model on (see ~/src/figments-rs).
+figment2 = { path = "../figments-rs", features = ["toml"] }

@@ -1,6 +1,7 @@
 // tassle: the Rust CLI.
 
 mod commands;
+mod config;
 mod profile_config;
 
 use clap::{Parser, Subcommand};
@@ -21,6 +22,8 @@ struct Cli {
 enum Command {
     /// Profile and authentication commands
     Auth(commands::auth::AuthArgs),
+    /// figment-backed config: profiles, loaded sources, active values
+    Config(commands::config::ConfigArgs),
     /// Generate records (node, tassilize, etc.) as JSON or CBOR
     Generate(commands::generate::GenerateArgs),
     /// Mage character sheet commands
@@ -39,6 +42,7 @@ async fn main() -> miette::Result<ExitCode> {
     let cli = Cli::parse();
     match cli.command {
         Command::Auth(args) => commands::auth::run(args).await,
+        Command::Config(args) => commands::config::run(args),
         Command::Generate(args) => match args.kind {
             commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a),
         },

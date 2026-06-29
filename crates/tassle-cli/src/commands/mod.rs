@@ -1,6 +1,7 @@
 // Command modules. Each file exposes an Args struct (clap) and a run(args).
 
 pub mod auth;
+pub mod config;
 pub mod generate;
 pub mod mage;
 pub mod repo;

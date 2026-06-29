@@ -23,6 +23,7 @@ tass-lex-corpus = { path = "../tass-lex-corpus" }
 jacquard.workspace = true
 jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
+figment2.workspace = true
 # Optional: durable auth-session store. Gated by the `auth-store` feature.
 jac-store-fjall = { workspace = true, optional = true }
 clap = { version = "~4.4", features = ["derive"] }
