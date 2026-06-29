@@ -1,4 +1,5 @@
 use crate::config;
+use crate::profile_config;
 use clap::{Args, Subcommand};
 use figment2::ops::{OperationStatus, RecordedIntent};
 use miette::IntoDiagnostic;
@@ -21,6 +22,18 @@ pub enum ConfigKind {
         /// Optional dotted key (e.g. `did`, `pds`); omit for the whole profile.
         key: Option<String>,
     },
+    /// Read or write a dotted key in the active profile fragment.
+    ///
+    /// `config set key=value` writes; `config set key` reads; `config set -u key`
+    /// removes. The special key `profile` edits the base config.toml selector
+    /// (i.e. switches the active profile).
+    Set {
+        /// Dotted key to read, or `key=value` to write.
+        assignment: String,
+        /// Remove the dotted key from the active profile fragment.
+        #[arg(short = 'u', long)]
+        unset: bool,
+    },
 }
 
 pub fn run(args: ConfigArgs) -> miette::Result<ExitCode> {
@@ -28,6 +41,7 @@ pub fn run(args: ConfigArgs) -> miette::Result<ExitCode> {
         ConfigKind::Files => files(),
         ConfigKind::List => list(),
         ConfigKind::Get { key } => get(key),
+        ConfigKind::Set { assignment, unset } => set(&assignment, unset),
     }
 }
 
@@ -84,6 +98,62 @@ fn get(key: Option<String>) -> miette::Result<ExitCode> {
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn set(assignment: &str, unset: bool) -> miette::Result<ExitCode> {
+    let (key, value) = split_assignment(assignment);
+    if key.is_empty() {
+        miette::bail!("config key is required");
+    }
+    if unset && value.is_some() {
+        miette::bail!("--unset expects a key, not key=value");
+    }
+
+    // The `profile` key lives in the base config.toml (the active selector);
+    // every other key belongs to the active profile's drop-in fragment.
+    let target = if key == "profile" {
+        config::config_file()?
+    } else {
+        let active = config::active_name(&config::active_figment(None)?);
+        let dir = config::dropins_dir()?;
+        std::fs::create_dir_all(&dir).into_diagnostic()?;
+        dir.join(format!("{active}.toml"))
+    };
+
+    if unset {
+        let removed = profile_config::unset_value_at(&target, key)?;
+        println!(
+            "{} {}",
+            if removed { "unset" } else { "(already unset)" },
+            key
+        );
+        println!("  file: {}", target.display());
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    match value {
+        Some(value) => {
+            let rendered = profile_config::write_value_at(&target, key, value)?;
+            println!("{key} = {rendered}");
+            println!("  file: {}", target.display());
+        }
+        None => {
+            // Bare `config set key` reads — same view as `config get key`.
+            let figment = config::active_figment(None)?;
+            let v: serde_json::Value = figment
+                .extract_inner(key)
+                .map_err(|e| miette::miette!("'{key}' not found: {e}"))?;
+            println!("{v}");
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn split_assignment(input: &str) -> (&str, Option<&str>) {
+    match input.split_once('=') {
+        Some((key, value)) => (key.trim(), Some(value.trim())),
+        None => (input.trim(), None),
+    }
 }
 
 fn status_str(status: OperationStatus) -> &'static str {

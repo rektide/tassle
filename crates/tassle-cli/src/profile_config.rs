@@ -258,3 +258,35 @@ pub fn unset_profile_value(key: &str) -> miette::Result<(Profile, bool)> {
         .ok_or_else(|| miette::miette!("updated profile is incomplete"))?;
     Ok((profile, removed))
 }
+
+// --- path-based dotted-key writers (shared by `config set`/`config unset`) ---
+// These operate on an explicit TOML file so the figment-backed `config` command
+// can edit a specific fragment (the active profile's drop-in, or the base
+// config.toml for the `profile` selector) without going through the legacy
+// did-keyed default_profile() lookup.
+
+/// Write `key=value` into the TOML file at `path` (creating it if missing).
+/// Returns the rendered value string. `value_input` is parsed as bool/int/float/string.
+pub(crate) fn write_value_at(path: &PathBuf, key: &str, value_input: &str) -> miette::Result<String> {
+    let mut doc = read_document(path)?;
+    let parts = dotted_path(key)?;
+    let item = parse_value(value_input);
+    let rendered = item
+        .as_value()
+        .map(ToString::to_string)
+        .unwrap_or_else(|| item.to_string().trim().to_owned());
+    set_item(&mut doc, &parts, item);
+    fs::write(path, doc.to_string()).into_diagnostic()?;
+    Ok(rendered)
+}
+
+/// Remove `key` from the TOML file at `path`. Returns whether it was present.
+pub(crate) fn unset_value_at(path: &PathBuf, key: &str) -> miette::Result<bool> {
+    let mut doc = read_document(path)?;
+    let parts = dotted_path(key)?;
+    let removed = remove_item(&mut doc, &parts);
+    if removed {
+        fs::write(path, doc.to_string()).into_diagnostic()?;
+    }
+    Ok(removed)
+}

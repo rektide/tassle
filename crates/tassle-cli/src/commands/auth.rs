@@ -17,6 +17,9 @@ pub enum AuthKind {
     /// Resolve and save a local profile as the default actor; OAuth comes later
     Login(LoginArgs),
     /// Read or write a key in the active profile config fragment
+    ///
+    /// Deprecated: prefer `tassle config set`. Retained for now as the legacy
+    /// did-keyed fragment editor; will be removed or hidden as an alias.
     Set(SetArgs),
 }
 
