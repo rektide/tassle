@@ -145,21 +145,31 @@ builders now live on the new repo types. (Earlier "broken build / bon deleted"
 notes are stale.) Remaining engine-v2 loose ends: `RepoCore::read_lock`, lazy
 paged streams, `RepoCapabilities` — none block the MVP.
 
-### 4.2 The API we'll use
+### 4.2 The API we'll use (confirmed by the tass-auth-spike)
+
+`FjallAuth<C: Codec>` is the high-level handle over one fjall DB; `.oauth()` /
+`.app_password()` hand back the two Jacquard-conforming stores sharing it:
 
 ```rust
-// fjall backend, CBOR codec (both fixed at build time — see §4.3).
-// bon builder now available on the engine-v2 types:
-let apppw = AppPasswordStore::builder()
-    .path(path)
-    .codec(Cbor)
-    .build()?;   // SessionStore<SessionKey,AtpSession> + SessionSelector<CredentialSessionMatch>
-let oauth = OAuthStore::builder().path(path).codec(Cbor).build()?; // ClientAuthStore + SessionSelector<OAuthSessionMatch>
+// fjall backend, CBOR codec (default); backend/codec fixed at build time (§4.3).
+let auth  = FjallAuth::open(path)?;                     // FjallAuth<Cbor>
+//   …or the bon builder for full control:
+//   FjallAuth::builder().path(p).codec(c).retry(r).harden(h).lock(l).build()?
+let apppw = Arc::new(auth.app_password());  // SessionStore<SessionKey,AtpSession> + SessionSelector<CredentialSessionMatch>
+let oauth = auth.oauth();                   // ClientAuthStore + SessionSelector<OAuthSessionMatch>
+
+let resolver = Arc::new(JacquardResolver::default());
+let session  = CredentialSession::new(apppw, resolver);
+match session.resume(&SessionHint::any()).await? {
+    CredentialResumeResult::LoginRequired(_) => { /* empty store → prompt */ }
+    CredentialResumeResult::Resumed(_)       => { /* have a session */ }
+}
 ```
-(Exact builder field names to be confirmed against the just-landed bon surface
-during the step-1 spike; the underlying `FjallEngine::open` / `KvRepository::new`
-refs are `src/engine/fjall.rs:60-83`, `src/repo/kv.rs:144-146`,
-`src/repo/mod.rs:163,235`.)
+Refs: `FjallAuth::open`/`builder` `src/engine/fjall.rs:235-293`; `.app_password()`
+/`.oauth()` `src/engine/fjall.rs:295-304`; `CredentialSession::new`
+`jacquard…/client/credential_session.rs:242`; `resume` returns `LoginRequired` as
+a value, not an error (`:44-48`, `:528-530`). Verified by
+`crates/tassle-cli/examples/auth_spike.rs`.
 
 Reassuring built-ins for our design:
 - `RepoCore` **already tracks active account**: `active_account()`,

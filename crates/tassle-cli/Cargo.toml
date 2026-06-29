@@ -33,3 +33,8 @@ miette = { version = "7", features = ["fancy"] }
 chrono = "0.4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 toml_edit = "0.22"
+
+[dev-dependencies]
+# Used by examples/spikes behind the `auth-store` feature.
+anyhow = "1"
+tempfile = "3"
