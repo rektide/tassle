@@ -71,7 +71,7 @@ cargo run -p tassle-cli -- repo list actor.rpg.stats
 # Generate a Node record as validated JSON
 cargo run -p tassle-cli -- generate node "Crystal Spring" -r 3 -R dynamic -t "a smooth river-stone"
 
-# Generate example records into samples/ from Rust builders
+# Regenerate corpus-owned example records from Rust builders
 cargo run -p tassle-cli -- samples
 ```
 
@@ -86,7 +86,7 @@ cargo run -p tassle-cli -- samples
 | `self stats` / `self list` | Inspect `actor.rpg.stats/self` aggregate contents |
 | `repo list <collection> --repo <did-or-handle>` | Public-list records from an actor's PDS using Jacquard XRPC |
 | `generate node <name> -r <rating>` | Generate and validate a Node record as JSON or DAG-CBOR |
-| `samples` | Regenerate example records into `samples/` from Rust builders |
+| `samples` | Regenerate example records into `crates/tass-lex-corpus/samples/` from Rust builders |
 
 Run `<cmd> --help` for full args. The older TypeScript commands (`login`, `sheet`, `mint`, `tassilize`, `meditate`, `enervate`) are the behavior reference while Rust parity lands.
 
@@ -163,13 +163,12 @@ Use `repo list actor.rpg.stats` for broad rpg.actor record browsing. Use `mage s
 ```
 tassle/
 ├── crates/
-│   ├── tass-lex-corpus/           # data-first lexicon JSON corpus
+│   ├── tass-lex-corpus/           # data-first lexicon JSON and sample corpus
 │   ├── tassle-cli/                # primary clap/Jacquard CLI
 │   ├── tassle-lexicons/           # generated Rust lexicon types/builders
 │   ├── tassle-codegen/            # Jacquard codegen wrapper
 │   └── tassle-validate/           # schema validation helper
-├── src/                           # legacy TypeScript CLI/reference implementation
-└── samples/                       # generated example records (regenerable via `tassle samples`)
+└── src/                           # legacy TypeScript CLI/reference implementation
 ```
 
 ## Auth lifecycle (shared between CLI and future web server)
@@ -263,7 +262,7 @@ Records are currently written with `validate: false` on the PDS — lexicons are
 
 # Samples
 
-`samples/` contains example records generated from the builders via `tassle samples`. Fixed `createdAt` for stable diffs; placeholder DID (`did:plc:samplesamplesamplesample`) since the canonical publisher isn't decided. Four examples cover the full lifecycle: node → tassilize → enervate, plus a meditate.
+`crates/tass-lex-corpus/samples/` contains example records generated from the builders via `tassle samples`. Fixed `createdAt` for stable diffs; placeholder DID (`did:plc:samplesamplesamplesample`) since the canonical publisher isn't decided. Four examples cover the full lifecycle: node → tassilize → enervate, plus a meditate.
 
 # Development
 
@@ -277,7 +276,7 @@ pnpm fix        # concurrently runs format (oxfmt) + lint --fix (oxlint)
 pnpm test       # vitest (no tests yet)
 ```
 
-Rust toolchain: root Cargo workspace, clap v4 derive, Jacquard for atproto/XRPC, `tass-lex-corpus` lexicon JSON data, generated `tassle-lexicons` builders, `miette` for diagnostics, `tokio` for async runtime.
+Rust toolchain: root Cargo workspace, clap v4 derive, Jacquard for atproto/XRPC, `tass-lex-corpus` lexicon JSON and sample data, generated `tassle-lexicons` builders, `miette` for diagnostics, `tokio` for async runtime.
 
 Legacy TypeScript toolchain: gunshi, `@atproto/api`, `@atproto/oauth-client-node`, oxfmt/oxlint, tsgo, tsdown, vitest, concurrently.
 

@@ -1,10 +1,10 @@
 {
-  "name": "Crystal Spring",
-  "rating": 3,
+  "$type": "com.superbfowle.tass.node",
+  "createdAt": "2026-06-21T12:00:00.000000Z",
   "description": "A clear spring deep in the old forest; the water hums faintly to those who can hear.",
   "location": "Old-growth forest, three miles north of the caern",
-  "ambientQuintessence": 15,
+  "name": "Crystal Spring",
+  "rating": 3,
   "resonance": "dynamic",
-  "tassForm": "a smooth river-stone, warm to the touch",
-  "createdAt": "2026-06-21T12:00:00.000Z"
+  "tassForm": "a smooth river-stone, warm to the touch"
 }

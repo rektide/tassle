@@ -1,0 +1,8 @@
+{
+  "$type": "com.superbfowle.tass.tassilize",
+  "createdAt": "2026-06-21T12:00:00.000000Z",
+  "form": "a silver coin, untarnished",
+  "node": "at://did:plc:samplesamplesamplesample/com.superbfowle.tass.node/3ksamplesample1",
+  "note": "Pulled from the spring's surface at dawn.",
+  "quintessence": 5
+}

@@ -30,7 +30,7 @@ enum Command {
     /// Inspect self-rkey aggregate records
     #[command(name = "self")]
     SelfRecord(commands::self_record::SelfArgs),
-    /// Generate example records into samples/
+    /// Generate example records into the lexicon corpus
     Samples(commands::samples::SamplesArgs),
 }
 

@@ -1,6 +1,5 @@
-// `tassle samples` — generate example records into samples/ using the
-// Rust fluent builders. Mirrors the TS samples command but uses the
-// schema-validated generated types.
+// `tassle samples` — generate example records into the corpus crate using the
+// schema-validated generated Rust types.
 //
 // Records use a fixed createdAt so diffs are stable across regenerations.
 
@@ -13,6 +12,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use tass_lex_corpus::SAMPLE_DIR;
 use tassle_lexicons::com_superbfowle::tass::{
     enervate::Enervate, meditate::Meditate, node::Node, tassilize::Tassilize,
 };
@@ -34,8 +34,8 @@ fn sample_uri(collection: &str, rkey: &str) -> String {
 
 #[derive(Args, Debug)]
 pub struct SamplesArgs {
-    /// Output directory (default: ./samples from CWD or repo root)
-    #[arg(short, long, default_value = "../../samples")]
+    /// Output directory
+    #[arg(short, long, default_value = SAMPLE_DIR)]
     pub out: PathBuf,
 
     /// Print sample filenames without writing

@@ -3428,6 +3428,7 @@ dependencies = [
  "serde",
  "serde_ipld_dagcbor",
  "serde_json",
+ "tass-lex-corpus",
  "tassle-lexicons",
  "tokio",
  "toml_edit",
