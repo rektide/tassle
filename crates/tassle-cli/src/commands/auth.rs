@@ -269,7 +269,7 @@ async fn session_status(
     did: Option<&str>,
     session_id: Option<&str>,
 ) -> serde_json::Value {
-    use jac_store_fjall::FjallAuth;
+    use jac_store_fjall::{AppPasswordStore, TursoRepository};
     use jacquard::common::session::{SessionKey, SessionStore};
     use jacquard::common::types::did::Did;
 
@@ -279,9 +279,9 @@ async fn session_status(
         return absent();
     }
     let Ok(did) = Did::new_owned(did_str) else { return absent(); };
-    let Ok(auth) = FjallAuth::open(store_path) else { return absent(); };
+    let Ok(repo) = TursoRepository::open_local(store_path).await else { return absent(); };
     let key = SessionKey::new(did, session_id.unwrap_or("session"));
-    let store = auth.app_password();
+    let store = AppPasswordStore::new(repo);
     let Some(session) = store.get(&key).await else { return absent(); };
 
     match jwt_exp(session.access_jwt.as_str()) {
@@ -328,7 +328,7 @@ async fn login_real(
     profile: Option<&str>,
 ) -> miette::Result<ExitCode> {
     use std::sync::Arc;
-    use jac_store_fjall::FjallAuth;
+    use jac_store_fjall::{AppPasswordStore, TursoRepository};
     use jacquard::client::credential_session::{
         CredentialLoginOptions, CredentialResumeResult, CredentialSession,
     };
@@ -351,17 +351,20 @@ async fn login_real(
                 .map_err(|e| miette::miette!("failed to read password: {e}"))
         })?;
 
-    // Open the profile's fjall store (explicit store_path, else a per-profile default).
+    // Open the profile's turso store (explicit store_path, else a per-profile default).
     let store_path = active.store_path.clone().unwrap_or_else(|| {
         crate::config::tassle_config_dir()
             .expect("config dir")
             .join("store")
-            .join(format!("{profile_name}.fjall"))
+            .join(format!("{profile_name}.db"))
     });
-    std::fs::create_dir_all(&store_path).into_diagnostic()?;
-    let auth = FjallAuth::open(&store_path)
+    if let Some(parent) = store_path.parent() {
+        std::fs::create_dir_all(parent).into_diagnostic()?;
+    }
+    let repo = TursoRepository::open_local(&store_path)
+        .await
         .map_err(|e| miette::miette!("failed to open auth store at {}: {e}", store_path.display()))?;
-    let store = Arc::new(auth.app_password());
+    let store = Arc::new(AppPasswordStore::new(repo));
 
     // resume-or-login. resume() returns LoginRequired as a value, not an error.
     let resolver = Arc::new(JacquardResolver::default());

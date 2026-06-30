@@ -28,10 +28,11 @@ jacquard-derive = "0.12"
 jacquard-identity = "0.12"
 jacquard-lexicon = "0.12"
 jacquard-oauth = "0.12"
-# Local path dep — version-aligned on jacquard 0.12. (Note: jac-store-fjall's own
-# [patch.crates-io] for the hydrant fjall fork does NOT carry across the path
-# boundary, so tassle resolves fjall from crates.io — fine for the auth MVP.)
-jac-store-fjall = { path = "../jac-store-fjall" }
+# Local path dep — version-aligned on jacquard 0.12. The auth store runs on the
+# native-SQL turso backend (engine-v2 AuthRepository), so default features
+# (backend-fjall + parking_lot) are off: turso self-serializes via SQL and needs
+# no RMW lock.
+jac-store-fjall = { path = "../jac-store-fjall", default-features = false, features = ["backend-turso"] }
 # Local fork of figment2 with the ops/DropIns/select_profile_from_config
 # machinery we build the profile model on (see ~/src/figments-rs).
 figment2 = { path = "../figments-rs", features = ["toml"] }

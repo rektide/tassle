@@ -2,7 +2,7 @@
 //! `auth-store` feature.
 //!
 //! [`AuthedClient::for_active_profile`] resolves the active profile, opens its
-//! fjall app-password store, resumes a jacquard `CredentialSession` once
+//! turso app-password store, resumes a jacquard `CredentialSession` once
 //! (validating the login + pointing it at the PDS), and then **lends** that one
 //! session by reference via [`AuthedClient::session`]. Consumers borrow it —
 //! e.g. `QuintClient::new(authed.session())` — so a single live session is
@@ -24,13 +24,14 @@ use crate::config;
 use crate::Profile;
 
 /// The concrete app-password store + resolver backing an [`AuthedClient`].
-type Store = jac_store_fjall::AppPasswordStore<
-    jac_store_fjall::KvRepository<jac_store_fjall::FjallEngine, jac_store_fjall::codec::Cbor>,
->;
+///
+/// Native-SQL turso backend (jac-store-fjall's engine-v2 `AuthRepository`): no
+/// byte codec, no RMW lock — turso self-serializes via SQL transactions.
+type Store = jac_store_fjall::AppPasswordStore<jac_store_fjall::TursoRepository>;
 type Resolver = jacquard::identity::PublicResolver;
 
-/// A live app-password session over the default fjall+Cbor store + public
-/// resolver. What [`AuthedClient::session`] lends.
+/// A live app-password session over the turso-backed store + public resolver.
+/// What [`AuthedClient::session`] lends.
 pub type AppPasswordSession = CredentialSession<Store, Resolver>;
 
 /// Errors from [`AuthedClient::for_active_profile`].
@@ -98,11 +99,15 @@ impl AuthedClient {
         let store_path = profile
             .store_path
             .clone()
-            .unwrap_or_else(|| cfg_dir.join("store").join(format!("{name}.fjall")));
+            .unwrap_or_else(|| cfg_dir.join("store").join(format!("{name}.db")));
 
-        let auth = jac_store_fjall::FjallAuth::open(&store_path)
+        if let Some(parent) = store_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;
+        }
+        let repo = jac_store_fjall::TursoRepository::open_local(&store_path)
+            .await
             .map_err(|e| AuthError::Store(e.to_string()))?;
-        let store = Arc::new(auth.app_password());
+        let store = Arc::new(jac_store_fjall::AppPasswordStore::new(repo));
         let resolver = Arc::new(JacquardResolver::default());
         let session = CredentialSession::new(store, resolver);
 

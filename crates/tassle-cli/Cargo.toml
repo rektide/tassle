@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [features]
 default = []
-# Auth/session store backend (jac-store-fjall, fjall + CBOR) + interactive
+# Auth/session store backend (jac-store-fjall, turso native-SQL) + interactive
 # password prompt. Off by default so the base record-generator CLI stays lean.
 auth-store = [
     "dep:jac-store-fjall",

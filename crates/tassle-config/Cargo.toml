@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [features]
 default = []
-# Authed-client construction: a jacquard CredentialSession over the fjall
+# Authed-client construction: a jacquard CredentialSession over the turso
 # app-password store, resumed from the active profile and pointed at its PDS.
 # Off by default so the pure config/profile build stays light; the app enables
 # this for write paths.
