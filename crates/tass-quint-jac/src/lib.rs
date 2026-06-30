@@ -108,7 +108,7 @@ impl<C: XrpcClient + Sync> QuintClient<C> {
     /// Read the mage pattern-quintessence for `repo`/`rkey`.
     ///
     /// Returns `Ok(None)` when the record is absent or carries no resolvable
-    /// quintessence. Prefers the `quint` extension field and hydrates from
+    /// quintessence. Prefers the `milliQuintessence` extension field and hydrates from
     /// `quintessence * 1000` for legacy sheets (see [`tass_quint::resolve`]).
     pub async fn read(&self, repo: &str, rkey: &str) -> Result<Option<Quint>> {
         let Some(record) = self.get_record(repo, rkey).await? else {
@@ -118,7 +118,7 @@ impl<C: XrpcClient + Sync> QuintClient<C> {
         Ok(extract_quint(&value))
     }
 
-    /// Read-modify-write the mage block: sets `quint` to `q.millis()` and
+    /// Read-modify-write the mage block: sets `milliQuintessence` to `q.millis()` and
     /// replicates the floored value into `quintessence` (see
     /// [`tass_quint::sheet_patch`]). All other mage fields and the record
     /// envelope are preserved; `updatedAt` is bumped. Requires an authenticated
@@ -206,18 +206,21 @@ pub(crate) fn mage_block_mut(value: &mut Value) -> Option<&mut Map<String, Value
     value.get_mut("mage").and_then(Value::as_object_mut)
 }
 
-/// Read `quint`/`quintessence` out of a record value and resolve to a [`Quint`].
+/// Read `milliQuintessence`/`quintessence` out of a record value and resolve to a [`Quint`].
 pub(crate) fn extract_quint(value: &Value) -> Option<Quint> {
     let mage = mage_block(value)?;
-    let quint = mage.get("quint").and_then(Value::as_i64);
+    let milli_quintessence = mage.get("milliQuintessence").and_then(Value::as_i64);
     let quintessence = mage.get("quintessence").and_then(Value::as_i64);
-    tass_quint::resolve(quint, quintessence)
+    tass_quint::resolve(milli_quintessence, quintessence)
 }
 
 /// Write the [`tass_quint::sheet_patch`] fields into a mage field map.
 pub(crate) fn apply_quint(mage: &mut Map<String, Value>, q: Quint) {
     let patch = tass_quint::sheet_patch(q);
-    mage.insert("quint".to_string(), Value::from(patch.quint));
+    mage.insert(
+        "milliQuintessence".to_string(),
+        Value::from(patch.milli_quintessence),
+    );
     mage.insert(
         "quintessence".to_string(),
         Value::from(patch.quintessence),
@@ -238,8 +241,8 @@ mod tests {
     }
 
     #[test]
-    fn extract_prefers_quint_field() {
-        let v = envelope(json!({ "quint": 1500, "quintessence": 9 }));
+    fn extract_prefers_milli_field() {
+        let v = envelope(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
         assert_eq!(extract_quint(&v), Some(Quint::from_millis(1500)));
         assert_eq!(extract_quint(&v).unwrap().points(), 1);
     }
@@ -278,7 +281,7 @@ mod tests {
         let mage = mage_block_mut(&mut v).unwrap();
         apply_quint(mage, Quint::from_millis(1_500));
         let mage = mage_block(&v).unwrap();
-        assert_eq!(mage.get("quint").and_then(Value::as_i64), Some(1500));
+        assert_eq!(mage.get("milliQuintessence").and_then(Value::as_i64), Some(1500));
         assert_eq!(mage.get("quintessence").and_then(Value::as_i64), Some(1));
         // sibling field preserved
         assert_eq!(mage.get("arete").and_then(Value::as_i64), Some(3));
@@ -295,7 +298,7 @@ mod tests {
         assert_eq!(v.get("system").and_then(Value::as_str), Some("mage"));
         assert_eq!(v.get("$type").and_then(Value::as_str), Some("actor.rpg.stats"));
         assert_eq!(
-            v.get("data").unwrap().get("quint").and_then(Value::as_i64),
+            v.get("data").unwrap().get("milliQuintessence").and_then(Value::as_i64),
             Some(2000)
         );
     }
@@ -308,7 +311,7 @@ mod tests {
             apply_quint(mage, Quint::from_points(4));
         }
         assert_eq!(
-            v.get("mage").unwrap().get("quint").and_then(Value::as_i64),
+            v.get("mage").unwrap().get("milliQuintessence").and_then(Value::as_i64),
             Some(4000)
         );
         assert_eq!(

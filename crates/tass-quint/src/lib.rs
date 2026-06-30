@@ -1,17 +1,18 @@
 //! Quint — thousandths-of-a-point mage pattern-quintessence.
 //!
 //! `actor.rpg.stats#mageStats.quintessence` (the rpg.actor host record) is an
-//! integer 0-20. Tassle extends the mage block with an optional `quint` integer
-//! that holds the real, sub-point-resolution balance at milli (1/1000th)
-//! granularity; the legacy `quintessence` field becomes a derived display value
-//! that always shows the [`Quint::points`] floor.
+//! integer 0-20. Tassle extends the mage block with an optional
+//! `milliQuintessence` integer that holds the real, sub-point-resolution
+//! balance at milli (1/1000th) granularity; the legacy `quintessence` field
+//! becomes a derived display value that always shows the [`Quint::points`] floor.
 //!
 //! Three properties every sheet read/write should satisfy, encoded here so
 //! callers get them "peacefully, without thinking about it":
 //!
-//! 1. **`quint` is the source of truth.** [`resolve`] prefers the explicit
-//!    `quint` field and only hydrates from `quintessence * 1000` when it is
-//!    absent (legacy sheets written before this extension).
+//! 1. **`milliQuintessence` is the source of truth.** [`resolve`] prefers the
+//!    explicit `milliQuintessence` field and only hydrates from
+//!    `quintessence * 1000` when it is absent (legacy sheets written before
+//!    this extension).
 //! 2. **quintessence always shows the rounded-down value.** [`Quint::points`]
 //!    is integer division by [`PER_POINT`].
 //! 3. **writes replicate.** [`sheet_patch`] emits both fields so clients that
@@ -59,7 +60,7 @@ impl Quint {
     }
 
     /// Raw milli-quintessence — the source-of-truth value to persist in the
-    /// `quint` sheet field.
+    /// `milliQuintessence` sheet field.
     pub const fn millis(self) -> i64 {
         self.0
     }
@@ -84,11 +85,11 @@ impl Quint {
 
 /// Resolve the effective quint from raw mage-block fields.
 ///
-/// Prefer an explicit `quint` (the Tassle extension field); hydrate from
-/// `quintessence * 1000` when only the legacy integer is present; return
+/// Prefer an explicit `milliQuintessence` (the Tassle extension field); hydrate
+/// from `quintessence * 1000` when only the legacy integer is present; return
 /// `None` when neither field is set.
-pub fn resolve(quint: Option<i64>, quintessence: Option<i64>) -> Option<Quint> {
-    if let Some(millis) = quint {
+pub fn resolve(milli_quintessence: Option<i64>, quintessence: Option<i64>) -> Option<Quint> {
+    if let Some(millis) = milli_quintessence {
         return Some(Quint::from_millis(millis));
     }
     quintessence.map(Quint::from_points)
@@ -97,12 +98,14 @@ pub fn resolve(quint: Option<i64>, quintessence: Option<i64>) -> Option<Quint> {
 /// The mage-block patch produced by [`sheet_patch`] — the exact fields to
 /// merge into an `actor.rpg.stats` mage record.
 ///
-/// Serialized `camelCase` to match the sheet's wire shape: `quint` carries the
-/// source-of-truth millis, `quintessence` carries the replicated floor.
+/// Serialized `camelCase` to match the sheet's wire shape: `milliQuintessence`
+/// carries the source-of-truth millis, `quintessence` carries the replicated
+/// floor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SheetPatch {
     /// Source-of-truth milli-quintessence.
-    pub quint: i64,
+    pub milli_quintessence: i64,
     /// Floored whole points, replicated so legacy clients stay consistent.
     pub quintessence: i64,
 }
@@ -112,7 +115,7 @@ pub struct SheetPatch {
 /// field.
 pub fn sheet_patch(q: Quint) -> SheetPatch {
     SheetPatch {
-        quint: q.millis(),
+        milli_quintessence: q.millis(),
         quintessence: q.points(),
     }
 }
@@ -172,7 +175,7 @@ mod tests {
     #[test]
     fn sheet_patch_replicates_floored_points() {
         let patch = sheet_patch(Quint::from_millis(1_500));
-        assert_eq!(patch.quint, 1_500);
+        assert_eq!(patch.milli_quintessence, 1_500);
         assert_eq!(patch.quintessence, 1);
     }
 
@@ -180,7 +183,7 @@ mod tests {
     fn sheet_patch_serializes_camel_case() {
         let patch = sheet_patch(Quint::from_points(3));
         let json = serde_json::to_string(&patch).unwrap();
-        assert_eq!(json, r#"{"quint":3000,"quintessence":3}"#);
+        assert_eq!(json, r#"{"milliQuintessence":3000,"quintessence":3}"#);
     }
 
     #[test]

@@ -97,9 +97,9 @@ struct NormalizedMageStats {
     /// Player-facing whole points — always the floor of the `quint` millis
     /// (resolved via `tass_quint`). Derived, not the raw sheet field.
     quintessence: Option<i64>,
-    /// Raw Tassle extension field (`quint`), in milli-quintessence. `None`
-    /// when the sheet only carries the legacy `quintessence` integer.
-    quint: Option<i64>,
+    /// Raw Tassle extension field (`milliQuintessence`), in milli-quintessence.
+    /// `None` when the sheet only carries the legacy `quintessence` integer.
+    milli_quintessence: Option<i64>,
     paradox: Option<i64>,
     spheres: BTreeMap<String, i64>,
     missing: Vec<String>,
@@ -301,11 +301,11 @@ fn normalize_mage(raw: &Value) -> miette::Result<NormalizedMageStats> {
     let willpower = willpower_field(obj);
     let willpower_temporary = willpower_temporary_field(obj);
     let quintessence_raw = number_field(obj, &["quintessence", "Quintessence"]);
-    let quint_raw = number_field(obj, &["quint", "Quint"]);
-    // quint is the source of truth when the Tassle extension field is present;
-    // otherwise hydrate from the legacy integer. quintessence always shows the
-    // rounded-down points. See the tass-quint crate.
-    let resolved = tass_quint::resolve(quint_raw, quintessence_raw);
+    let milli_raw = number_field(obj, &["milliQuintessence", "MilliQuintessence"]);
+    // milliQuintessence is the source of truth when the Tassle extension field
+    // is present; otherwise hydrate from the legacy integer. quintessence
+    // always shows the rounded-down points. See the tass-quint crate.
+    let resolved = tass_quint::resolve(milli_raw, quintessence_raw);
     let quintessence = resolved.map(|q| q.points());
     let paradox = number_field(obj, &["paradox", "Paradox"]);
 
@@ -348,7 +348,7 @@ fn normalize_mage(raw: &Value) -> miette::Result<NormalizedMageStats> {
         willpower,
         willpower_temporary,
         quintessence,
-        quint: quint_raw,
+        milli_quintessence: milli_raw,
         paradox,
         spheres,
         missing,
@@ -467,8 +467,8 @@ fn print_record(output: &StatsOutput) {
             println!("  temp willpower: {temporary}");
         }
         println!("  quintessence: {}", display_opt(mage.quintessence));
-        if let Some(millis) = mage.quint {
-            println!("  quint:        {millis} millis");
+        if let Some(millis) = mage.milli_quintessence {
+            println!("  milliQ:       {millis} millis");
         }
         println!("  paradox:      {}", display_opt(mage.paradox));
         println!("  spheres:");
