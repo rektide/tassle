@@ -1,0 +1,18 @@
+[package]
+name = "tass-quint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Quint — thousandths-of-a-point quintessence for actor.rpg.stats#mageStats. Pure logic, no jacquard."
+
+[lib]
+name = "tass_quint"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
