@@ -151,6 +151,184 @@ pub fn sheet_patch(q: Quint) -> SheetPatch {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Coherence — inline sync seam for `milliQuintessence` ↔ `quintessence`.
+//
+// This module is pure logic with no IO. [`QuintClient`] in `tass-quint-jac`
+// consults it inline inside its existing `read` / `write_with` / `adjust_with`
+// paths so callers get a coherent value back without any separate sync pass.
+// See `doc/microquint.md` and the `tass-quint-stale-sync` ticket.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A drift classification produced by [`Coherence::classify`]. Exhaustive
+/// on purpose: it is the *complete* list of repair actions the inline
+/// read/write path can take. Adding a new case is a breaking change to the
+/// seam, by design.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncDecision {
+    /// The two fields agree and the timestamps are consistent. No refresh.
+    InSync,
+    /// The legacy `quintessence` field disagrees with
+    /// `floor(milliQuintessence / 1000)`, OR the record-level `updatedAt` is
+    /// newer than `milliQuintessenceUpdatedAt` (something else mutated the
+    /// mage block outside a tass-quint write). Repair by re-replicating the
+    /// floor into `quintessence` — the default milli-is-truth action.
+    RefreshFloor,
+    /// The milli field is present but is no longer the system of record (the
+    /// `tass-quint-sync-direction` sibling's `QuintessenceIsTruth` policy).
+    /// Repair by hydrating `milliQuintessence = quintessence * 1000` from the
+    /// legacy integer. The default coherence impl here never returns this —
+    /// it exists so the seam does not need to be reshaped when the sibling
+    /// ticket lands.
+    HydrateMilli,
+}
+
+impl SyncDecision {
+    /// True when the sheet is coherent — no repair needed. Only
+    /// [`SyncDecision::InSync`] qualifies today.
+    pub const fn is_in_sync(self) -> bool {
+        matches!(self, SyncDecision::InSync)
+    }
+
+    /// True when drift was detected. Convenience inverse of
+    /// [`SyncDecision::is_in_sync`]; surfaces in read reports.
+    pub const fn is_drift(self) -> bool {
+        !self.is_in_sync()
+    }
+}
+
+/// The raw fields a [`Coherence`] impl looks at. Pulled out of the mage block
+/// by the jac layer and handed to the seam; the seam never touches the wire
+/// directly, which keeps it unit-testable without a PDS.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SheetFields<'a> {
+    /// Raw `milliQuintessence` (the Tassle extension field), `None` when the
+    /// sheet only carries the legacy integer.
+    pub milli_quintessence: Option<i64>,
+    /// Raw `quintessence` (legacy whole points), `None` when not present.
+    pub quintessence: Option<i64>,
+    /// `milliQuintessenceUpdatedAt` — when the milli value last changed (the
+    /// narrow stamp tass-quint writes). `None` on legacy sheets and on writes
+    /// that didn't set it.
+    pub milli_quintessence_updated_at: Option<&'a str>,
+    /// Record-level `updatedAt` — broad stamp advanced on any mutation of the
+    /// record, including ones outside tass-quint. `None` when absent.
+    pub updated_at: Option<&'a str>,
+}
+
+/// Pluggable coherence rule. The default impl is [`MilliIsTruthCoherence`],
+/// matching today's behavior exactly.
+///
+/// The only callers of this trait live inside `tass-quint-jac`'s existing
+/// `read` / `write_with` / `adjust_with` methods. Nothing outside the quint
+/// family calls it directly — it is a seam for varying drift heuristics per
+/// chronicle, not a new sync verb.
+pub trait Coherence {
+    /// Inspect `fields` and return the [`SyncDecision`] the inline path should
+    /// act on.
+    fn classify(&self, fields: &SheetFields<'_>) -> SyncDecision;
+}
+
+/// The default coherence rule. Matches today's behavior with no policy
+/// applied: `milliQuintessence` is the source of truth.
+///
+/// Detection logic:
+/// 1. If no milli field is present → [`SyncDecision::InSync`] (the legacy
+///    integer is the only signal, resolved via [`resolve`]; no coherence
+///    check applies — the sheet is as coherent as it can be).
+/// 2. If `floor(milli / 1000) != quintessence` → [`SyncDecision::RefreshFloor`]
+///    (floor drifted — covers "quintessence disagrees with the milli floor"
+///    and "quintessence absent while milli present", the latter being a legacy
+///    sheet that needs a replicated floor).
+/// 3. Else if `milli_quintessence_updated_at` is older (lexically) than the
+///    record-level `updated_at` → [`SyncDecision::RefreshFloor`] too
+///    (timestamp drift: something else touched the mage block without a
+///    tass-quint write). The repair action is the same floor re-replication;
+///    the broad `updatedAt` advance is reported as drift, not acted on as an
+///    authority switch.
+/// 4. Else → [`SyncDecision::InSync`].
+///
+/// Timestamp comparison is lexical ISO-8601 string compare, the only format
+/// tass-quint writes. A non-ISO broad stamp will compare wrongly; it surfaces
+/// as drift via the same path (false positives are safe — the repair is a
+/// no-op floor re-replication).
+///
+/// This impl never returns [`SyncDecision::HydrateMilli`] — that variant is
+/// the sibling `tass-quint-sync-direction` ticket's concern.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MilliIsTruthCoherence;
+
+impl Coherence for MilliIsTruthCoherence {
+    fn classify(&self, fields: &SheetFields<'_>) -> SyncDecision {
+        let Some(millis) = fields.milli_quintessence else {
+            return SyncDecision::InSync;
+        };
+        let floor = Quint::from_millis(millis).points();
+        if fields.quintessence == Some(floor) {
+            // Floor agrees — check timestamp drift.
+            if let (Some(milli_ts), Some(rec_ts))
+                = (fields.milli_quintessence_updated_at, fields.updated_at)
+                && rec_ts > milli_ts
+            {
+                return SyncDecision::RefreshFloor;
+            }
+            SyncDecision::InSync
+        } else {
+            // Floor drifted (covers both "quintessence != floor(milli)" and
+            // "quintessence absent while milli present" — the latter is a
+            // legacy sheet that needs a replicated floor).
+            SyncDecision::RefreshFloor
+        }
+    }
+}
+
+/// The return shape of `QuintClient::read` once coherence is folded in: the
+/// coherent [`Quint`] (already repaired per the active coherence policy) plus
+/// the [`SyncDecision`] that was made, so callers can surface drift without
+/// the read path issuing a write.
+///
+/// A read MUST NOT mutate the sheet — the `quint` returned here is the coherent
+/// view of what's on the wire; the next `write_with` is what repairs the sheet
+/// in storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReadReport {
+    /// The coherent value per the active coherence policy.
+    pub quint: Quint,
+    /// What the coherence check found. [`SyncDecision::InSync`] when the sheet
+    /// was already coherent; otherwise the repair action that produced `quint`.
+    pub decision: SyncDecision,
+}
+
+impl ReadReport {
+    /// True when the sheet was found coherent at read time.
+    pub const fn in_sync(&self) -> bool {
+        self.decision.is_in_sync()
+    }
+    /// True when drift was detected (any non-in-sync decision).
+    pub const fn drifted(&self) -> bool {
+        self.decision.is_drift()
+    }
+}
+
+/// Resolve the coherent [`Quint`] for a sheet given the coherence decision.
+/// Pure: `read` and `adjust_with`'s internal read step both call this.
+///
+/// - [`SyncDecision::InSync`] or [`SyncDecision::RefreshFloor`]: resolve via
+///   [`resolve`] (milli preferred, hydrate from legacy when milli absent). The
+///   `RefreshFloor` decision says the *sheet's floor field* needs repair, not
+///   the value we return — the value we return is already the milli one.
+/// - [`SyncDecision::HydrateMilli`]: hydrate `Quint::from_points(quintessence)`
+///   from the legacy integer. This is the forward-compat branch the
+///   `tass-quint-sync-direction` sibling ticket's coherence impl will trigger;
+///   the default coherence impl never produces this decision today.
+/// - `None` when no field is present.
+pub fn coherent_quint(fields: &SheetFields<'_>, decision: SyncDecision) -> Option<Quint> {
+    match decision {
+        SyncDecision::HydrateMilli => fields.quintessence.map(Quint::from_points),
+        _ => resolve(fields.milli_quintessence, fields.quintessence),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,5 +443,103 @@ mod tests {
         assert_eq!(Quint::from_millis(1_000).add_millis(-250).millis(), 750);
         assert_eq!(Quint::from_millis(i64::MAX).add_millis(1).millis(), i64::MAX);
         assert_eq!(Quint::from_millis(0).add_millis(-1).millis(), -1);
+    }
+
+    // — coherence seam — milli-is-truth default ———————————————
+
+    fn fields<'a>(
+        milli: Option<i64>,
+        quint: Option<i64>,
+        milli_ts: Option<&'a str>,
+        rec_ts: Option<&'a str>,
+    ) -> SheetFields<'a> {
+        SheetFields {
+            milli_quintessence: milli,
+            quintessence: quint,
+            milli_quintessence_updated_at: milli_ts,
+            updated_at: rec_ts,
+        }
+    }
+
+    #[test]
+    fn coherence_in_sync_when_floor_agrees_and_timestamps_consistent() {
+        let f = fields(Some(1_500), Some(1), Some("2026-06-29T10:00:00Z"), Some("2026-06-29T10:00:00Z"));
+        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::InSync);
+        // broad stamp older than the milli stamp is fine (we wrote after)
+        let f = fields(Some(1_500), Some(1), Some("2026-06-29T11:00:00Z"), Some("2026-06-29T10:00:00Z"));
+        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::InSync);
+    }
+
+    #[test]
+    fn coherence_refresh_floor_when_floor_drifted() {
+        // quintessence says 9 but floor(1500/1000) = 1
+        let f = fields(Some(1_500), Some(9), None, None);
+        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::RefreshFloor);
+    }
+
+    #[test]
+    fn coherence_refresh_floor_when_legacy_field_absent_but_milli_present() {
+        // legacy field missing — needs a replicated floor
+        let f = fields(Some(1_500), None, None, None);
+        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::RefreshFloor);
+    }
+
+    #[test]
+    fn coherence_refresh_floor_on_timestamp_drift_with_agreeing_floor() {
+        // floor agrees (milli=1500, quint=1) but broad updatedAt is newer
+        let f = fields(Some(1_500), Some(1), Some("2026-06-29T10:00:00Z"), Some("2026-06-30T10:00:00Z"));
+        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::RefreshFloor);
+    }
+
+    #[test]
+    fn coherence_in_sync_when_no_milli_field() {
+        // legacy-only sheet: resolve() handles it, coherence is a no-op
+        let f = fields(None, Some(7), None, Some("2026-06-29T10:00:00Z"));
+        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::InSync);
+    }
+
+    #[test]
+    fn coherence_in_sync_when_both_absent() {
+        let f = fields(None, None, None, None);
+        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::InSync);
+    }
+
+    #[test]
+    fn coherent_quint_returns_milli_value_on_refresh_floor() {
+        let f = fields(Some(1_500), Some(9), None, None);
+        let d = MilliIsTruthCoherence.classify(&f);
+        assert_eq!(coherent_quint(&f, d), Some(Quint::from_millis(1_500)));
+    }
+
+    #[test]
+    fn coherent_quint_hydrates_from_legacy_on_hydrate_milli() {
+        // forward-compat: a future QuintessenceIsTruth coherence impl would
+        // return HydrateMilli; coherent_quint honors it by hydrating from the
+        // legacy integer. The default MilliIsTruthCoherence never produces this
+        // decision today; this test pins the forward-compat behavior.
+        let f = fields(Some(1_500), Some(9), None, None);
+        assert_eq!(coherent_quint(&f, SyncDecision::HydrateMilli), Some(Quint::from_points(9)));
+    }
+
+    #[test]
+    fn coherent_quint_resolves_legacy_only_sheet() {
+        let f = fields(None, Some(7), None, None);
+        assert_eq!(coherent_quint(&f, SyncDecision::InSync), Some(Quint::from_points(7)));
+    }
+
+    #[test]
+    fn coherent_quint_none_when_no_fields() {
+        let f = fields(None, None, None, None);
+        assert_eq!(coherent_quint(&f, SyncDecision::InSync), None);
+    }
+
+    #[test]
+    fn read_report_helpers_classify_drift() {
+        let r = ReadReport { quint: Quint::from_millis(1_500), decision: SyncDecision::RefreshFloor };
+        assert!(r.drifted());
+        assert!(!r.in_sync());
+        let r = ReadReport { quint: Quint::from_millis(1_500), decision: SyncDecision::InSync };
+        assert!(!r.drifted());
+        assert!(r.in_sync());
     }
 }

@@ -38,7 +38,8 @@ The timestamp check is the real signal of "did a tass-quint write touch this she
 
 The crucial design choice: **there is no `sync` command, no `sync()` API, no out-of-band reconciliation pass.** The coherence check is folded into the existing `QuintClient` read / write / adjust paths. Callers keep calling the same methods they call today:
 
-- `QuintClient::read(repo, rkey)` still returns `Option<Quint>`. It just returns the *coherent* one — the value the active sync direction says is authoritative, repaired from drift before it leaves the library. A read MUST NOT issue a write to repair the sheet.
+- `QuintClient::read(repo, rkey)` still returns `Option<Quint>`. It just returns the *coherent* one — the value the active sync direction says is authoritative, repaired from drift before it leaves the library. A read MUST NOT issue a write to repair the sheet. (Drift is silent on this path; the value is just repaired.)
+- `QuintClient::read_report(repo, rkey)` is the read variant for callers that want the decision surfaced alongside the `Quint`: returns `Option<ReadReport { quint, decision }>`. Same single fetch + classify as `read`; the decision is returned instead of discarded. Use this to log/audit sheet coherence. It is *not* a sync verb.
 - `QuintClient::write_with(repo, rkey, q, opts)` still writes a `Quint` and returns the applied one. The patch it persists is built so that, regardless of incoming drift, the record it leaves behind is coherent by construction (milli-is-truth: replicate the floor; quintessence-is-truth: hydrate the milli from the requested points).
 - `QuintClient::adjust_with(...)` is `read` + `write_with` — both halves above apply for free.
 
