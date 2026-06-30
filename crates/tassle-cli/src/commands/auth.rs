@@ -21,6 +21,8 @@ pub enum AuthKind {
     /// jac-store-fjall store, and write the non-secret profile fragment.
     /// (Without the `auth-store` feature, falls back to a profile-only stub.)
     Login(LoginArgs),
+    /// Show every profile and its session state; mark the active profile.
+    Status(StatusArgs),
     /// Read or write a key in the active profile config fragment
     ///
     /// Deprecated: prefer `tassle config set`. Retained for now as the legacy
@@ -48,7 +50,7 @@ pub struct SetArgs {
     /// Dotted key to read, or key=value to write
     pub assignment: String,
 
-    /// Remove the dotted key from the active profile
+    /// Remove the dotted key from the active profile config
     #[arg(short = 'u', long)]
     pub unset: bool,
 
@@ -57,9 +59,17 @@ pub struct SetArgs {
     pub json: bool,
 }
 
+#[derive(Args, Debug)]
+pub struct StatusArgs {
+    /// Emit machine-readable JSON
+    #[arg(short, long)]
+    pub json: bool,
+}
+
 pub async fn run(args: AuthArgs) -> miette::Result<ExitCode> {
     match args.kind {
         AuthKind::Login(args) => login(args).await,
+        AuthKind::Status(args) => status(args).await,
         AuthKind::Set(args) => set(args),
     }
 }
@@ -152,6 +162,124 @@ async fn login(args: LoginArgs) -> miette::Result<ExitCode> {
     {
         return login_profile_only(args).await;
     }
+}
+
+async fn status(args: StatusArgs) -> miette::Result<ExitCode> {
+    use miette::IntoDiagnostic;
+    let profiles = crate::config::available_profiles()?;
+    let active_figment = crate::config::active_figment(None)?;
+    let active_name = crate::config::active_name(&active_figment);
+
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    for name in &profiles {
+        let figment = crate::config::build_figment(Some(name))?;
+        let p = crate::config::active_profile(&figment)?;
+        let store_path = p.store_path.clone().unwrap_or_else(|| {
+            crate::config::tassle_config_dir()
+                .unwrap_or_default()
+                .join("store")
+                .join(format!("{name}.fjall"))
+        });
+        let session = session_status(&store_path, p.did.as_deref(), p.session_id.as_deref()).await;
+        rows.push(serde_json::json!({
+            "profile": name,
+            "active": name == &active_name,
+            "did": p.did,
+            "handle": p.handle,
+            "pds": p.pds,
+            "store_path": store_path,
+            "session": session,
+        }));
+    }
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&rows).into_diagnostic()?);
+    } else if rows.is_empty() {
+        println!("(no profiles in {})", crate::config::dropins_dir()?.display());
+    } else {
+        for r in &rows {
+            let mark = if r["active"].as_bool() == Some(true) { "*" } else { " " };
+            let prof = r["profile"].as_str().unwrap_or("?");
+            let did = r["did"].as_str().unwrap_or("(no did)");
+            let handle = r["handle"].as_str().unwrap_or("-");
+            println!(
+                "{mark} {prof:<14} {did:<32} {handle:<22} {:<24} {}",
+                format_session(&r["session"]),
+                r["store_path"].as_str().unwrap_or("?"),
+            );
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn format_session(s: &serde_json::Value) -> String {
+    match s.get("state").and_then(|v| v.as_str()) {
+        Some("ok") => match s.get("exp").and_then(|v| v.as_str()) {
+            Some(exp) => format!("session exp {exp}"),
+            None => "session present".to_string(),
+        },
+        Some("expired") => "session EXPIRED".to_string(),
+        Some("absent") => "no session".to_string(),
+        _ => "session: n/a".to_string(),
+    }
+}
+
+/// Look up the profile's stored AtpSession and decode its access-JWT exp.
+/// Requires `auth-store`; never creates an empty store (skips if path absent).
+#[cfg(feature = "auth-store")]
+async fn session_status(
+    store_path: &std::path::Path,
+    did: Option<&str>,
+    session_id: Option<&str>,
+) -> serde_json::Value {
+    use jac_store_fjall::FjallAuth;
+    use jacquard::common::session::{SessionKey, SessionStore};
+    use jacquard::common::types::did::Did;
+
+    let absent = || serde_json::json!({ "state": "absent" });
+    let Some(did_str) = did else { return absent(); };
+    if !store_path.exists() {
+        return absent();
+    }
+    let Ok(did) = Did::new_owned(did_str) else { return absent(); };
+    let Ok(auth) = FjallAuth::open(store_path) else { return absent(); };
+    let key = SessionKey::new(did, session_id.unwrap_or("session"));
+    let store = auth.app_password();
+    let Some(session) = store.get(&key).await else { return absent(); };
+
+    match jwt_exp(session.access_jwt.as_str()) {
+        Some(exp) => {
+            let now = chrono::Utc::now().timestamp();
+            let state = if exp < now { "expired" } else { "ok" };
+            let iso = chrono::DateTime::from_timestamp(exp, 0)
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_else(|| exp.to_string());
+            serde_json::json!({ "state": state, "exp": iso, "exp_unix": exp })
+        }
+        None => serde_json::json!({ "state": "ok" }),
+    }
+}
+
+#[cfg(not(feature = "auth-store"))]
+async fn session_status(
+    _: &std::path::Path,
+    _: Option<&str>,
+    _: Option<&str>,
+) -> serde_json::Value {
+    serde_json::json!({ "state": "n/a", "note": "build with --features auth-store for session state" })
+}
+
+#[cfg(feature = "auth-store")]
+fn jwt_exp(token: &str) -> Option<i64> {
+    use base64::Engine as _;
+    let mut parts = token.split('.');
+    let _header = parts.next()?;
+    let payload = parts.next()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("exp").and_then(|e| e.as_i64())
 }
 
 /// Real app-password login: createSession over jacquard + persist into the
