@@ -14,9 +14,9 @@
 //! # #[cfg(feature = "auth-store")] {
 //! use tassle_config::AuthedClient;
 //! # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
-//! let client = AuthedClient::for_active_profile().await?;
-//! let cloned = client.clone();              // AuthedClient is Clone
-//! let _session = cloned.session().await;    // fresh owned CredentialSession
+//! let authed = AuthedClient::for_active_profile().await?;
+//! // authed.session() lends &CredentialSession — pass it to a QuintClient::new(&…):
+//! let _session = authed.session();
 //! # Ok(()) } }
 //! ```
 //!
@@ -40,7 +40,7 @@ pub fn active() -> miette::Result<Profile> {
 }
 
 #[cfg(feature = "auth-store")]
-pub use auth::{AppPasswordSession, AuthError, AuthedClient, SessionSource};
+pub use auth::{AppPasswordSession, AuthError, AuthedClient};
 
 #[cfg(test)]
 mod tests {
@@ -91,14 +91,15 @@ mod tests {
         }
     }
 
-    // Compile-proofs that the auth types are `Clone` (the whole point of
-    // SessionSource). No runtime construction needed — the bound proves the
-    // derive. Gated by `auth-store` since the types only exist under it.
+    // Compile-checks that the auth types exist and are constructible from the
+    // crate root. Gated by `auth-store` since they only exist under it.
     #[cfg(feature = "auth-store")]
     #[test]
-    fn authed_client_and_session_source_are_clone() {
-        fn needs_clone<T: Clone>() {}
-        needs_clone::<crate::AuthedClient>();
-        needs_clone::<crate::SessionSource>();
+    fn auth_types_are_exported() {
+        // Forces the re-exports to resolve; "used" via a dead-code take.
+        fn _check() {
+            let _ = std::any::TypeId::of::<crate::AuthedClient>();
+            let _ = std::any::TypeId::of::<crate::AppPasswordSession>();
+        }
     }
 }

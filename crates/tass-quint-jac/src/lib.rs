@@ -12,7 +12,8 @@
 //! # use jacquard::client::BasicClient;
 //! use tass_quint_jac::QuintClient;
 //! # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
-//! let qc = QuintClient::new(BasicClient::unauthenticated());
+//! let client = BasicClient::unauthenticated();
+//! let qc = QuintClient::new(&client);
 //! // point base_uri at the actor's PDS first, then:
 //! let _current = qc.read("did:plc:…", "mage").await?;
 //! # Ok(()) }
@@ -137,24 +138,26 @@ impl WriteOpts {
 
 /// Read/write access to mage pattern-quintessence on `actor.rpg.stats`.
 ///
-/// Generic over any `C: XrpcClient`. Pass an unauthenticated client (e.g.
-/// `BasicClient::unauthenticated()`) for public reads; pass an authenticated
-/// session/agent for writes. Whether a write succeeds is enforced by the PDS
-/// based on the client's auth, not by this type.
-pub struct QuintClient<C> {
-    client: C,
+/// **Borrows** the jacquard client (`&'c C`), so the caller keeps owning it.
+/// Pass `&basic_client` for unauthenticated public reads, or `&authed_session`
+/// for writes — whether a write succeeds is enforced by the PDS based on the
+/// client's auth, not by this type. Because the session is borrowed, a single
+/// live session can be shared by many concurrent `QuintClient` uses (the safe
+/// model — see the crate docs and the `tass-config-session-source` ticket).
+pub struct QuintClient<'c, C: XrpcClient + Sync + ?Sized> {
+    client: &'c C,
 }
 
-impl<C: XrpcClient + Sync> QuintClient<C> {
-    /// Wrap a jacquard client. The caller is responsible for pointing the
+impl<'c, C: XrpcClient + Sync + ?Sized> QuintClient<'c, C> {
+    /// Borrow a jacquard client. The caller is responsible for pointing the
     /// client's `base_uri` at the actor's PDS before calling read/write.
-    pub fn new(client: C) -> Self {
+    pub fn new(client: &'c C) -> Self {
         Self { client }
     }
 
-    /// Borrow the underlying client.
-    pub fn client(&self) -> &C {
-        &self.client
+    /// The borrowed client reference.
+    pub fn client(&self) -> &'c C {
+        self.client
     }
 
     /// Read the mage pattern-quintessence for `repo`/`rkey`.
