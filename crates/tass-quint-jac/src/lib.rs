@@ -83,6 +83,58 @@ impl From<serde_json::Error> for QuintError {
     }
 }
 
+/// How [`QuintClient::write_with`] stamps `milliQuintessenceUpdatedAt`.
+///
+/// The common case is [`Stamp::Now`]: the write layer generates the timestamp
+/// itself. Callers backdating or reproducing a value supply [`Stamp::At`], and
+/// callers who don't want the field touched use [`Stamp::None`].
+#[derive(Debug, Clone)]
+enum Stamp {
+    /// Generate the stamp from the wall clock (the default).
+    Now,
+    /// Use a caller-supplied ISO-8601 timestamp.
+    At(String),
+    /// Don't write `milliQuintessenceUpdatedAt`.
+    None,
+}
+
+/// Options for [`QuintClient::write_with`].
+///
+/// Defaults to **stamping "now"** — the write generates the
+/// `milliQuintessenceUpdatedAt` timestamp unless the caller opts out or
+/// supplies their own:
+///
+/// ```
+/// use tass_quint_jac::WriteOpts;
+/// let _default_now = WriteOpts::default();                       // stamp now
+/// let _at = WriteOpts::default().at("2026-06-30T00:00:00Z");     // caller time
+/// let _off = WriteOpts::default().unstamped();                   // no stamp
+/// ```
+#[derive(Debug, Clone)]
+pub struct WriteOpts {
+    stamp: Stamp,
+}
+
+impl Default for WriteOpts {
+    fn default() -> Self {
+        Self { stamp: Stamp::Now }
+    }
+}
+
+impl WriteOpts {
+    /// Stamp with a caller-supplied ISO-8601 time instead of generating "now".
+    pub fn at(mut self, ts: impl Into<String>) -> Self {
+        self.stamp = Stamp::At(ts.into());
+        self
+    }
+
+    /// Don't write `milliQuintessenceUpdatedAt` at all.
+    pub fn unstamped(mut self) -> Self {
+        self.stamp = Stamp::None;
+        self
+    }
+}
+
 /// Read/write access to mage pattern-quintessence on `actor.rpg.stats`.
 ///
 /// Generic over any `C: XrpcClient`. Pass an unauthenticated client (e.g.
@@ -118,26 +170,43 @@ impl<C: XrpcClient + Sync> QuintClient<C> {
         Ok(extract_quint(&value))
     }
 
-    /// Read-modify-write the mage block: sets `milliQuintessence` to `q.millis()`,
-    /// replicates the floor into `quintessence`, stamps `milliQuintessenceUpdatedAt`
-    /// with "now", and bumps the record-level `updatedAt` (see
-    /// [`tass_quint::sheet_patch`] + [`SheetPatch::with_updated_at`]). All other
-    /// mage fields and the record envelope are preserved. Requires an
-    /// authenticated client or the PDS will reject the putRecord.
+    /// Read-modify-write the mage block, **stamping `milliQuintessenceUpdatedAt`
+    /// with "now"** (the common case). Equivalent to
+    /// [`write_with`](Self::write_with) with [`WriteOpts::default`].
     ///
+    /// Requires an authenticated client or the PDS will reject the putRecord.
     /// Returns the applied [`Quint`] on success.
     pub async fn write(&self, repo: &str, rkey: &str, q: Quint) -> Result<Quint> {
+        self.write_with(repo, rkey, q, WriteOpts::default()).await
+    }
+
+    /// Read-modify-write with full control over the timestamp stamp.
+    ///
+    /// Sets `milliQuintessence` to `q.millis()`, replicates the floor into
+    /// `quintessence`, and stamps `milliQuintessenceUpdatedAt` per `opts`
+    /// (now by default, a caller-supplied time via [`WriteOpts::at`], or none
+    /// via [`WriteOpts::unstamped`]). The record-level `updatedAt` always bumps
+    /// to "now" — it marks when the write happened, independent of the milli
+    /// provenance stamp. All other mage fields and the record envelope are
+    /// preserved.
+    pub async fn write_with(
+        &self,
+        repo: &str,
+        rkey: &str,
+        q: Quint,
+        opts: WriteOpts,
+    ) -> Result<Quint> {
         let Some(record) = self.get_record(repo, rkey).await? else {
             return Err(QuintError::NoMageBlock);
         };
         let mut value = serde_json::to_value(&record.value)?;
         let now = Utc::now().to_rfc3339();
-        let patch = sheet_patch(q).with_updated_at(now.clone());
+        let patch = build_patch(q, &opts, &now);
         {
             let mage = mage_block_mut(&mut value).ok_or(QuintError::NoMageBlock)?;
             apply_quint(mage, &patch);
         }
-        // Bump the record-level updatedAt (LWW marker) too.
+        // Record-level updatedAt always bumps to "now" (the write happened now).
         if let Some(root) = value.as_object_mut() {
             root.insert("updatedAt".to_string(), Value::from(now.as_str()));
         }
@@ -236,6 +305,17 @@ pub(crate) fn apply_quint(mage: &mut Map<String, Value>, patch: &SheetPatch) {
             "milliQuintessenceUpdatedAt".to_string(),
             Value::from(ts.as_str()),
         );
+    }
+}
+
+/// Build the [`SheetPatch`] for `q` under stamp `opts`, where `now` is the
+/// write layer's current wall-clock time (used for [`Stamp::Now`]). Pure, so
+/// the three stamp modes are unit-testable without a client.
+pub(crate) fn build_patch(q: Quint, opts: &WriteOpts, now: &str) -> SheetPatch {
+    match &opts.stamp {
+        Stamp::Now => sheet_patch(q).with_updated_at(now),
+        Stamp::At(ts) => sheet_patch(q).with_updated_at(ts.as_str()),
+        Stamp::None => sheet_patch(q),
     }
 }
 
@@ -352,5 +432,34 @@ mod tests {
         apply_quint(mage, &sheet_patch(Quint::from_points(1)));
         let mage = mage_block(&v).unwrap();
         assert!(mage.get("milliQuintessenceUpdatedAt").is_none());
+    }
+
+    #[test]
+    fn build_patch_default_stamps_now() {
+        let patch = build_patch(Quint::from_points(2), &WriteOpts::default(), "2026-06-30T00:00:00Z");
+        assert_eq!(patch.milli_quintessence, 2_000);
+        assert_eq!(patch.quintessence, 2);
+        assert_eq!(
+            patch.milli_quintessence_updated_at.as_deref(),
+            Some("2026-06-30T00:00:00Z")
+        );
+    }
+
+    #[test]
+    fn build_patch_at_uses_caller_time() {
+        let opts = WriteOpts::default().at("1999-01-01T00:00:00Z");
+        let patch = build_patch(Quint::from_points(1), &opts, "2026-06-30T00:00:00Z");
+        // caller time wins over "now"
+        assert_eq!(
+            patch.milli_quintessence_updated_at.as_deref(),
+            Some("1999-01-01T00:00:00Z")
+        );
+    }
+
+    #[test]
+    fn build_patch_unstamped_omits_timestamp() {
+        let opts = WriteOpts::default().unstamped();
+        let patch = build_patch(Quint::from_points(1), &opts, "2026-06-30T00:00:00Z");
+        assert!(patch.milli_quintessence_updated_at.is_none());
     }
 }
