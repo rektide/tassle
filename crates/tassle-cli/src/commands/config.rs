@@ -36,17 +36,41 @@ pub enum ConfigKind {
     },
 }
 
-pub fn run(args: ConfigArgs) -> miette::Result<ExitCode> {
+pub fn run(args: ConfigArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     match args.kind {
-        ConfigKind::Files => files(),
-        ConfigKind::List => list(),
-        ConfigKind::Get { key } => get(key),
-        ConfigKind::Set { assignment, unset } => set(&assignment, unset),
+        ConfigKind::Files => files(format),
+        ConfigKind::List => list(format),
+        ConfigKind::Get { key } => get(key, format),
+        ConfigKind::Set { assignment, unset } => set(&assignment, unset, format),
     }
 }
 
-fn files() -> miette::Result<ExitCode> {
+fn files(format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let figment = config::active_figment(None)?;
+    if format.is_json() {
+        let records: Vec<_> = figment
+            .operation_records()
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "id": r.id,
+                    "status": status_str(r.status),
+                    "operator": r.operator_name,
+                    "summary": summarize(&r.intent),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "active_profile": config::active_name(&figment),
+                "config_file": config::config_file()?.display().to_string(),
+                "dropins_dir": config::dropins_dir()?.display().to_string(),
+                "records": records,
+            })
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
     println!("active profile: {}", config::active_name(&figment));
     println!("config file:    {}", config::config_file()?.display());
     println!("drop-ins dir:   {}", config::dropins_dir()?.display());
@@ -62,13 +86,21 @@ fn files() -> miette::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn list() -> miette::Result<ExitCode> {
+fn list(format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let active_name = config::active_figment(None)
         .ok()
         .as_ref()
         .map(config::active_name)
         .unwrap_or_default();
     let profiles = config::available_profiles()?;
+    if format.is_json() {
+        let rows: Vec<_> = profiles
+            .iter()
+            .map(|p| serde_json::json!({ "profile": p, "active": p == &active_name }))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&rows).into_diagnostic()?);
+        return Ok(ExitCode::SUCCESS);
+    }
     if profiles.is_empty() {
         println!("(no profile fragments in {})", config::dropins_dir()?.display());
         return Ok(ExitCode::SUCCESS);
@@ -80,27 +112,34 @@ fn list() -> miette::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn get(key: Option<String>) -> miette::Result<ExitCode> {
+fn get(key: Option<String>, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let figment = config::active_figment(None)?;
     match key {
         None => {
             let p = config::active_profile(&figment)?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&p).into_diagnostic()?
-            );
+            // A LoginProfile is already a JSON-shaped value; emit it the same in
+            // both modes (pretty JSON), since it has no tabular form.
+            println!("{}", serde_json::to_string_pretty(&p).into_diagnostic()?);
         }
         Some(k) => {
             let v: serde_json::Value = figment
                 .extract_inner(&k)
                 .map_err(|e| miette::miette!("'{k}' not found: {e}"))?;
-            println!("{v}");
+            if format.is_json() {
+                println!("{v}");
+            } else {
+                // Plain scalar: strip JSON quoting for strings.
+                match v {
+                    serde_json::Value::String(s) => println!("{s}"),
+                    other => println!("{other}"),
+                }
+            }
         }
     }
     Ok(ExitCode::SUCCESS)
 }
 
-fn set(assignment: &str, unset: bool) -> miette::Result<ExitCode> {
+fn set(assignment: &str, unset: bool, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let (key, value) = split_assignment(assignment);
     if key.is_empty() {
         miette::bail!("config key is required");
@@ -122,20 +161,31 @@ fn set(assignment: &str, unset: bool) -> miette::Result<ExitCode> {
 
     if unset {
         let removed = profile_config::unset_value_at(&target, key)?;
-        println!(
-            "{} {}",
-            if removed { "unset" } else { "(already unset)" },
-            key
-        );
-        println!("  file: {}", target.display());
+        if format.is_json() {
+            println!(
+                "{}",
+                serde_json::json!({ "key": key, "removed": removed, "file": target.display().to_string() })
+            );
+        } else {
+            println!("{}", if removed { "unset" } else { "(already unset)" });
+            println!("  {key}");
+            println!("  file: {}", target.display());
+        }
         return Ok(ExitCode::SUCCESS);
     }
 
     match value {
         Some(value) => {
             let rendered = profile_config::write_value_at(&target, key, value)?;
-            println!("{key} = {rendered}");
-            println!("  file: {}", target.display());
+            if format.is_json() {
+                println!(
+                    "{}",
+                    serde_json::json!({ "key": key, "value": rendered, "file": target.display().to_string() })
+                );
+            } else {
+                println!("{key} = {rendered}");
+                println!("  file: {}", target.display());
+            }
         }
         None => {
             // Bare `config set key` reads — same view as `config get key`.
@@ -143,7 +193,14 @@ fn set(assignment: &str, unset: bool) -> miette::Result<ExitCode> {
             let v: serde_json::Value = figment
                 .extract_inner(key)
                 .map_err(|e| miette::miette!("'{key}' not found: {e}"))?;
-            println!("{v}");
+            if format.is_json() {
+                println!("{v}");
+            } else {
+                match v {
+                    serde_json::Value::String(s) => println!("{s}"),
+                    other => println!("{other}"),
+                }
+            }
         }
     }
     Ok(ExitCode::SUCCESS)

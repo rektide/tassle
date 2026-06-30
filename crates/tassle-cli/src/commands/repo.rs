@@ -42,10 +42,6 @@ pub struct ListArgs {
     /// Return records in reverse order
     #[arg(long)]
     pub reverse: bool,
-
-    /// Emit machine-readable JSON, including raw values
-    #[arg(short, long)]
-    pub json: bool,
 }
 
 #[derive(Serialize)]
@@ -91,13 +87,13 @@ async fn resolve_repo(client: &BasicClient, repo: &str) -> miette::Result<(AtIde
     }
 }
 
-pub async fn run(args: RepoArgs) -> miette::Result<ExitCode> {
+pub async fn run(args: RepoArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     match args.kind {
-        RepoKind::List(args) => list(args).await,
+        RepoKind::List(args) => list(args, format).await,
     }
 }
 
-async fn list(args: ListArgs) -> miette::Result<ExitCode> {
+async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     if args.limit < 1 || args.limit > 100 {
         miette::bail!("--limit must be between 1 and 100");
     }
@@ -152,7 +148,7 @@ async fn list(args: ListArgs) -> miette::Result<ExitCode> {
         records,
     };
 
-    if args.json {
+    if format.is_json() {
         println!(
             "{}",
             serde_json::to_string_pretty(&listed).into_diagnostic()?

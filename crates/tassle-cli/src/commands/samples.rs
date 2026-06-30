@@ -122,7 +122,7 @@ fn build_samples() -> miette::Result<Vec<SampleDef>> {
     ])
 }
 
-pub fn run(args: SamplesArgs) -> miette::Result<ExitCode> {
+pub fn run(args: SamplesArgs, _format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let samples = build_samples()?;
 
     if args.dry_run {

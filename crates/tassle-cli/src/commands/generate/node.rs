@@ -1,6 +1,5 @@
 // `tassle gen node` — construct and validate a Node record.
 
-use crate::commands::OutputFormat;
 use clap::Args;
 use jacquard_common::DefaultStr;
 use jacquard_common::types::datetime::Datetime;
@@ -40,13 +39,9 @@ pub struct NodeArgs {
     /// Skip schema validation before output
     #[arg(long)]
     pub no_validate: bool,
-
-    /// Output format
-    #[arg(long, default_value = "json")]
-    pub output: OutputFormat,
 }
 
-pub fn run(args: NodeArgs) -> miette::Result<ExitCode> {
+pub fn run(args: NodeArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let mut builder = Node::<DefaultStr>::builder()
         .name(args.name.clone())
         .rating(args.rating)
@@ -78,5 +73,5 @@ pub fn run(args: NodeArgs) -> miette::Result<ExitCode> {
         }
     }
 
-    crate::commands::emit(&node, args.output)
+    crate::commands::emit(&node, format)
 }

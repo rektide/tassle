@@ -30,10 +30,6 @@ pub struct StatsArgs {
     /// Actor DID or handle to read (default: active tassle profile)
     #[arg(short, long)]
     pub actor: Option<String>,
-
-    /// Emit raw JSON plus summary
-    #[arg(short, long)]
-    pub json: bool,
 }
 
 #[derive(Serialize)]
@@ -53,9 +49,9 @@ struct SystemSummary {
     fields: Vec<String>,
 }
 
-pub async fn run(args: SelfArgs) -> miette::Result<ExitCode> {
+pub async fn run(args: SelfArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     match args.kind {
-        SelfKind::Stats(args) | SelfKind::List(args) => stats(args).await,
+        SelfKind::Stats(args) | SelfKind::List(args) => stats(args, format).await,
     }
 }
 
@@ -117,7 +113,7 @@ fn summarize_systems(raw: &Value) -> Vec<SystemSummary> {
     systems
 }
 
-async fn stats(args: StatsArgs) -> miette::Result<ExitCode> {
+async fn stats(args: StatsArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
     let (repo, pds) = resolve_actor(&client, args.actor).await?;
     let pds_uri = jacquard_common::deps::fluent_uri::Uri::parse(pds.clone())
@@ -146,7 +142,7 @@ async fn stats(args: StatsArgs) -> miette::Result<ExitCode> {
         raw,
     };
 
-    if args.json {
+    if format.is_json() {
         println!(
             "{}",
             serde_json::to_string_pretty(&output).into_diagnostic()?

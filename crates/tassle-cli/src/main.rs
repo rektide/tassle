@@ -5,6 +5,7 @@ mod config;
 mod profile_config;
 
 use clap::{Parser, Subcommand};
+use commands::OutputFormat;
 use std::process::ExitCode;
 
 #[derive(Parser, Debug)]
@@ -14,6 +15,10 @@ use std::process::ExitCode;
     about = "Tassle — Mage: The Ascension quintessence/tass energy ledger"
 )]
 struct Cli {
+    /// Output format (global; accepted on every subcommand).
+    #[arg(global = true, long, value_enum, default_value_t = OutputFormat::Table)]
+    format: OutputFormat,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -40,15 +45,16 @@ enum Command {
 #[tokio::main]
 async fn main() -> miette::Result<ExitCode> {
     let cli = Cli::parse();
+    let format = cli.format;
     match cli.command {
-        Command::Auth(args) => commands::auth::run(args).await,
-        Command::Config(args) => commands::config::run(args),
+        Command::Auth(args) => commands::auth::run(args, format).await,
+        Command::Config(args) => commands::config::run(args, format),
         Command::Generate(args) => match args.kind {
-            commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a),
+            commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a, format),
         },
-        Command::Mage(args) => commands::mage::run(args).await,
-        Command::Repo(args) => commands::repo::run(args).await,
-        Command::SelfRecord(args) => commands::self_record::run(args).await,
-        Command::Samples(args) => commands::samples::run(args),
+        Command::Mage(args) => commands::mage::run(args, format).await,
+        Command::Repo(args) => commands::repo::run(args, format).await,
+        Command::SelfRecord(args) => commands::self_record::run(args, format).await,
+        Command::Samples(args) => commands::samples::run(args, format),
     }
 }

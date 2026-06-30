@@ -41,10 +41,6 @@ pub struct LoginArgs {
     /// interactive prompt. (Requires the `auth-store` feature.)
     #[arg(long)]
     pub password: Option<String>,
-
-    /// Emit machine-readable JSON
-    #[arg(short, long)]
-    pub json: bool,
 }
 
 #[derive(Args, Debug)]
@@ -55,34 +51,23 @@ pub struct SetArgs {
     /// Remove the dotted key from the active profile config
     #[arg(short = 'u', long)]
     pub unset: bool,
-
-    /// Emit machine-readable JSON
-    #[arg(short, long)]
-    pub json: bool,
 }
 
 #[derive(Args, Debug)]
-pub struct StatusArgs {
-    /// Emit machine-readable JSON
-    #[arg(short, long)]
-    pub json: bool,
-}
+pub struct StatusArgs {}
 
 #[derive(Args, Debug)]
 pub struct SwitchArgs {
     /// Profile name to make active (must have a config.toml.d/<name>.toml fragment).
     pub profile: String,
-    /// Emit machine-readable JSON
-    #[arg(short, long)]
-    pub json: bool,
 }
 
-pub async fn run(args: AuthArgs) -> miette::Result<ExitCode> {
+pub async fn run(args: AuthArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     match args.kind {
-        AuthKind::Login(args) => login(args).await,
-        AuthKind::Status(args) => status(args).await,
-        AuthKind::Switch(args) => switch(args),
-        AuthKind::Set(args) => set(args),
+        AuthKind::Login(args) => login(args, format).await,
+        AuthKind::Status(args) => status(args, format).await,
+        AuthKind::Switch(args) => switch(args, format),
+        AuthKind::Set(args) => set(args, format),
     }
 }
 
@@ -93,7 +78,8 @@ fn split_assignment(input: &str) -> (&str, Option<&str>) {
     }
 }
 
-fn set(args: SetArgs) -> miette::Result<ExitCode> {
+fn set(args: SetArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+    let json = format.is_json();
     let (key, value) = split_assignment(&args.assignment);
     if key.is_empty() {
         miette::bail!("config key is required");
@@ -104,7 +90,7 @@ fn set(args: SetArgs) -> miette::Result<ExitCode> {
 
     if args.unset {
         let (profile, removed) = profile_config::unset_profile_value(key)?;
-        if args.json {
+        if json {
             println!(
                 "{}",
                 serde_json::json!({
@@ -126,7 +112,7 @@ fn set(args: SetArgs) -> miette::Result<ExitCode> {
     match value {
         Some(value) => {
             let (profile, rendered) = profile_config::write_profile_value(key, value)?;
-            if args.json {
+            if json {
                 println!(
                     "{}",
                     serde_json::json!({
@@ -143,7 +129,7 @@ fn set(args: SetArgs) -> miette::Result<ExitCode> {
         }
         None => {
             let (profile, value) = profile_config::read_profile_value(key)?;
-            if args.json {
+            if json {
                 println!(
                     "{}",
                     serde_json::json!({
@@ -165,19 +151,20 @@ fn set(args: SetArgs) -> miette::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-async fn login(args: LoginArgs) -> miette::Result<ExitCode> {
+async fn login(args: LoginArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     #[cfg(feature = "auth-store")]
     {
-        return login_real(args).await;
+        return login_real(args, format).await;
     }
     #[cfg(not(feature = "auth-store"))]
     {
-        return login_profile_only(args).await;
+        return login_profile_only(args, format).await;
     }
 }
 
-async fn status(args: StatusArgs) -> miette::Result<ExitCode> {
+async fn status(args: StatusArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     use miette::IntoDiagnostic;
+    let json = format.is_json();
     let profiles = crate::config::available_profiles()?;
     let active_figment = crate::config::active_figment(None)?;
     let active_name = crate::config::active_name(&active_figment);
@@ -204,7 +191,7 @@ async fn status(args: StatusArgs) -> miette::Result<ExitCode> {
         }));
     }
 
-    if args.json {
+    if json {
         println!("{}", serde_json::to_string_pretty(&rows).into_diagnostic()?);
     } else if rows.is_empty() {
         println!("(no profiles in {})", crate::config::dropins_dir()?.display());
@@ -224,7 +211,7 @@ async fn status(args: StatusArgs) -> miette::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn switch(args: SwitchArgs) -> miette::Result<ExitCode> {
+fn switch(args: SwitchArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     use miette::IntoDiagnostic;
     let profiles = crate::config::available_profiles()?;
     if !profiles.iter().any(|p| p == &args.profile) {
@@ -238,7 +225,7 @@ fn switch(args: SwitchArgs) -> miette::Result<ExitCode> {
     std::fs::create_dir_all(&dir).into_diagnostic()?;
     let base = crate::config::config_file()?;
     let rendered = profile_config::write_value_at(&base, "profile", &args.profile)?;
-    if args.json {
+    if format.is_json() {
         println!(
             "{}",
             serde_json::json!({ "active": args.profile, "value": rendered })
@@ -323,7 +310,7 @@ fn jwt_exp(token: &str) -> Option<i64> {
 /// Real app-password login: createSession over jacquard + persist into the
 /// profile's jac-store-fjall store. Requires the `auth-store` feature.
 #[cfg(feature = "auth-store")]
-async fn login_real(args: LoginArgs) -> miette::Result<ExitCode> {
+async fn login_real(args: LoginArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     use std::sync::Arc;
     use jac_store_fjall::FjallAuth;
     use jacquard::client::credential_session::{
@@ -396,7 +383,7 @@ async fn login_real(args: LoginArgs) -> miette::Result<ExitCode> {
         profile_config::write_value_at(&frag, "pds", &pds.to_string())?;
     }
 
-    if args.json {
+    if format.is_json() {
         println!(
             "{}",
             serde_json::json!({
@@ -418,7 +405,7 @@ async fn login_real(args: LoginArgs) -> miette::Result<ExitCode> {
 /// Profile-only bootstrap stub (ADR 0001): resolve DID/handle → PDS and save the
 /// profile without authenticating. Used when the `auth-store` feature is off.
 #[cfg(not(feature = "auth-store"))]
-async fn login_profile_only(args: LoginArgs) -> miette::Result<ExitCode> {
+async fn login_profile_only(args: LoginArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
     let ident: AtIdentifier = AtIdentifier::new_owned(&args.actor).into_diagnostic()?;
     let (did, handle, pds) = match ident {
@@ -440,7 +427,7 @@ async fn login_profile_only(args: LoginArgs) -> miette::Result<ExitCode> {
 
     let profile = profile_config::save_profile(&did, handle.as_deref(), &pds)?;
 
-    if args.json {
+    if format.is_json() {
         println!(
             "{}",
             serde_json::to_string_pretty(&profile).into_diagnostic()?

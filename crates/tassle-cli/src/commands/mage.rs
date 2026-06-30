@@ -47,10 +47,6 @@ pub struct ListArgs {
     /// Pagination cursor for --all
     #[arg(long)]
     pub cursor: Option<String>,
-
-    /// Emit JSON with raw source payloads
-    #[arg(short, long)]
-    pub json: bool,
 }
 
 #[derive(Serialize)]
@@ -104,9 +100,9 @@ struct NormalizedMageStats {
     missing: Vec<String>,
 }
 
-pub async fn run(args: MageArgs) -> miette::Result<ExitCode> {
+pub async fn run(args: MageArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     match args.kind {
-        MageKind::List(args) => list(args).await,
+        MageKind::List(args) => list(args, format).await,
     }
 }
 
@@ -347,7 +343,7 @@ fn normalize_mage(raw: &Value) -> miette::Result<NormalizedMageStats> {
     })
 }
 
-async fn list(args: ListArgs) -> miette::Result<ExitCode> {
+async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
     let (repo, pds) = resolve_actor(&client, args.actor.clone()).await?;
     let pds_uri = jacquard_common::deps::fluent_uri::Uri::parse(pds.clone())
@@ -357,7 +353,7 @@ async fn list(args: ListArgs) -> miette::Result<ExitCode> {
 
     if args.all {
         let output = list_stats_records(&client, repo, &args).await?;
-        if args.json {
+        if format.is_json() {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&output).into_diagnostic()?
@@ -420,7 +416,7 @@ async fn list(args: ListArgs) -> miette::Result<ExitCode> {
             raw,
         };
 
-        if args.json {
+        if format.is_json() {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&output).into_diagnostic()?
