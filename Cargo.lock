@@ -3786,6 +3786,8 @@ dependencies = [
  "serde_ipld_dagcbor",
  "serde_json",
  "tass-quint",
+ "tass-quint-jac",
+ "tassle-config",
  "tassle-lexicons",
  "tempfile",
  "tokio",

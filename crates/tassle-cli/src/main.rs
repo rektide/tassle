@@ -39,6 +39,9 @@ enum Command {
     Generate(commands::generate::GenerateArgs),
     /// Mage character sheet commands
     Mage(commands::mage::MageArgs),
+    /// Set/adjust mage pattern-quintessence (milliQuintessence). (auth-store)
+    #[cfg(feature = "auth-store")]
+    Quint(commands::quint::QuintArgs),
     /// Read public repository records through Jacquard XRPC
     Repo(commands::repo::RepoArgs),
     /// Inspect self-rkey aggregate records
@@ -58,6 +61,8 @@ async fn main() -> miette::Result<ExitCode> {
             commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a, format),
         },
         Command::Mage(args) => commands::mage::run(args, format).await,
+        #[cfg(feature = "auth-store")]
+        Command::Quint(args) => commands::quint::run(args, format, profile).await,
         Command::Repo(args) => commands::repo::run(args, format).await,
         Command::SelfRecord(args) => commands::self_record::run(args, format).await,
     }

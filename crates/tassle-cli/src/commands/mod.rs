@@ -4,6 +4,8 @@ pub mod auth;
 pub mod config;
 pub mod generate;
 pub mod mage;
+#[cfg(feature = "auth-store")]
+pub mod quint;
 pub mod repo;
 pub mod self_record;
 

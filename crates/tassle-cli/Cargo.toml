@@ -15,11 +15,20 @@ path = "src/main.rs"
 default = []
 # Auth/session store backend (jac-store-fjall, fjall + CBOR) + interactive
 # password prompt. Off by default so the base record-generator CLI stays lean.
-auth-store = ["dep:jac-store-fjall", "dep:rpassword", "dep:base64"]
+auth-store = [
+    "dep:jac-store-fjall",
+    "dep:rpassword",
+    "dep:base64",
+    "dep:tassle-config",
+    "dep:tass-quint-jac",
+]
 
 [dependencies]
 tassle-lexicons = { path = "../tassle-lexicons" }
 tass-quint = { path = "../tass-quint" }
+# Optional: quint write commands + authed-client. Gated by `auth-store`.
+tass-quint-jac = { path = "../tass-quint-jac", optional = true }
+tassle-config = { path = "../tassle-config", features = ["auth-store"], optional = true }
 jacquard.workspace = true
 jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
