@@ -20,6 +20,7 @@ auth-store = ["dep:jac-store-fjall", "dep:rpassword", "dep:base64"]
 [dependencies]
 tassle-lexicons = { path = "../tassle-lexicons" }
 tass-lex-corpus = { path = "../tass-lex-corpus" }
+tass-quint = { path = "../tass-quint" }
 jacquard.workspace = true
 jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
