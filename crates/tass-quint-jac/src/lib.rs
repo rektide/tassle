@@ -218,6 +218,34 @@ impl<'c, C: XrpcClient + Sync + ?Sized> QuintClient<'c, C> {
         Ok(q)
     }
 
+    /// Read-modify-write: add `delta` to the current value (defaulting to 0 when
+    /// absent) and write it back, stamping "now". Equivalent to
+    /// [`adjust_with`](Self::adjust_with) with [`WriteOpts::default`].
+    ///
+    /// **Non-atomic**: the read and the write are separate XRPC calls, so a
+    /// concurrent writer between them can be clobbered. Fine for a single-user
+    /// CLI; not safe under concurrent writers without optimistic concurrency
+    /// (swap records / `swapCommit`), which this does not do yet.
+    pub async fn adjust(&self, repo: &str, rkey: &str, delta: Quint) -> Result<Quint> {
+        self.adjust_with(repo, rkey, delta, WriteOpts::default()).await
+    }
+
+    /// Read-modify-write with full control over the timestamp stamp.
+    pub async fn adjust_with(
+        &self,
+        repo: &str,
+        rkey: &str,
+        delta: Quint,
+        opts: WriteOpts,
+    ) -> Result<Quint> {
+        let current = self
+            .read(repo, rkey)
+            .await?
+            .unwrap_or_else(|| Quint::from_millis(0));
+        let next = current.add_millis(delta.millis());
+        self.write_with(repo, rkey, next, opts).await
+    }
+
     async fn get_record(&self, repo: &str, rkey: &str) -> Result<Option<GetRecordOutput>> {
         let request = GetRecord::<DefaultStr> {
             repo: AtIdentifier::new_owned(repo).map_err(QuintError::Ident)?,
