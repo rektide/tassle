@@ -23,6 +23,8 @@ pub enum AuthKind {
     Login(LoginArgs),
     /// Show every profile and its session state; mark the active profile.
     Status(StatusArgs),
+    /// Switch the active profile (writes `profile = <name>` to base config.toml).
+    Switch(SwitchArgs),
     /// Read or write a key in the active profile config fragment
     ///
     /// Deprecated: prefer `tassle config set`. Retained for now as the legacy
@@ -66,10 +68,20 @@ pub struct StatusArgs {
     pub json: bool,
 }
 
+#[derive(Args, Debug)]
+pub struct SwitchArgs {
+    /// Profile name to make active (must have a config.toml.d/<name>.toml fragment).
+    pub profile: String,
+    /// Emit machine-readable JSON
+    #[arg(short, long)]
+    pub json: bool,
+}
+
 pub async fn run(args: AuthArgs) -> miette::Result<ExitCode> {
     match args.kind {
         AuthKind::Login(args) => login(args).await,
         AuthKind::Status(args) => status(args).await,
+        AuthKind::Switch(args) => switch(args),
         AuthKind::Set(args) => set(args),
     }
 }
@@ -208,6 +220,32 @@ async fn status(args: StatusArgs) -> miette::Result<ExitCode> {
                 r["store_path"].as_str().unwrap_or("?"),
             );
         }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn switch(args: SwitchArgs) -> miette::Result<ExitCode> {
+    use miette::IntoDiagnostic;
+    let profiles = crate::config::available_profiles()?;
+    if !profiles.iter().any(|p| p == &args.profile) {
+        miette::bail!(
+            "unknown profile '{}'; available: {}",
+            args.profile,
+            if profiles.is_empty() { "(none)".to_string() } else { profiles.join(", ") }
+        );
+    }
+    let dir = crate::config::tassle_config_dir()?;
+    std::fs::create_dir_all(&dir).into_diagnostic()?;
+    let base = crate::config::config_file()?;
+    let rendered = profile_config::write_value_at(&base, "profile", &args.profile)?;
+    if args.json {
+        println!(
+            "{}",
+            serde_json::json!({ "active": args.profile, "value": rendered })
+        );
+    } else {
+        println!("active profile: {}", args.profile);
+        println!("  file: {}", base.display());
     }
     Ok(ExitCode::SUCCESS)
 }
