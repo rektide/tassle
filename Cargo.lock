@@ -3802,6 +3802,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tassle-config"
+version = "0.1.0"
+dependencies = [
+ "figment2",
+ "jac-store-fjall",
+ "jacquard",
+ "jacquard-common",
+ "miette",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
 name = "tassle-ledger"
 version = "0.1.0"
 dependencies = [

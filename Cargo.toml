@@ -6,6 +6,7 @@ members = [
     "crates/tass-quint",
     "crates/tass-quint-jac",
     "crates/tassle-codegen",
+    "crates/tassle-config",
     "crates/tassle-lexicons",
     "crates/tassle-validate",
     "crates/tassle-cli",
