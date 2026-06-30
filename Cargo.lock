@@ -3963,6 +3963,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-fsm"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c5404b670164c08c8759ac4c712951c610a23c0f7a02c5d4ad97a62c9a84659"
+dependencies = [
+ "rust-fsm-dsl",
+]
+
+[[package]]
+name = "rust-fsm-dsl"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "874568b8ce30b51302fb11895b99a7edbfb29418c2a8d4b9b4494973d001d6d1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "rust-stemmers"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4019,7 +4039,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4789,6 +4809,17 @@ version = "0.1.0"
 [[package]]
 name = "tass-lex-schema"
 version = "0.1.0"
+
+[[package]]
+name = "tass-phase"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "rust-fsm",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "tass-quint"

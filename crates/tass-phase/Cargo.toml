@@ -1,0 +1,25 @@
+[package]
+name = "tass-phase"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Phased async work: a pure rust-fsm machine driven across phases by an async Driver, run concurrently by an Executor. Runtime-agnostic, no polling."
+
+[lib]
+name = "tass_phase"
+path = "src/lib.rs"
+
+[dependencies]
+# The pure state machine. dsl (default) gives the `state_machine!` macro.
+rust-fsm = "0.8"
+# FuturesUnordered + StreamExt for the concurrent, completion-streaming Executor.
+futures-util = "0.3"
+
+[dev-dependencies]
+# Examples/tests assume tokio (the library itself stays runtime-agnostic).
+tokio = { version = "1", features = ["macros", "rt", "time", "test-util"] }
+# Demonstrates durable parking: a mid-chain phase serialized + resumed.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
