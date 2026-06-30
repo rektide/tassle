@@ -51,7 +51,7 @@ pub struct LoginProfile {
     /// Which session within the account (jacquard `SessionKey.session_id`).
     pub session_id: Option<String>,
     /// Optional per-profile store path override.
-    pub storage_path: Option<PathBuf>,
+    pub store_path: Option<PathBuf>,
 }
 
 /// Build the tassle figment. If `profile_override` is given (from `--profile`

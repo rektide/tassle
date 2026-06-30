@@ -90,7 +90,7 @@ We repurpose this as the **login switcher**: one figment profile per login.
 # ${XDG_CONFIG_HOME:-~/.config}/tassle/config.toml  (nested profiles)
 [default]                       # applies to every profile unless overridden
 auth_mode = "app_password"      # default auth mode
-storage_path = "${XDG_CONFIG_HOME}/tassle/default.fjall"   # default store location
+store_path = "${XDG_CONFIG_HOME}/tassle/default.fjall"   # default store location
 
 [global]                        # overrides everything (rare; e.g. user_agent)
 
@@ -103,7 +103,7 @@ session_id = "primary"
 did = "did:plc:player..."       #   -> "multiple logins to one account"
 auth_mode = "oauth"
 session_id = "oauth-test"
-storage_path = "${XDG_CONFIG_HOME}/tassle/profiles/player-oauth.fjall"
+store_path = "${XDG_CONFIG_HOME}/tassle/profiles/player-oauth.fjall"
 
 [storyteller]                   # a second account
 did = "did:plc:st..."
@@ -251,7 +251,7 @@ polish. Defer/reject d and f.
 
 - **Per-profile storage** = each profile optionally declares its own store path
   (and, if we ever support it, backend/codec). Implemented by the `config` module
-  (asks a/b/e): a profile with no `storage_path` falls back to
+  (asks a/b/e): a profile with no `store_path` falls back to
   `StorePaths::for_profile(<profile-name>)`. Isolation is just separate fjall DBs
   at different paths.
 - **Storage domains** — rektide: *"atproto is the database, so I don't foresee
@@ -268,7 +268,7 @@ polish. Defer/reject d and f.
 
 - Tokens live **only** in the fjall store (permission-hardened 0700/0600), never
   in figment profile fragments (per ADR 0001 §Consequences). figment profiles
-  carry identity + `session_id` + `auth_mode` + optional `storage_path` — **no
+  carry identity + `session_id` + `auth_mode` + optional `store_path` — **no
   secrets**.
 - The app password itself: **not stored for MVP**. On `RefreshFailed`, re-prompt.
   (atpxrpc stores it plaintext for silent re-auth; we defer that until a keyring

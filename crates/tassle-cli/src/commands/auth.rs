@@ -182,8 +182,8 @@ async fn login_real(args: LoginArgs) -> miette::Result<ExitCode> {
                 .map_err(|e| miette::miette!("failed to read password: {e}"))
         })?;
 
-    // Open the profile's fjall store (explicit storage_path, else a per-profile default).
-    let store_path = active.storage_path.clone().unwrap_or_else(|| {
+    // Open the profile's fjall store (explicit store_path, else a per-profile default).
+    let store_path = active.store_path.clone().unwrap_or_else(|| {
         crate::config::tassle_config_dir()
             .expect("config dir")
             .join("store")
