@@ -161,12 +161,22 @@ fn set(
         miette::bail!("--unset expects a key, not key=value");
     }
 
-    // The `profile` key lives in the base config.toml (the active selector);
-    // every other key belongs to the active profile's drop-in fragment.
-    let target = if key == "profile" {
+    // Write target:
+    //   key == "profile"            -> base config.toml (the active selector)
+    //   active profile is `default` -> base config.toml (figment's Default profile,
+    //                                   the low-priority fallback inherited by every
+    //                                   profile; a write here affects anyone without
+    //                                   their own setting)
+    //   otherwise                   -> the active custom profile's drop-in fragment
+    //                                   (config.toml.d/<active>.toml), an override.
+    // Base config.toml is always loaded (non-nested => Default profile); the
+    // drop-ins load profile-gated only for the selected custom profile.
+    let active = config::active_name(&config::active_figment(profile)?);
+    let target = if key == "profile" || active == "default" {
+        let dir = config::tassle_config_dir()?;
+        std::fs::create_dir_all(&dir).into_diagnostic()?;
         config::config_file()?
     } else {
-        let active = config::active_name(&config::active_figment(profile)?);
         let dir = config::dropins_dir()?;
         std::fs::create_dir_all(&dir).into_diagnostic()?;
         dir.join(format!("{active}.toml"))
