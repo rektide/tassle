@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/tass-lex-corpus",
     "crates/tass-quint",
+    "crates/tass-quint-jac",
     "crates/tassle-codegen",
     "crates/tassle-lexicons",
     "crates/tassle-validate",
