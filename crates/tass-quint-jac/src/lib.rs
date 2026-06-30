@@ -32,7 +32,7 @@ use jacquard_common::xrpc::atproto::{
 };
 use jacquard_common::xrpc::{XrpcClient, XrpcError};
 use serde_json::{Map, Value};
-use tass_quint::Quint;
+use tass_quint::{sheet_patch, Quint, SheetPatch};
 
 /// Default collection (the rpg.actor host record).
 pub const STATS_COLLECTION: &str = "actor.rpg.stats";
@@ -118,11 +118,12 @@ impl<C: XrpcClient + Sync> QuintClient<C> {
         Ok(extract_quint(&value))
     }
 
-    /// Read-modify-write the mage block: sets `milliQuintessence` to `q.millis()` and
-    /// replicates the floored value into `quintessence` (see
-    /// [`tass_quint::sheet_patch`]). All other mage fields and the record
-    /// envelope are preserved; `updatedAt` is bumped. Requires an authenticated
-    /// client or the PDS will reject the putRecord.
+    /// Read-modify-write the mage block: sets `milliQuintessence` to `q.millis()`,
+    /// replicates the floor into `quintessence`, stamps `milliQuintessenceUpdatedAt`
+    /// with "now", and bumps the record-level `updatedAt` (see
+    /// [`tass_quint::sheet_patch`] + [`SheetPatch::with_updated_at`]). All other
+    /// mage fields and the record envelope are preserved. Requires an
+    /// authenticated client or the PDS will reject the putRecord.
     ///
     /// Returns the applied [`Quint`] on success.
     pub async fn write(&self, repo: &str, rkey: &str, q: Quint) -> Result<Quint> {
@@ -130,11 +131,15 @@ impl<C: XrpcClient + Sync> QuintClient<C> {
             return Err(QuintError::NoMageBlock);
         };
         let mut value = serde_json::to_value(&record.value)?;
-        let mage = mage_block_mut(&mut value).ok_or(QuintError::NoMageBlock)?;
-        apply_quint(mage, q);
-        // Bump the record-level updatedAt (LWW marker), not the mage block's.
+        let now = Utc::now().to_rfc3339();
+        let patch = sheet_patch(q).with_updated_at(now.clone());
+        {
+            let mage = mage_block_mut(&mut value).ok_or(QuintError::NoMageBlock)?;
+            apply_quint(mage, &patch);
+        }
+        // Bump the record-level updatedAt (LWW marker) too.
         if let Some(root) = value.as_object_mut() {
-            root.insert("updatedAt".to_string(), Value::from(Utc::now().to_rfc3339()));
+            root.insert("updatedAt".to_string(), Value::from(now.as_str()));
         }
         let data: Data<DefaultStr> = serde_json::from_value(value)?;
         self.put_record(repo, rkey, data).await?;
@@ -214,9 +219,10 @@ pub(crate) fn extract_quint(value: &Value) -> Option<Quint> {
     tass_quint::resolve(milli_quintessence, quintessence)
 }
 
-/// Write the [`tass_quint::sheet_patch`] fields into a mage field map.
-pub(crate) fn apply_quint(mage: &mut Map<String, Value>, q: Quint) {
-    let patch = tass_quint::sheet_patch(q);
+/// Write a [`SheetPatch`] into a mage field map: `milliQuintessence`, the
+/// replicated `quintessence` floor, and `milliQuintessenceUpdatedAt` when the
+/// patch carries one.
+pub(crate) fn apply_quint(mage: &mut Map<String, Value>, patch: &SheetPatch) {
     mage.insert(
         "milliQuintessence".to_string(),
         Value::from(patch.milli_quintessence),
@@ -225,6 +231,12 @@ pub(crate) fn apply_quint(mage: &mut Map<String, Value>, q: Quint) {
         "quintessence".to_string(),
         Value::from(patch.quintessence),
     );
+    if let Some(ts) = &patch.milli_quintessence_updated_at {
+        mage.insert(
+            "milliQuintessenceUpdatedAt".to_string(),
+            Value::from(ts.as_str()),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -279,7 +291,7 @@ mod tests {
     fn apply_replicates_into_legacy_field() {
         let mut v = envelope(json!({ "arete": 3, "quintessence": 5 }));
         let mage = mage_block_mut(&mut v).unwrap();
-        apply_quint(mage, Quint::from_millis(1_500));
+        apply_quint(mage, &sheet_patch(Quint::from_millis(1_500)));
         let mage = mage_block(&v).unwrap();
         assert_eq!(mage.get("milliQuintessence").and_then(Value::as_i64), Some(1500));
         assert_eq!(mage.get("quintessence").and_then(Value::as_i64), Some(1));
@@ -292,7 +304,7 @@ mod tests {
         let mut v = envelope(json!({ "quintessence": 0 }));
         {
             let mage = mage_block_mut(&mut v).unwrap();
-            apply_quint(mage, Quint::from_points(2));
+            apply_quint(mage, &sheet_patch(Quint::from_points(2)));
         }
         // envelope structure untouched
         assert_eq!(v.get("system").and_then(Value::as_str), Some("mage"));
@@ -308,7 +320,7 @@ mod tests {
         let mut v = inline(json!({ "quintessence": 0 }));
         {
             let mage = mage_block_mut(&mut v).unwrap();
-            apply_quint(mage, Quint::from_points(4));
+            apply_quint(mage, &sheet_patch(Quint::from_points(4)));
         }
         assert_eq!(
             v.get("mage").unwrap().get("milliQuintessence").and_then(Value::as_i64),
@@ -318,5 +330,27 @@ mod tests {
             v.get("mage").unwrap().get("quintessence").and_then(Value::as_i64),
             Some(4)
         );
+    }
+
+    #[test]
+    fn apply_writes_updated_at_when_stamped() {
+        let mut v = envelope(json!({ "quintessence": 0 }));
+        let mage = mage_block_mut(&mut v).unwrap();
+        let patch = sheet_patch(Quint::from_points(1)).with_updated_at("2026-06-29T21:00:00Z");
+        apply_quint(mage, &patch);
+        let mage = mage_block(&v).unwrap();
+        assert_eq!(
+            mage.get("milliQuintessenceUpdatedAt").and_then(Value::as_str),
+            Some("2026-06-29T21:00:00Z")
+        );
+    }
+
+    #[test]
+    fn apply_omits_updated_at_when_unstamped() {
+        let mut v = envelope(json!({ "quintessence": 0 }));
+        let mage = mage_block_mut(&mut v).unwrap();
+        apply_quint(mage, &sheet_patch(Quint::from_points(1)));
+        let mage = mage_block(&v).unwrap();
+        assert!(mage.get("milliQuintessenceUpdatedAt").is_none());
     }
 }

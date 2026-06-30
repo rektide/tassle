@@ -100,23 +100,40 @@ pub fn resolve(milli_quintessence: Option<i64>, quintessence: Option<i64>) -> Op
 ///
 /// Serialized `camelCase` to match the sheet's wire shape: `milliQuintessence`
 /// carries the source-of-truth millis, `quintessence` carries the replicated
-/// floor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// floor, and `milliQuintessenceUpdatedAt` (when stamped by the write layer
+/// via [`SheetPatch::with_updated_at`]) records when the milli value changed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetPatch {
     /// Source-of-truth milli-quintessence.
     pub milli_quintessence: i64,
     /// Floored whole points, replicated so legacy clients stay consistent.
     pub quintessence: i64,
+    /// When the `milliQuintessence` value was last changed (ISO-8601). `None`
+    /// on the pure [`sheet_patch`] builder (which has no clock); the write
+    /// layer stamps it with "now". Skipped from the wire when `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub milli_quintessence_updated_at: Option<String>,
+}
+
+impl SheetPatch {
+    /// Stamp the patch with the time the milli value was changed. The write
+    /// layer calls this with "now" so `milliQuintessenceUpdatedAt` tracks the
+    /// last milli-value write on the sheet.
+    pub fn with_updated_at(mut self, ts: impl Into<String>) -> Self {
+        self.milli_quintessence_updated_at = Some(ts.into());
+        self
+    }
 }
 
 /// Build the mage-block patch for a desired balance: writes `q` as the source
 /// of truth and replicates the floored value into the legacy `quintessence`
-/// field.
+/// field. Leaves `milliQuintessenceUpdatedAt` unset; the write layer stamps it.
 pub fn sheet_patch(q: Quint) -> SheetPatch {
     SheetPatch {
         milli_quintessence: q.millis(),
         quintessence: q.points(),
+        milli_quintessence_updated_at: None,
     }
 }
 
@@ -183,7 +200,18 @@ mod tests {
     fn sheet_patch_serializes_camel_case() {
         let patch = sheet_patch(Quint::from_points(3));
         let json = serde_json::to_string(&patch).unwrap();
+        // updatedAt stays absent when the write layer hasn't stamped it.
         assert_eq!(json, r#"{"milliQuintessence":3000,"quintessence":3}"#);
+    }
+
+    #[test]
+    fn sheet_patch_with_updated_at_serializes() {
+        let patch = sheet_patch(Quint::from_points(3)).with_updated_at("2026-06-29T21:00:00Z");
+        let json = serde_json::to_string(&patch).unwrap();
+        assert_eq!(
+            json,
+            r#"{"milliQuintessence":3000,"quintessence":3,"milliQuintessenceUpdatedAt":"2026-06-29T21:00:00Z"}"#
+        );
     }
 
     #[test]
