@@ -36,17 +36,21 @@ pub enum ConfigKind {
     },
 }
 
-pub fn run(args: ConfigArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+pub fn run(
+    args: ConfigArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     match args.kind {
-        ConfigKind::Files => files(format),
-        ConfigKind::List => list(format),
-        ConfigKind::Get { key } => get(key, format),
-        ConfigKind::Set { assignment, unset } => set(&assignment, unset, format),
+        ConfigKind::Files => files(format, profile),
+        ConfigKind::List => list(format, profile),
+        ConfigKind::Get { key } => get(key, format, profile),
+        ConfigKind::Set { assignment, unset } => set(&assignment, unset, format, profile),
     }
 }
 
-fn files(format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
-    let figment = config::active_figment(None)?;
+fn files(format: crate::commands::OutputFormat, profile: Option<&str>) -> miette::Result<ExitCode> {
+    let figment = config::active_figment(profile)?;
     if format.is_json() {
         let records: Vec<_> = figment
             .operation_records()
@@ -86,8 +90,8 @@ fn files(format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn list(format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
-    let active_name = config::active_figment(None)
+fn list(format: crate::commands::OutputFormat, profile: Option<&str>) -> miette::Result<ExitCode> {
+    let active_name = config::active_figment(profile)
         .ok()
         .as_ref()
         .map(config::active_name)
@@ -112,8 +116,12 @@ fn list(format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn get(key: Option<String>, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
-    let figment = config::active_figment(None)?;
+fn get(
+    key: Option<String>,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
+    let figment = config::active_figment(profile)?;
     match key {
         None => {
             let p = config::active_profile(&figment)?;
@@ -139,7 +147,12 @@ fn get(key: Option<String>, format: crate::commands::OutputFormat) -> miette::Re
     Ok(ExitCode::SUCCESS)
 }
 
-fn set(assignment: &str, unset: bool, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+fn set(
+    assignment: &str,
+    unset: bool,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     let (key, value) = split_assignment(assignment);
     if key.is_empty() {
         miette::bail!("config key is required");
@@ -153,7 +166,7 @@ fn set(assignment: &str, unset: bool, format: crate::commands::OutputFormat) -> 
     let target = if key == "profile" {
         config::config_file()?
     } else {
-        let active = config::active_name(&config::active_figment(None)?);
+        let active = config::active_name(&config::active_figment(profile)?);
         let dir = config::dropins_dir()?;
         std::fs::create_dir_all(&dir).into_diagnostic()?;
         dir.join(format!("{active}.toml"))
@@ -189,7 +202,7 @@ fn set(assignment: &str, unset: bool, format: crate::commands::OutputFormat) -> 
         }
         None => {
             // Bare `config set key` reads — same view as `config get key`.
-            let figment = config::active_figment(None)?;
+            let figment = config::active_figment(profile)?;
             let v: serde_json::Value = figment
                 .extract_inner(key)
                 .map_err(|e| miette::miette!("'{key}' not found: {e}"))?;

@@ -62,10 +62,14 @@ pub struct SwitchArgs {
     pub profile: String,
 }
 
-pub async fn run(args: AuthArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+pub async fn run(
+    args: AuthArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     match args.kind {
-        AuthKind::Login(args) => login(args, format).await,
-        AuthKind::Status(args) => status(args, format).await,
+        AuthKind::Login(args) => login(args, format, profile).await,
+        AuthKind::Status(args) => status(args, format, profile).await,
         AuthKind::Switch(args) => switch(args, format),
         AuthKind::Set(args) => set(args, format),
     }
@@ -151,10 +155,14 @@ fn set(args: SetArgs, format: crate::commands::OutputFormat) -> miette::Result<E
     Ok(ExitCode::SUCCESS)
 }
 
-async fn login(args: LoginArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+async fn login(
+    args: LoginArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     #[cfg(feature = "auth-store")]
     {
-        return login_real(args, format).await;
+        return login_real(args, format, profile).await;
     }
     #[cfg(not(feature = "auth-store"))]
     {
@@ -162,11 +170,15 @@ async fn login(args: LoginArgs, format: crate::commands::OutputFormat) -> miette
     }
 }
 
-async fn status(args: StatusArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+async fn status(
+    args: StatusArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     use miette::IntoDiagnostic;
     let json = format.is_json();
     let profiles = crate::config::available_profiles()?;
-    let active_figment = crate::config::active_figment(None)?;
+    let active_figment = crate::config::active_figment(profile)?;
     let active_name = crate::config::active_name(&active_figment);
 
     let mut rows: Vec<serde_json::Value> = Vec::new();
@@ -310,7 +322,11 @@ fn jwt_exp(token: &str) -> Option<i64> {
 /// Real app-password login: createSession over jacquard + persist into the
 /// profile's jac-store-fjall store. Requires the `auth-store` feature.
 #[cfg(feature = "auth-store")]
-async fn login_real(args: LoginArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+async fn login_real(
+    args: LoginArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     use std::sync::Arc;
     use jac_store_fjall::FjallAuth;
     use jacquard::client::credential_session::{
@@ -320,7 +336,7 @@ async fn login_real(args: LoginArgs, format: crate::commands::OutputFormat) -> m
     use jacquard::identity::JacquardResolver;
 
     // Active profile name (resolves the store path + the fragment to write).
-    let figment = crate::config::active_figment(None)?;
+    let figment = crate::config::active_figment(profile)?;
     let profile_name = crate::config::active_name(&figment);
     let active = crate::config::active_profile(&figment)?;
 

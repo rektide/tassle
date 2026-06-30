@@ -19,6 +19,12 @@ struct Cli {
     #[arg(global = true, long, value_enum, default_value_t = OutputFormat::Table)]
     format: OutputFormat,
 
+    /// Profile (login) to use for this invocation, overriding TASSLE_PROFILE and
+    /// the config file's `profile` selector. Global; accepted on every
+    /// subcommand (honoured by the figment-backed `auth`/`config` commands).
+    #[arg(global = true, long)]
+    profile: Option<String>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -46,9 +52,10 @@ enum Command {
 async fn main() -> miette::Result<ExitCode> {
     let cli = Cli::parse();
     let format = cli.format;
+    let profile = cli.profile.as_deref();
     match cli.command {
-        Command::Auth(args) => commands::auth::run(args, format).await,
-        Command::Config(args) => commands::config::run(args, format),
+        Command::Auth(args) => commands::auth::run(args, format, profile).await,
+        Command::Config(args) => commands::config::run(args, format, profile),
         Command::Generate(args) => match args.kind {
             commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a, format),
         },
