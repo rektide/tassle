@@ -3748,6 +3748,7 @@ name = "tassle-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "chrono",
  "clap",
  "figment2",
