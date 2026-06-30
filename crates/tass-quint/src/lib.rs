@@ -81,6 +81,20 @@ impl Quint {
     pub fn is_out_of_range(self) -> bool {
         self.0 < 0 || self.0 > MAX_MILLIS
     }
+
+    /// Construct from whole points given as a float, rounded to the nearest
+    /// milli. The cast saturates: NaN maps to 0, ±inf clamp to the `i64` bounds.
+    /// Callers surfacing user input may want to reject non-finite values first.
+    pub fn from_points_f64(points: f64) -> Self {
+        Self((points * PER_POINT as f64).round() as i64)
+    }
+
+    /// Return a new `Quint` with `delta_millis` added, saturating at the `i64`
+    /// bounds. Useful for increment flows:
+    /// `current.add_millis(delta.millis())`.
+    pub const fn add_millis(self, delta_millis: i64) -> Self {
+        Self(self.0.saturating_add(delta_millis))
+    }
 }
 
 /// Resolve the effective quint from raw mage-block fields.
@@ -232,5 +246,24 @@ mod tests {
         // not clamped: values pass through verbatim
         assert_eq!(neg.millis(), -1);
         assert_eq!(over.millis(), MAX_MILLIS + 1);
+    }
+
+    #[test]
+    fn from_points_f64_rounds_to_millis() {
+        assert_eq!(Quint::from_points_f64(3.5).millis(), 3_500);
+        assert_eq!(Quint::from_points_f64(2.0).millis(), 2_000);
+        assert_eq!(Quint::from_points_f64(-0.25).millis(), -250);
+        assert_eq!(Quint::from_points_f64(0.0).millis(), 0);
+        // non-finite saturates rather than UB
+        assert!(Quint::from_points_f64(f64::INFINITY).is_out_of_range());
+        assert_eq!(Quint::from_points_f64(f64::NAN).millis(), 0);
+    }
+
+    #[test]
+    fn add_millis_saturates_and_handles_negative() {
+        assert_eq!(Quint::from_millis(1_000).add_millis(500).millis(), 1_500);
+        assert_eq!(Quint::from_millis(1_000).add_millis(-250).millis(), 750);
+        assert_eq!(Quint::from_millis(i64::MAX).add_millis(1).millis(), i64::MAX);
+        assert_eq!(Quint::from_millis(0).add_millis(-1).millis(), -1);
     }
 }
