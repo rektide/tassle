@@ -14,8 +14,9 @@
 //! # #[cfg(feature = "auth-store")] {
 //! use tassle_config::AuthedClient;
 //! # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
-//! let c = AuthedClient::for_active_profile().await?;
-//! // c.session() is a jacquard XrpcClient ready for write calls.
+//! let client = AuthedClient::for_active_profile().await?;
+//! let cloned = client.clone();              // AuthedClient is Clone
+//! let _session = cloned.session().await;    // fresh owned CredentialSession
 //! # Ok(()) } }
 //! ```
 //!
@@ -39,7 +40,7 @@ pub fn active() -> miette::Result<Profile> {
 }
 
 #[cfg(feature = "auth-store")]
-pub use auth::{AuthError, AuthedClient, AppPasswordSession};
+pub use auth::{AppPasswordSession, AuthError, AuthedClient, SessionSource};
 
 #[cfg(test)]
 mod tests {
@@ -88,5 +89,16 @@ mod tests {
         unsafe {
             std::env::remove_var("XDG_CONFIG_HOME");
         }
+    }
+
+    // Compile-proofs that the auth types are `Clone` (the whole point of
+    // SessionSource). No runtime construction needed — the bound proves the
+    // derive. Gated by `auth-store` since the types only exist under it.
+    #[cfg(feature = "auth-store")]
+    #[test]
+    fn authed_client_and_session_source_are_clone() {
+        fn needs_clone<T: Clone>() {}
+        needs_clone::<crate::AuthedClient>();
+        needs_clone::<crate::SessionSource>();
     }
 }
