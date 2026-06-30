@@ -84,11 +84,11 @@ pub struct AuthedClient {
 }
 
 impl AuthedClient {
-    /// Resolve the active profile, resume its session non-interactively, and
-    /// point it at the profile's PDS.
-    pub async fn for_active_profile() -> Result<Self, AuthError> {
-        let figment =
-            config::active_figment(None).map_err(|e| AuthError::Config(e.to_string()))?;
+    /// Resolve a profile (CLI override > `TASSLE_PROFILE` > config selector),
+    /// resume its session non-interactively, and point it at the profile's PDS.
+    pub async fn for_profile(cli_profile: Option<&str>) -> Result<Self, AuthError> {
+        let figment = config::active_figment(cli_profile)
+            .map_err(|e| AuthError::Config(e.to_string()))?;
         let name = config::active_name(&figment);
         let profile =
             config::active_profile(&figment).map_err(|e| AuthError::Config(e.to_string()))?;
@@ -124,6 +124,12 @@ impl AuthedClient {
         session.set_endpoint(endpoint).await;
 
         Ok(AuthedClient { session, profile, name })
+    }
+
+    /// Convenience for [`AuthedClient::for_profile`] with no CLI override
+    /// (uses `TASSLE_PROFILE` / the config selector).
+    pub async fn for_active_profile() -> Result<Self, AuthError> {
+        Self::for_profile(None).await
     }
 
     /// Lend the live session. Consumers (e.g.
