@@ -1,66 +1,40 @@
-# Spacedust: commands-by-text as tassle's primary interface
+# Spacedust + jetstream: the tassle listener daemon
 
-> How tassle uses [Spacedust](https://www.microcosm.blue/) — microcosm's "configurable ATProto notifications firehose" — as its **primary user interface**: a person posts something like *"burn my tass"* at our account, and we react by reading their records, performing the action, and posting an attestation that we did it. This is a sibling to the [attestation options](attestation.md) discovery doc (which covers *cosign* trust) and feeds the [`tass-listener-svc`](#how-this-fits-the-existing-plan) epic. Source studied: `~/archive/microcosm.blue/microcosm-rs/{spacedust,links,jetstream}`.
+> tassle's primary interface is **atproto posts addressed at us**: a person posts something like *"burn my tass"* at our Mage account, and a standalone listener daemon reacts — reads their records, performs the action, and posts an attestation. That command stream comes from [Spacedust](https://www.microcosm.blue/), microcosm's "configurable ATProto notifications firehose." A *second* source — a [jetstream](https://github.com/bluesky-social/jetstream) firehose of `com.superbfowle.tass.*` records **at large** — feeds the ledger fold so we always know each tass's real remaining quintessence. The daemon is **fjall-native** (hydrant is deleted) and built around two-level **sources + listeners**. Epic: [`tass-listener-svc`](#tickets). Sibling doc: [attestation.md](attestation.md) (cosign *trust*, distinct from this doc's action receipts). Source studied: `~/archive/microcosm.blue/microcosm-rs/{spacedust,links,jetstream}`.
 
 ---
 
-## 1. The idea
+## 1. Two sources, two jobs
 
-Tassle's primary interface is **not** a CLI or a web form — it is **atproto posts addressed at us**. A user writes, in plain text, a command like:
+There are two genuinely different event sources, and conflating them was the original mistake in this doc:
 
-> "@mage burn my tass"
+| Source | Mechanism | Yields | Job |
+| --- | --- | --- | --- |
+| **posts-at-us** | Spacedust `wantedSubjectDids=<MAGE_DID>` | link *pointers* → hydrate | the **command** interface ("burn my tass", "meditate") |
+| **tass-at-large** | jetstream `wantedCollections=com.superbfowle.tass.*` | full record bodies, cursor replay | the **ledger fold** (every enervate/tassilize/meditate, network-wide) |
 
-and the tassle service, running as a dedicated **Mage account**, reacts:
+`enervate` records authored by **anyone, anywhere** are an event we track — independent of whether someone is talking *at* us — because the fold needs them to keep each tass's balance correct. The command handler that *writes* an enervate and the fold that *observes* enervates everywhere are two consumers of two different sources. Both normalize to one `EventSource` envelope (`tass-sync-source`).
 
-1. **Watches** for posts that reference us (mention / reply).
-2. **Hydrates** the post to read the command text.
-3. **Looks up the user's records** (their `tassilize` tass, their `node`).
-4. **Does the thing** — writes the corresponding action record in *our* repo.
-5. **Attests** — posts an attestation record in our own NSID saying what we did.
-
-Two flows are in scope for MVP **v1.1**:
-
-| Command (example phrasing) | Action record written | Effect |
-| --- | --- | --- |
-| **"burn my tass"** (primary) | `com.superbfowle.tass.enervate` | Drains the user's tass; the quintessence flows to the Mage. |
-| **"meditate"** (second, MVP-final) | `com.superbfowle.tass.meditate` | The Mage pulls ambient quintessence from a Node. |
-
-Everything else (tassilize, resonance, forms, cosigns) is out of scope for v1.1.
-
-Spacedust is the right substrate for step 1 because, as its server banner says, it is *"A configurable ATProto notifications firehose"* (`spacedust/src/server.rs:59`). It does the "who is talking at us" filtering **server-side, by our DID**, so we receive only the handful of posts actually addressed to us — not the entire global post firehose (which is what a raw Jetstream / Hydrant consumer would force us to inspect record-by-record).
+> **Why not hydrant for tass-at-large?** Hydrant was deleted; tassle is fjall-native. The firehose source is now a plain `jetstream` consumer — the same crate Spacedust and Slingshot already use — with cursor-based replay. This also erased the fjall version-skew hazard hydrant introduced, which is what makes the shared-store design in §7 easy.
 
 ---
 
 ## 2. What Spacedust is, mechanically
 
-A WebSocket service with one real endpoint: `GET /subscribe` (upgraded to a WS channel — `server.rs:317`). Internally it consumes Jetstream, runs every record through `collect_links` (which walks the record JSON and emits one event per link/reference it finds — `consumer.rs:89`, `links/src/record.rs:walk_record`), and fans those link-events out to subscribers who filter for the ones they care about.
+A WebSocket service. One real endpoint: `GET /subscribe` (upgraded to a WS channel — `server.rs:317`). It consumes jetstream internally, runs every record through `collect_links` (walks the record JSON, emits one event per link/reference — `consumer.rs:89`, `links/src/record.rs`), and fans those link-events out to subscribers who filter for the ones they care about. The framing that makes this work: *all social interactions in atproto are links* — a reply, mention, quote, like, follow is a record whose link **target** carries some DID. "A post at us" = "a link whose target carries our DID."
 
-The framing that makes this work: **all social interactions in atproto are links.** A reply, a mention, a quote, a like, a repost, a follow — each is just a record whose *link target* contains some DID or at-uri. "A post at us" = "a link whose target carries our DID."
+### The `/subscribe` filters (the "at us" mechanism)
 
----
-
-## 3. The `/subscribe` filters (the "at us" mechanism)
-
-Filters are supplied as query params on the subscribe URL, and can also be **updated live** by sending a JSON text frame on the open socket (`subscriber.rs:77`, `subscriber.rs:154`).
-
-### Wanted-params table
+Query params (also live-updatable by sending a JSON text frame on the open socket — `subscriber.rs:154`):
 
 | Param | What it matches | Limit | Tassle use |
 | --- | --- | --- | --- |
-| `wantedSubjectDids` | DIDs to receive links about — matches **bare-DID links _and_ DIDs extracted from at-uri targets** (`lib.rs:40`) | 10 000 | **Our primary filter.** `wantedSubjectDids=<MAGE_DID>` catches *everything aimed at us*: replies, quotes, mentions, likes, follows. |
-| `wantedSubjectPrefixes` | Prefix match on the target | 100 | `at://<MAGE_DID>/` to catch links to *any of our records specifically* (e.g. someone enervating one of our tass). Or `at://<MAGE_DID>/app.bsky.feed.post/` to scope to replies to our posts only. |
-| `wantedSubjects` | Exact target at-uri / uri / DID | 50 000 | Watch one specific record — e.g. a single "command thread" post we published, where every reply is a command. |
-| `wantedSources` | Link **source** = `<collection NSID>:<dotted record path>` (`lib.rs:48`) | 1 000 | Narrow to *textual commands only* (posts), filtering out likes/follows/etc. See below. |
+| `wantedSubjectDids` | DIDs to receive links about — bare-DID links **and** DIDs extracted from at-uri targets (`lib.rs:40`) | 10 000 | **Primary filter.** `wantedSubjectDids=<MAGE_DID>` catches everything aimed at us. |
+| `wantedSubjectPrefixes` | prefix match on the target | 100 | `at://<MAGE_DID>/` for links to any of our records; narrower scoping. |
+| `wantedSubjects` | exact target at-uri / uri / DID | 50 000 | watch one "command thread" post where every reply is a command. |
+| `wantedSources` | link **source** = `<collection NSID>:<dotted path>` (`lib.rs:48`) | 1 000 | narrow to *textual commands only* (posts), dropping likes/follows. |
 
-### Filter logic
-
-From `subscriber.rs:123`:
-
-- `wantedSubjects` **OR** `wantedSubjectPrefixes` **OR** `wantedSubjectDids` (the subject group is a logical OR).
-- That whole group is **AND**'d with `wantedSources`.
-- An empty group matches everything.
-
-So **"posts that mention or reply to us"** =
+Filter logic (`subscriber.rs:123`): the three subject filters are **OR**'d; that group is **AND**'d with `wantedSources`; empty group = match-all. So "posts that mention or reply to us" =
 
 ```
 wantedSubjectDids = <MAGE_DID>
@@ -69,115 +43,190 @@ wantedSources    = { "app.bsky.feed.post:reply.parent.uri",
                      "app.bsky.feed.post:facets[].features[app.bsky.richtext.facet#mention].did" }
 ```
 
-- `app.bsky.feed.post:reply.parent.uri` — a reply to one of our posts (the parent at-uri carries our DID). (Reply paths confirmed by the test at `links/src/record.rs:65`.)
-- `app.bsky.feed.post:facets[].features[app.bsky.richtext.facet#mention].did` — an @-mention of us (a richtext facet whose `did` feature is our bare DID). The typed-array path notation (`[app.bsky.richtext.facet#mention]`) comes from `walk_record` keying array entries on their `$type` (`links/src/record.rs:14`).
+The `instant` scalar param bypasses Spacedust's default **21-second delay buffer** (`server.rs:299`), which exists so a post-then-delete never fires. We want the **default delayed** stream: someone who posts and instantly deletes "burn my tass" should not trigger a burn.
 
-This `wantedSources` AND-clause is what keeps the firehose from drowning us in likes/reposts when all we want is text we can parse.
+### Events are pointers — hydrate them
 
-### The `instant` flag (scalar param)
-
-By default Spacedust **holds every link for 21 seconds** before emitting, so an interaction that gets undone quickly (≈<1% of links) never fires a notification (`server.rs:299`). `instant=true` bypasses the delay buffer for faster, noisier delivery. For a command interface we want the **default (delayed)** stream — a user who posts and immediately deletes a "burn my tass" should not trigger a burn.
+The payload is a pointer, not the content (`lib.rs:89`): `{operation, source, source_record, source_rev, subject}`, no record body (`lib.rs:96`). To read the command text we **hydrate `source_record`** — Slingshot `getRecordByUri?at_uri=<source_record>` returns `{uri, cid, value}`, with a plain PDS `getRecord` as fallback. So the microcosm tools compose: **Spacedust targets, Slingshot hydrates, Constellation recovers** (§6).
 
 ---
 
-## 4. What an event contains — and the hydration step
+## 3. Object model: sources and listeners (two levels)
 
-The payload is a **pointer, not the content** (`lib.rs:89`, `ClientLinkEvent`):
+- A **Source** is a live connection to a feed (the Spacedust WS subscription; the jetstream subscription). It owns transport, cursor, reconnect, and produces normalized `EventSource` events. You can toggle a *whole source* off.
+- A **Listener** is a named reaction *bound to a source*: `{ name, source, matcher, action_chain, reads, writes, verbosity }`. This is the unit you independently enable/disable and tune. **Many listeners share one source** (several command listeners on Spacedust; the ledger-fold listener on jetstream).
 
-```json
-{ "kind": "link", "origin": "live",
-  "link": {
-    "operation": "create",
-    "source":        "app.bsky.feed.post:reply.parent.uri",
-    "source_record": "at://did:plc:THEM/app.bsky.feed.post/3l...",   // the post that mentioned us
-    "source_rev":    "...",
-    "subject":       "at://did:plc:MAGE/app.bsky.feed.post/3k..."     // our record they referenced
-  } }
-```
+Toggling happens at **both** levels: kill a source (stop connecting) or disable a listener (source stays up, that reaction stops).
 
-There is deliberately **no record body** (`lib.rs:96`). So to read the actual command text we must **hydrate `source_record`** — fetch the referenced post. This is the one place [Slingshot](https://www.microcosm.blue/) earns its keep (it is a read-side record cache, useless as a listener but good here): `getRecordByUri?at_uri=<source_record>` returns `{uri, cid, value}`. So the two microcosm tools compose — **Spacedust targets, Slingshot hydrates** — with a plain PDS `getRecord` as the fallback.
+### Per-listener knobs (orthogonal, not a rolled-up mode)
 
----
+| Knob | Controls | Values |
+| --- | --- | --- |
+| `verbosity` | how much this listener logs (see §5) | `silent` / `summary` / `verbose` |
+| `reads` | API reads — hydrate the post, resolve character/tass, look up balances | `off` / `on` |
+| `writes` | API writes — create records, post replies | `off` / `own` / `all` |
 
-## 5. The tassle command pipeline
+Behavior falls out of the product — **"dry-run" is just `reads=on, writes=off`**, not a special mode:
 
 ```
-spacedust /subscribe?wantedSubjectDids=<MAGE_DID>&wantedSources=<post mention/reply>   (1) WATCH
-   → hydrate source_record  (Slingshot getRecordByUri, PDS fallback)                   (2) READ COMMAND
-   → parse command grammar  ("burn my tass" | "meditate")                              (3) PARSE
-   → resolve the user's records  (their tassilize / node)                              (4) LOOK FOR RECORDS
-   → perform action  (write enervate / meditate in the MAGE repo)                      (5) DO THE THING
-   → post attestation record in com.superbfowle.tass.*  (what we changed, from → to)   (6) ATTEST
-   → on reconnect, backfill the gap from Constellation, dedupe by source_record+rev    (recovery)
+reads=off, writes=off  → pure match: "saw a burn-tass command", nothing else
+reads=on,  writes=off  → dry-run: hydrate, resolve, compute the would-be effect, log it
+reads=on,  writes=own  → enact records into our repo, no public reply
+reads=on,  writes=all  → records + reply to the user's post
 ```
 
-### (4)–(5): looking for the records, and doing the things
+Example config (two-level; Spacedust endpoint configurable, public default):
 
-Spacedust gives us *both halves* of what we need: it tells us a post is at us **and** it surfaces the at-uris in that post, so we can both **find the user's records** and **act on them**.
+```toml
+[sources.spacedust]
+enabled  = true
+endpoint = "wss://spacedust.microcosm.blue/subscribe"   # configurable; confirm host
+account  = "did:plc:MAGE"          # → wantedSubjectDids
 
-- **"burn my tass" → enervate (primary).** We act *as the Mage*: we write a `com.superbfowle.tass.enervate` record **in our own (Mage) repo** whose `tass` field is the at-uri of the user's `com.superbfowle.tass.tassilize` record, with `amount` = the quintessence drained (`enervate.json`: `tass` at-uri, `amount` 0–100, `purpose`, `createdAt`). The enervate reduces the available quintessence on the referenced tass, and — because the Mage authored it — that current "flows to the Mage." (Note: the enervate lexicon has **no explicit recipient field**; "to the Mage" is currently modeled only by *who authored the record*. See open questions.)
-- **"meditate" → meditate (MVP v1.1 second flow).** The Mage pulls ambient quintessence from a Node: a `com.superbfowle.tass.meditate` record (`meditate.json`: `node` at-uri, `amount` 0–20, `createdAt`). Limited by Avatar rating out-of-band (the lexicon does not enforce it).
+[sources.jetstream]
+enabled  = true                     # tass-at-large fold
 
-We can only write to **our own** repo, never the user's PDS. "Create records for people" therefore means: we create records *in the Mage repo* that reference and act on the user's records — not edits to their repo.
+[listeners.burn-tass]
+source    = "spacedust"
+reads     = "on"
+writes    = "off"                   # ship as dry-run
+verbosity = "verbose"
 
-### (6): the attestation output
+[listeners.meditate]
+source    = "spacedust"
+reads     = "on"
+writes    = "all"
 
-After doing the thing, we post an **attestation record in our own NSID** (e.g. `com.superbfowle.tass.*`) that says *we did it* and records the state change. Concretely it should reference the action record we wrote and the user record we acted on, and capture the **before → after** of the affected quantity (the tass's `quintessence` before and after the enervate, or the Mage's pattern total before/after a meditate).
-
-> **Status: the attestation shape is still "meh."** The [attestation discovery doc](attestation.md) covers *cosign* trust (keytrace/co-core/atproto-attestation) — a different concern from this lightweight **action receipt**. The receipt idea here is deliberately small: a per-action record proving the Mage performed a state change. One concrete improvement is already ticketed: **carry an AGE-encrypted payload on the attestation describing exactly what changed, from → to** — so the before/after is verifiable by the affected user (who holds the key) without publishing the raw ledger numbers to the world. See beads `tass-1bq`.
-
----
-
-## 6. Config: the account we listen from
-
-The listener needs a configured **specific account to listen from / as**:
-
-- `MAGE_DID` (or handle, resolved to DID) — the account commands are addressed *at*; this is the value we pass as `wantedSubjectDids`, and the repo we write action + attestation records *into*.
-- Spacedust endpoint — microcosm's public instance (expected `wss://spacedust.microcosm.blue/subscribe`, following the `*.microcosm.blue` convention of `constellation.`/`slingshot.`/`ufos.`; **confirm the host** before relying on it), with a self-hosted instance as a fallback.
-- Hydration endpoint — a Slingshot base URL, PDS fallback.
-- A persisted **cursor / dedupe set** — see limitations.
-
-This slots into the existing profile/config layering (`doc/adr/0001-profile-config-before-auth.md`); the Mage account is just another configured identity, and writes use the authenticated write path being built under `tass-quint-auth-config` / `tass-refresh`.
-
----
-
-## 7. Limitations to design around
-
-Spacedust's current version is intentionally lightweight (its readme):
-
-1. **No replay window, no delete events.** If the listener disconnects, everything in the gap is lost; and once a link is emitted, no later delete event is sent. → On reconnect, **backfill from [Constellation](https://constellation.microcosm.blue/)** (the backlink *index*): `GET /links?target=<MAGE_DID>&collection=app.bsky.feed.post&path=.reply.parent.uri` (and the mention path), then **dedupe by `source_record` + `source_rev`** against what we have already processed. This also protects against double-acting on a command after a restart.
-2. **Slow-consumer drop.** A subscriber that can't keep up is dropped as a laggard (`subscriber.rs:52`). Keep the socket handler cheap: enqueue events and do hydration / action / attestation off-thread.
-3. **Idempotency is on us.** A command should produce exactly one enervate even if we see the link twice (live + backfill). Key idempotency on `(source_record, source_rev)` and refuse to re-run a command we have an attestation for.
-
-A heavier next-gen Spacedust (full forward-link index, replay, hydrated deletes) is planned upstream; if/when it lands, items 1 and 3 get easier.
+[listeners.enervate-fold]           # enervates AT LARGE → ledger
+source    = "jetstream"
+reads     = "on"
+writes    = "off"                   # fold only touches the local ledger
+```
 
 ---
 
-## 8. How this fits the existing plan
+## 4. The command pipeline (action chain)
 
-Spacedust is **another `EventSource` impl under [`tass-sync-source`](../../)** — but a different *shape* than the Jetstream/Hydrant sources: it yields **link notifications, not record bodies**, so it needs a hydration adapter (`NotificationSource → hydrate → RecordEvent`) before the [`tass-listener-svc`](../../) fold. The command pipeline (parse → act → attest) is new surface that sits on top of that source, gated behind the same listener cargo feature as the Hydrant path.
+A listener that matches runs an ordered **action chain** of steps that each run / skip / short-circuit. For v1.1 the chains are **static, in code** (typed `Vec<Step>`), shaped to grow later into a named-step registry. Matching is **keyword spotting**.
 
-Relationship to the alternatives studied earlier:
+```
+spacedust event → matcher (keyword spot) → [ resolve character → resolve tass
+   → authorize → write action record → write attestation → reply ] → wide event
+```
 
-- **Jetstream / Hydrant** (full bodies, no "aimed-at-me" filter): you ingest the whole post firehose and inspect every record. Right for *indexing all tass activity*; wrong for *a command inbox*.
-- **Spacedust** (server-side target-by-DID filter, pointers only): you receive only what is addressed to you, at the cost of one hydration round-trip. **Right for the command interface.**
-- **Constellation** (backlink index, query not stream): the catch-up / dedupe companion for Spacedust's missing replay.
-- **Slingshot** (record cache, query not stream): the hydration companion for Spacedust's body-less payloads.
+### "burn my tass" → enervate (primary)
 
-A complete v1.1 listener uses **three** microcosm services together: Spacedust to notice, Slingshot to read, Constellation to recover.
+1. **Match** "burn (my) tass" in the hydrated post text.
+2. **Resolve character** (multi-mage problem): a user may own several mage records (`actor.rpg.stats` rkeys). Pick the one whose **character-name word** appears in the message.
+3. **Resolve tass** (multi-tass): match a tass `form`/name word in the message; **if unspecified, pick a random** owned tass (`tassilize.json`: `form`, `quintessence`).
+4. **Authorize**: a user may only burn their **own** tass. (Simple and sufficient for v1.1.)
+5. **Enact**: write a `com.superbfowle.tass.enervate` (`tass` at-uri of the user's tassilize, `amount`) — gated by `writes`. **For now, enervate implies the user as the effect target** (you burn your own tass); routing burned quintessence to a recipient (the Mage or another party) is the future, more sophisticated model in [`tass-recipient-alloc`](#tickets).
+6. **Attest**: post an attestation in our NSID recording the change (see §8 / [`tass-attest-age-payload`](#tickets)).
+7. **Reply**: optional, only when `writes=all`.
+
+### "meditate" → meditate (MVP v1.1 second flow, and the last)
+
+Keyword-spot "meditate" → resolve character + target Node → write `com.superbfowle.tass.meditate` (`node` at-uri, `amount` 0–20). Deferred completion (effect after an in-fiction duration) is modeled as a **due job** (§6). Shares the character/tass resolver and the chain runtime.
+
+Everything else (tassilize, resonance, forms, cosigns) is out of scope for v1.1.
+
+### Writing as the Mage — reuse the auth engine
+
+Writes authenticate as the Mage via the **existing** `tassle-config` auth engine: `AuthedClient::for_profile(mage)` opens the `jac-store-fjall` session store, resumes a `CredentialSession`, points it at the PDS, and **lends** `&session` (the borrow model — `AuthedClient` is deliberately not `Clone`). The daemon is the first long-running, concurrent, autonomous consumer of that session, so it is also the real stress test for cross-task token refresh (`tass-refresh-coordination`); it consumes a `SessionSource`, not a raw client.
 
 ---
 
-## 9. Open questions
+## 5. Wide-event tracing
 
-1. **Recipient modeling.** "Burn my tass *to the Mage*" is currently implicit in record authorship. Should `enervate` (or a wrapping record) gain an explicit recipient field, or is author-is-recipient sufficient for v1.1?
-2. **Command grammar.** What exactly do we parse? Just `"burn my tass"` / `"meditate"` keyword-spotting for v1.1, or a small structured grammar (amounts, target selection when a user has multiple tass)? How do we disambiguate *which* tass when the user has several?
-3. **Authorization.** Anyone can post "burn my tass" at us. Do we only act on commands from accounts in some allowlist / with a sheet, or is acting-on-anyone fine because the action only drains *their own* tass?
-4. **Confirm the Spacedust public host** (`spacedust.microcosm.blue`?) and decide self-host vs. public for a load-bearing primary interface (best-effort uptime upstream — a pi4).
-5. **Attestation payload.** Lands in beads `tass-1bq`: AGE-encrypted before→after on the attestation record. Who holds the decryption key (the affected user? the reality?), and what's the recipient/key-discovery story?
+One canonical **wide-event** log line per processed event, at **INFO**, assembled across a per-listener span: `source, listener, matched, mode, actor, command, target_uri, steps, effect_uris, dry_run, dedupe_key, latency_ms, outcome/error`. It always emits — that's the point of it.
+
+`verbosity` is a **per-listener filter directive**, not a suppressor of the wide event. Each listener runs inside a span tagged with its name (`span!(target: "tassle::listener", listener = "burn-tass")`); verbosity scopes how much *extra* prints:
+
+- `silent` → only the INFO wide event.
+- `summary` → + key spans.
+- `verbose` → + per-step DEBUG events with payloads.
+
+Mechanically this is `tracing-subscriber` `EnvFilter` span-field scoping — `tassle::listener[{listener=burn-tass}]=debug` turns up one listener while others stay at their wide event. **Per-layer filters** (`Layer::with_filter`) let different sinks show different subsystems ("a trace shows for one subsystem but not another"), and `tracing_subscriber::reload` allows live verbosity changes from config. ([`tass-wide-event`](#tickets).)
+
+---
+
+## 6. Backfill when we drop offline — two mechanisms
+
+- **jetstream (tass-at-large): real replay.** The source takes a **cursor**; `connect_cursor(Some(cursor))` resumes from the last *durably committed* cursor (and `Some(0)` is a full rebuild). The fold advances the cursor only after the fjall commit succeeds, so it never loses tass events across a restart.
+- **Spacedust (posts-at-us): no replay → catch up via Constellation.** On reconnect, enumerate posts that referenced the Mage during the gap from the [Constellation](https://constellation.microcosm.blue/) backlink index (`/links?target=<MAGE_DID>&collection=app.bsky.feed.post&path=.reply.parent.uri`, plus the mention path), replay them through the listeners, and **dedupe by idempotency key** (`source_record`+`source_rev`) so a command never double-burns. ([`tass-backfill-constellation`](#tickets).)
+
+Idempotency lives in the job store (§7) — the same mechanism that makes the chain durable also makes backfill safe.
+
+---
+
+## 7. fjall, the job mechanism, and a shared store
+
+tassle is fjall-native, and `jac-store-fjall` is growing **DB builders** that expose the database-instance creation formerly used internally. That gives us a clean **`StoreProvider`** ([`tass-store-provider`](#tickets)) that hands out fjall partition/keyspace handles to sessions, the ledger, and jobs from one data root. Because hydrant is gone, every consumer resolves fjall from crates.io and stays version-aligned, so a single shared keyspace with handle-passing is straightforward — no version reconciliation.
+
+The **durable job queue** ([`tass-job`](#tickets)) is extracted into its own crate: `Job = {inputUri, inputCid, kind, dueAt, status, attempts}`, enactment idempotent by `inputUri+inputCid+effectKind`, a worker enacting at `dueAt` with retry/backoff. It is three things at once: the action-chain's deferred/retryable step runtime, the dedupe ledger for backfill/replay, and a reusable scheduler for future work (meditate completion, node regen).
+
+---
+
+## 8. Attestation output
+
+After acting, the Mage posts an **attestation record in our own NSID** referencing the action record and the affected user record, capturing the **before → after** of the changed quantity. This is a lightweight *action receipt*, distinct from the *cosign trust* options in [attestation.md](attestation.md). The one concrete improvement already ticketed ([`tass-attest-age-payload`](#tickets)): carry an **AGE-encrypted** payload describing exactly what changed, so the affected user (key holder) can verify the diff without the raw ledger numbers being published to the firehose.
+
+---
+
+## 9. Crate decomposition
+
+Granular, so the engine is a library reusable by the daemon and (later) the CLI:
+
+```
+tass-sync-source        EventSource trait + normalized envelope
+tass-source-spacedust   WS subscribe + reconnect + hydration   → impls the trait
+tass-source-jetstream   tass-at-large firehose + cursor         → impls the trait
+tass-job                durable due-job queue + worker (reusable)
+tass-store-provider     shared fjall handles via jac-store-fjall builders
+tass-engine             listener registry, keyword matcher, action-chain runtime, knobs, wide-event
+tass-listend            standalone service binary (sources + engine + worker + config)
+tassle-cli              thin, feature-gated wiring → same engine (tassle listen / worker)   [low-pri]
+tassle-config           extended with the two-level source/listener config schema
+```
+
+`tass-engine` sits above `tassle-ledger` + `tass-quint`; Mage auth comes from `tassle-config`'s `AuthedClient`/`SessionSource`.
+
+---
+
+## 10. Open questions
+
+1. **Confirm the Spacedust public host** (`spacedust.microcosm.blue`?) and decide self-host vs. public for a load-bearing primary interface (upstream is best-effort uptime).
+2. **Command grammar** beyond keyword spotting — disambiguation when multiple character/tass words match, or none.
+3. **Recipient model** ([`tass-recipient-alloc`](#tickets)): when we move past "enervate implies the user," what does controlled allocation look like — a recipient field on enervate, a separate transfer record, authorization?
+4. **Cross-task refresh** ([`tass-refresh-coordination`](#tickets)) under the long-running daemon — the borrow-model session shared across handler tasks.
+5. **AGE payload** key holder + discovery ([`tass-attest-age-payload`](#tickets)).
+
+## Tickets
+
+Epic **`tass-listener-svc`** — *Configurable listener daemon (Spacedust commands + tass-at-large fold)*. Children:
+
+- `tass-sync-source` — EventSource trait + normalized envelope
+- `tass-source-spacedust` — Spacedust WS source + hydration
+- `tass-source-jetstream` — jetstream tass-at-large source + cursor replay
+- `tass-job` — reusable durable job queue + worker (fjall, idempotent)
+- `tass-store-provider` — shared fjall StoreProvider via jac-store-fjall builders
+- `tass-engine` — registry + keyword matcher + action-chain runtime + knobs
+- `tass-listener-config` — two-level sources + per-listener knobs
+- `tass-wide-event` — wide-event tracing + per-listener verbosity filtering
+- `tass-target-resolve` — resolve character + tass from message words
+- `tass-handler-burn` — burn-tass handler (primary)
+- `tass-handler-meditate` — meditate handler (MVP v1.1 second flow)
+- `tass-backfill-constellation` — Constellation catch-up + idempotent dedupe
+- `tass-ledger-fold` — ledger fold over the EventSource stream
+- `tass-listend` — standalone service binary
+- `tass-cli-listen` — CLI integration (low priority)
+- `tass-recipient-alloc` — controlled allocation to recipients (future)
+- `tass-attest-age-payload` — AGE-encrypted before→after on attestations
+
+(`tass-embed-hydrant` is closed — hydrant deleted.)
 
 ## See also
 
-- [attestation.md](attestation.md) — cosign *trust* options (keytrace / co-core / atproto-attestation); distinct from this doc's lightweight action-receipt attestation.
-- [ledger.md](../ledger.md), [hedystia-listener-design.md](../hedystia-listener-design.md) — the fold/ledger and listener-service designs this pipeline feeds.
-- `~/archive/microcosm.blue/microcosm-rs/spacedust/` — `server.rs` (subscribe + params), `subscriber.rs` (filter logic), `consumer.rs` + `links/src/record.rs` (link extraction), `lib.rs` (event payload).
+- [attestation.md](attestation.md) — cosign *trust* options (distinct from §8's action receipts).
+- [ledger.md](../ledger.md) — the per-DID fold the jetstream source feeds.
+- `~/archive/microcosm.blue/microcosm-rs/spacedust/` — `server.rs` (subscribe + params), `subscriber.rs` (filters), `consumer.rs` + `links/src/record.rs` (link extraction), `lib.rs` (payload).
