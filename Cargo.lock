@@ -3744,6 +3744,26 @@ name = "tass-lex-corpus"
 version = "0.1.0"
 
 [[package]]
+name = "tass-quint"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "tass-quint-jac"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jacquard",
+ "jacquard-common",
+ "serde",
+ "serde_json",
+ "tass-quint",
+]
+
+[[package]]
 name = "tassle-cli"
 version = "0.1.0"
 dependencies = [
@@ -3762,6 +3782,7 @@ dependencies = [
  "serde_ipld_dagcbor",
  "serde_json",
  "tass-lex-corpus",
+ "tass-quint",
  "tassle-lexicons",
  "tempfile",
  "tokio",
