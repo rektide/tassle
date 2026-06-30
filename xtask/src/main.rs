@@ -1,9 +1,9 @@
-// `tassle samples` — generate example records into the corpus crate using the
-// schema-validated generated Rust types.
+// xtask: tassle workspace task runner.
 //
-// Records use a fixed createdAt so diffs are stable across regenerations.
+//   cargo xtask codegen   — regenerate crates/tassle-lexicons/src from tass-lex-schema
+//   cargo xtask samples   — regenerate crates/tass-lex-sample/samples from the builders
 
-use clap::Args;
+use clap::{Parser, Subcommand};
 use jacquard_common::DefaultStr;
 use jacquard_common::types::aturi::AtUri;
 use jacquard_common::types::datetime::Datetime;
@@ -12,15 +12,59 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use tass_lex_corpus::SAMPLE_DIR;
 use tassle_lexicons::com_superbfowle::tass::{
     enervate::Enervate, meditate::Meditate, node::Node, tassilize::Tassilize,
 };
 
-/// Placeholder DID for sample at-uris (not a real publisher).
-const SAMPLE_DID: &str = "did:plc:samplesamplesamplesample";
+#[derive(Parser)]
+#[command(name = "xtask", about = "tassle workspace task runner")]
+struct Cli {
+    #[command(subcommand)]
+    cmd: Cmd,
+}
 
-/// Fixed timestamp so diffs are stable. Regenerated on every run.
+#[derive(Subcommand)]
+enum Cmd {
+    /// Regenerate Rust lexicon types into crates/tassle-lexicons/src
+    Codegen {
+        #[arg(short, long, default_value = "crates/tass-lex-schema/lexicons")]
+        input: PathBuf,
+        #[arg(short, long, default_value = "crates/tassle-lexicons/src")]
+        output: PathBuf,
+    },
+    /// Regenerate example records into crates/tass-lex-sample/samples
+    Samples {
+        #[arg(short, long, default_value = "crates/tass-lex-sample/samples")]
+        out: PathBuf,
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+fn main() -> miette::Result<ExitCode> {
+    match Cli::parse().cmd {
+        Cmd::Codegen { input, output } => run_codegen(&input, &output),
+        Cmd::Samples { out, dry_run } => run_samples(&out, dry_run),
+    }
+}
+
+fn run_codegen(input: &std::path::Path, output: &std::path::Path) -> miette::Result<ExitCode> {
+    use jacquard_lexicon::codegen::{CodeGenerator, CodegenMode};
+    use jacquard_lexicon::corpus::LexiconCorpus;
+
+    eprintln!("Loading lexicons from {}...", input.display());
+    let corpus = LexiconCorpus::load_from_dir(input)?;
+    let count = corpus.iter().count();
+    eprintln!("Loaded {count} lexicon documents");
+
+    eprintln!("Generating code...");
+    let codegen = CodeGenerator::with_mode(&corpus, "crate".to_string(), CodegenMode::Pretty);
+    codegen.write_to_disk(output)?;
+    eprintln!("Generated code to {}", output.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+const SAMPLE_DID: &str = "did:plc:samplesamplesamplesample";
 const SAMPLE_AT: &str = "2026-06-21T12:00:00.000Z";
 
 fn sample_at() -> Datetime {
@@ -32,18 +76,6 @@ fn sample_uri(collection: &str, rkey: &str) -> String {
     format!("at://{SAMPLE_DID}/{collection}/{rkey}")
 }
 
-#[derive(Args, Debug)]
-pub struct SamplesArgs {
-    /// Output directory
-    #[arg(short, long, default_value = SAMPLE_DIR)]
-    pub out: PathBuf,
-
-    /// Print sample filenames without writing
-    #[arg(long)]
-    pub dry_run: bool,
-}
-
-/// Definition of one sample file.
 struct SampleDef {
     filename: &'static str,
     description: &'static str,
@@ -122,10 +154,10 @@ fn build_samples() -> miette::Result<Vec<SampleDef>> {
     ])
 }
 
-pub fn run(args: SamplesArgs, _format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+fn run_samples(out: &std::path::Path, dry_run: bool) -> miette::Result<ExitCode> {
     let samples = build_samples()?;
 
-    if args.dry_run {
+    if dry_run {
         for s in &samples {
             println!("  {}", s.filename);
             println!("    {}", s.description);
@@ -133,20 +165,14 @@ pub fn run(args: SamplesArgs, _format: crate::commands::OutputFormat) -> miette:
         return Ok(ExitCode::SUCCESS);
     }
 
-    fs::create_dir_all(&args.out).into_diagnostic()?;
-
+    fs::create_dir_all(out).into_diagnostic()?;
     for s in &samples {
-        let path = args.out.join(s.filename);
+        let path = out.join(s.filename);
         let mut file = fs::File::create(&path).into_diagnostic()?;
         let json = serde_json::to_string_pretty(&s.record).into_diagnostic()?;
         writeln!(file, "{json}").into_diagnostic()?;
         eprintln!("  wrote {}", path.display());
     }
-
-    eprintln!(
-        "✓ {} samples written to {}",
-        samples.len(),
-        args.out.display()
-    );
+    eprintln!("✓ {} samples written to {}", samples.len(), out.display());
     Ok(ExitCode::SUCCESS)
 }

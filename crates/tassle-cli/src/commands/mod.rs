@@ -5,7 +5,6 @@ pub mod config;
 pub mod generate;
 pub mod mage;
 pub mod repo;
-pub mod samples;
 pub mod self_record;
 
 use clap::ValueEnum;

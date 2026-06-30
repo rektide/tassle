@@ -63,18 +63,18 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
     ```
     Cargo.toml                  # workspace
     crates/
-    ├── tass-lex-corpus/        # canonical lexicon JSON corpus
+    ├── tass-lex-schema/        # canonical lexicon JSON corpus
     ├── tassle-lexicons/         # generated, .gitignore'd or committed?
     │   └── src/...              # output of jacquard-codegen
     └── tassle-codegen/          # thin binary wrapping jacquard-lexgen
         ├── Cargo.toml           # git dep on rsform/jacquard
-        └── src/main.rs          # read tass-lex-corpus/lexicons, write tassle-lexicons/
+        └── src/main.rs          # read tass-lex-schema/lexicons, write tassle-lexicons/
     ```
 
 2. **A `lexicons.kdl`** at project root:
    ```kdl
    source "tassle" type="path" priority=100 {
-        path "crates/tass-lex-corpus/lexicons"
+        path "crates/tass-lex-schema/lexicons"
         pattern "**/*.json"
     }
    ```

@@ -4,14 +4,14 @@
 
 This directory holds local snapshots of upstream ATProto lexicon schemas that **tassle** depends on or draws design inspiration from. These are **manual snapshots** copied from their publishing accounts — they are *not* generated from tassle's own sources, and they may lag behind upstream. Always consult the source links below for the current canonical version.
 
-Tass's own lexicons live in the data-first corpus crate at [`crates/tass-lex-corpus/lexicons/`](../../crates/tass-lex-corpus/lexicons/):
+Tass's own lexicons live in the `tass-lex-schema` crate at [`crates/tass-lex-schema/lexicons/`](../../crates/tass-lex-schema/lexicons/):
 
-- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.node.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.node.json)
-- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.form.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.form.json)
-- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.resonance.json)
-- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.enervate.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.enervate.json)
-- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.meditate.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.meditate.json)
-- [`crates/tass-lex-corpus/lexicons/com.superbfowle.tass.tassilize.json`](../../crates/tass-lex-corpus/lexicons/com.superbfowle.tass.tassilize.json)
+- [`crates/tass-lex-schema/lexicons/com.superbfowle.tass.node.json`](../../crates/tass-lex-schema/lexicons/com.superbfowle.tass.node.json)
+- [`crates/tass-lex-schema/lexicons/com.superbfowle.tass.form.json`](../../crates/tass-lex-schema/lexicons/com.superbfowle.tass.form.json)
+- [`crates/tass-lex-schema/lexicons/com.superbfowle.tass.resonance.json`](../../crates/tass-lex-schema/lexicons/com.superbfowle.tass.resonance.json)
+- [`crates/tass-lex-schema/lexicons/com.superbfowle.tass.enervate.json`](../../crates/tass-lex-schema/lexicons/com.superbfowle.tass.enervate.json)
+- [`crates/tass-lex-schema/lexicons/com.superbfowle.tass.meditate.json`](../../crates/tass-lex-schema/lexicons/com.superbfowle.tass.meditate.json)
+- [`crates/tass-lex-schema/lexicons/com.superbfowle.tass.tassilize.json`](../../crates/tass-lex-schema/lexicons/com.superbfowle.tass.tassilize.json)
 
 ## Sources
 

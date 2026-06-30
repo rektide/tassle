@@ -1,7 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/tass-lex-corpus",
+    "crates/tass-lex-schema",
+    "crates/tass-lex-sample",
     "crates/tass-quint",
     "crates/tass-quint-jac",
     "crates/tassle-codegen",
@@ -9,6 +10,7 @@ members = [
     "crates/tassle-validate",
     "crates/tassle-cli",
     "crates/tassle-ledger",
+    "xtask",
 ]
 
 [workspace.package]

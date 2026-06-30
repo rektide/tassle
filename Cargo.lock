@@ -3740,7 +3740,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
-name = "tass-lex-corpus"
+name = "tass-lex-sample"
+version = "0.1.0"
+
+[[package]]
+name = "tass-lex-schema"
 version = "0.1.0"
 
 [[package]]
@@ -3781,7 +3785,6 @@ dependencies = [
  "serde",
  "serde_ipld_dagcbor",
  "serde_json",
- "tass-lex-corpus",
  "tass-quint",
  "tassle-lexicons",
  "tempfile",
@@ -4775,6 +4778,19 @@ dependencies = [
  "log",
  "mac",
  "markup5ever",
+]
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "jacquard-common",
+ "jacquard-lexicon",
+ "miette",
+ "serde_json",
+ "tassle-lexicons",
 ]
 
 [[package]]

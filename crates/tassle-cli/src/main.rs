@@ -44,8 +44,6 @@ enum Command {
     /// Inspect self-rkey aggregate records
     #[command(name = "self")]
     SelfRecord(commands::self_record::SelfArgs),
-    /// Generate example records into the lexicon corpus
-    Samples(commands::samples::SamplesArgs),
 }
 
 #[tokio::main]
@@ -62,6 +60,5 @@ async fn main() -> miette::Result<ExitCode> {
         Command::Mage(args) => commands::mage::run(args, format).await,
         Command::Repo(args) => commands::repo::run(args, format).await,
         Command::SelfRecord(args) => commands::self_record::run(args, format).await,
-        Command::Samples(args) => commands::samples::run(args, format),
     }
 }
