@@ -1,4 +1,4 @@
-use crate::config;
+use tassle_config::config;
 use crate::profile_config;
 use clap::{Args, Subcommand};
 use figment2::ops::{OperationStatus, RecordedIntent};

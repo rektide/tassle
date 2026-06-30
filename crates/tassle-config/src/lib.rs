@@ -1,13 +1,14 @@
 //! Tassle config + profile + auth bundle — the foundation the app bootstraps
 //! from.
 //!
-//! This crate consolidates the three concerns that today live scattered across
-//! `tassle-cli`'s `config.rs` / `profile_config.rs` / `auth.rs`:
+//! This crate owns the config/auth concerns that used to live in `tassle-cli`:
 //!
 //! - **config** ([`config`]): figment2 config dir, active-profile selection, the
-//!   [`Profile`] shape.
+//!   [`Profile`] shape. `tassle-cli` consumes this module directly (its old
+//!   `config.rs` copy was deleted); the legacy did-keyed `profile_config.rs`
+//!   write helpers still live in the CLI pending their own retirement.
 //! - **auth** ([`auth`], behind the `auth-store` feature): an [`AuthedClient`]
-//!   resumed from the active profile's fjall app-password store and pointed at
+//!   resumed from the active profile's turso app-password store and pointed at
 //!   its PDS — the single path write paths compose.
 //!
 //! ```no_run
@@ -20,10 +21,10 @@
 //! # Ok(()) } }
 //! ```
 //!
-//! This is an initial **spike** to evaluate the layering and API; it duplicates
-//! the figment profile model from `tassle-cli::config` rather than extracting
-//! it yet. Migration (make `tassle-cli` depend on this crate and delete its
-//! copies) is the follow-up once the design settles.
+//! The figment profile model is now the single copy: `tassle-cli` depends on
+//! this crate and its duplicate `config.rs` was removed (tass-cli-config-dedup).
+//! Next: a service (non-login) config layer for the axum OAuth web flow
+//! (tass-config-service-shape), since today's [`Profile`] is login-centric.
 
 pub mod config;
 

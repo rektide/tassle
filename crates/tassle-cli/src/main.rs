@@ -1,7 +1,6 @@
 // tassle: the Rust CLI.
 
 mod commands;
-mod config;
 mod profile_config;
 
 use clap::{Parser, Subcommand};

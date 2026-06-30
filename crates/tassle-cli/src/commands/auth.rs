@@ -177,19 +177,19 @@ async fn status(
 ) -> miette::Result<ExitCode> {
     use miette::IntoDiagnostic;
     let json = format.is_json();
-    let profiles = crate::config::available_profiles()?;
-    let active_figment = crate::config::active_figment(profile)?;
-    let active_name = crate::config::active_name(&active_figment);
+    let profiles = tassle_config::config::available_profiles()?;
+    let active_figment = tassle_config::config::active_figment(profile)?;
+    let active_name = tassle_config::config::active_name(&active_figment);
 
     let mut rows: Vec<serde_json::Value> = Vec::new();
     for name in &profiles {
-        let figment = crate::config::build_figment(Some(name))?;
-        let p = crate::config::active_profile(&figment)?;
+        let figment = tassle_config::config::build_figment(Some(name))?;
+        let p = tassle_config::config::active_profile(&figment)?;
         let store_path = p.store_path.clone().unwrap_or_else(|| {
-            crate::config::tassle_config_dir()
+            tassle_config::config::tassle_config_dir()
                 .unwrap_or_default()
                 .join("store")
-                .join(format!("{name}.fjall"))
+                .join(format!("{name}.db"))
         });
         let session = session_status(&store_path, p.did.as_deref(), p.session_id.as_deref()).await;
         rows.push(serde_json::json!({
@@ -206,7 +206,7 @@ async fn status(
     if json {
         println!("{}", serde_json::to_string_pretty(&rows).into_diagnostic()?);
     } else if rows.is_empty() {
-        println!("(no profiles in {})", crate::config::dropins_dir()?.display());
+        println!("(no profiles in {})", tassle_config::config::dropins_dir()?.display());
     } else {
         for r in &rows {
             let mark = if r["active"].as_bool() == Some(true) { "*" } else { " " };
@@ -225,7 +225,7 @@ async fn status(
 
 fn switch(args: SwitchArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     use miette::IntoDiagnostic;
-    let profiles = crate::config::available_profiles()?;
+    let profiles = tassle_config::config::available_profiles()?;
     if !profiles.iter().any(|p| p == &args.profile) {
         miette::bail!(
             "unknown profile '{}'; available: {}",
@@ -233,9 +233,9 @@ fn switch(args: SwitchArgs, format: crate::commands::OutputFormat) -> miette::Re
             if profiles.is_empty() { "(none)".to_string() } else { profiles.join(", ") }
         );
     }
-    let dir = crate::config::tassle_config_dir()?;
+    let dir = tassle_config::config::tassle_config_dir()?;
     std::fs::create_dir_all(&dir).into_diagnostic()?;
-    let base = crate::config::config_file()?;
+    let base = tassle_config::config::config_file()?;
     let rendered = profile_config::write_value_at(&base, "profile", &args.profile)?;
     if format.is_json() {
         println!(
@@ -336,9 +336,9 @@ async fn login_real(
     use jacquard::identity::JacquardResolver;
 
     // Active profile name (resolves the store path + the fragment to write).
-    let figment = crate::config::active_figment(profile)?;
-    let profile_name = crate::config::active_name(&figment);
-    let active = crate::config::active_profile(&figment)?;
+    let figment = tassle_config::config::active_figment(profile)?;
+    let profile_name = tassle_config::config::active_name(&figment);
+    let active = tassle_config::config::active_profile(&figment)?;
 
     // App password: --password > TASSLE_PASSWORD > interactive prompt.
     let password = args
@@ -353,7 +353,7 @@ async fn login_real(
 
     // Open the profile's turso store (explicit store_path, else a per-profile default).
     let store_path = active.store_path.clone().unwrap_or_else(|| {
-        crate::config::tassle_config_dir()
+        tassle_config::config::tassle_config_dir()
             .expect("config dir")
             .join("store")
             .join(format!("{profile_name}.db"))
@@ -390,7 +390,7 @@ async fn login_real(
 
     // The AtpSession JWTs were persisted into the fjall store by jacquard.
     // Persist the NON-secret profile fragment: did/handle/pds/session_id.
-    let dir = crate::config::dropins_dir()?;
+    let dir = tassle_config::config::dropins_dir()?;
     std::fs::create_dir_all(&dir).into_diagnostic()?;
     let frag = dir.join(format!("{profile_name}.toml"));
     let did = atp.did.to_string();

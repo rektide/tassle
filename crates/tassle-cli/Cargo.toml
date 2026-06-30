@@ -19,7 +19,7 @@ auth-store = [
     "dep:jac-store-fjall",
     "dep:rpassword",
     "dep:base64",
-    "dep:tassle-config",
+    "tassle-config/auth-store",
     "dep:tass-quint-jac",
 ]
 
@@ -28,7 +28,9 @@ tassle-lexicons = { path = "../tassle-lexicons" }
 tass-quint = { path = "../tass-quint" }
 # Optional: quint write commands + authed-client. Gated by `auth-store`.
 tass-quint-jac = { path = "../tass-quint-jac", optional = true }
-tassle-config = { path = "../tassle-config", features = ["auth-store"], optional = true }
+# Base config/profile model (figment2). The `auth-store` feature additionally
+# enables its `auth-store` feature for the AuthedClient path.
+tassle-config = { path = "../tassle-config" }
 jacquard.workspace = true
 jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
