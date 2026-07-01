@@ -1,0 +1,20 @@
+[package]
+name = "tass-config-tailscale"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Tailscale config fragment for tassle services. Pure config shape — runtime lifecycle lives in the consuming crate."
+
+[lib]
+name = "tass_config_tailscale"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+shell-words = "1"
+
+[dev-dependencies]
+figment2 = { workspace = true }
+miette = { version = "7", features = ["fancy"] }

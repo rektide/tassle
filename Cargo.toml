@@ -10,6 +10,7 @@ members = [
     "crates/tass-output",
     "crates/tass-codegen",
     "crates/tass-config",
+    "crates/tass-config-tailscale",
     "crates/tass-lex",
     "crates/tass-lex-rpg",
     "crates/tass-lex-rpg-schema",
