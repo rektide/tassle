@@ -7,8 +7,10 @@
 //!
 //! 1. **Raw** — the upstream rpg JSON snapshots, patched for Jacquard codegen
 //!    compatibility (bare `"type":"object"` → add `"properties":{}`;
-//!    `"format":"date"` → `"format":"datetime"`). Patches are minimal; see the
-//!    patch script committed alongside the lexicons.
+//!    `"format":"date"` → `"format":"datetime"`). Also includes tass-specific
+//!    overlay fields baked into `actor.rpg.stats#mageStats`:
+//!    `milliQuintessence` and `milliQuintessenceUpdatedAt`. Patches are
+//!    minimal; the overlay dir exists for future proper separation.
 //! 2. **Overlay** — mage-specific schema additions layered on top of the raw
 //!    upstream set. Starts empty; fills in via the `tass-lex-mage-codegen`
 //!    follow-up. Lives in `overlay/`.

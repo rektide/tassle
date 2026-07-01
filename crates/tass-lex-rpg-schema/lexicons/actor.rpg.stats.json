@@ -4079,11 +4079,22 @@
 					"type": "ref",
 					"ref": "#mageWillpower"
 				},
-				"quintessence": {
-					"type": "integer",
-					"minimum": 0,
-					"maximum": 20
-				},
+			"quintessence": {
+				"type": "integer",
+				"minimum": 0,
+				"maximum": 20
+			},
+			"milliQuintessence": {
+				"type": "integer",
+				"minimum": 0,
+				"maximum": 20000,
+				"description": "Tass overlay: fixed-point quintessence in milli-units (actual = value / 1000). Source of truth for quintessence; the integer quintessence field is the derived floor."
+			},
+			"milliQuintessenceUpdatedAt": {
+				"type": "string",
+				"format": "datetime",
+				"description": "Tass overlay: when milliQuintessence was last updated."
+			},
 				"paradox": {
 					"type": "integer",
 					"minimum": 0,

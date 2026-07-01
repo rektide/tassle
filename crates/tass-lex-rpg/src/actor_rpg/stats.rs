@@ -1883,6 +1883,12 @@ pub struct MageStats<S: BosStr = DefaultStr> {
     pub meditation: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub melee: Option<i64>,
+    ///Tass overlay: fixed-point quintessence in milli-units (actual = value / 1000). Source of truth for quintessence; the integer quintessence field is the derived floor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub milli_quintessence: Option<i64>,
+    ///Tass overlay: when milliQuintessence was last updated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub milli_quintessence_updated_at: Option<Datetime>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mind: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -10396,6 +10402,24 @@ impl<S: BosStr> LexiconSchema for MageStats<S> {
                 });
             }
         }
+        if let Some(ref value) = self.milli_quintessence {
+            if *value > 20000i64 {
+                return Err(ConstraintError::Maximum {
+                    path: ValidationPath::from_field("milli_quintessence"),
+                    max: 20000i64,
+                    actual: *value,
+                });
+            }
+        }
+        if let Some(ref value) = self.milli_quintessence {
+            if *value < 0i64 {
+                return Err(ConstraintError::Minimum {
+                    path: ValidationPath::from_field("milli_quintessence"),
+                    min: 0i64,
+                    actual: *value,
+                });
+            }
+        }
         if let Some(ref value) = self.mind {
             if *value > 5i64 {
                 return Err(ConstraintError::Maximum {
@@ -18451,6 +18475,26 @@ fn lexicon_doc_actor_rpg_stats() -> LexiconDoc<'static> {
                             LexObjectProperty::Integer(LexInteger {
                                 minimum: Some(0i64),
                                 maximum: Some(5i64),
+                                ..Default::default()
+                            }),
+                        );
+                        map.insert(
+                            SmolStr::new_static("milliQuintessence"),
+                            LexObjectProperty::Integer(LexInteger {
+                                minimum: Some(0i64),
+                                maximum: Some(20000i64),
+                                ..Default::default()
+                            }),
+                        );
+                        map.insert(
+                            SmolStr::new_static("milliQuintessenceUpdatedAt"),
+                            LexObjectProperty::String(LexString {
+                                description: Some(
+                                    CowStr::new_static(
+                                        "Tass overlay: when milliQuintessence was last updated.",
+                                    ),
+                                ),
+                                format: Some(LexStringFormat::Datetime),
                                 ..Default::default()
                             }),
                         );
