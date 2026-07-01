@@ -4861,6 +4861,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tass-stats"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "tassle-cli"
 version = "0.1.0"
 dependencies = [

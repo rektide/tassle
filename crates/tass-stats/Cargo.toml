@@ -1,0 +1,19 @@
+[package]
+name = "tass-stats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Pure actor.rpg.stats record-family shape detection + summaries. No jacquard, no IO."
+
+[lib]
+name = "tass_stats"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
