@@ -60,12 +60,12 @@ interface SampleFile {
 
 const NODE_URIS = {
 	// Reference at-uris used by other samples. The rkey is illustrative.
-	crystalSpring: sampleAtUri("com.superbfowle.tass.node", "3ksamplesample1"),
+	crystalSpring: sampleAtUri("at.telluri.node", "3ksamplesample1"),
 };
 
 const TASSILIZE_URIS = {
 	silverCoin: sampleAtUri(
-		"com.superbfowle.tass.tassilize",
+		"at.telluri.act.tassilize",
 		"3ksamplesample2",
 	),
 };

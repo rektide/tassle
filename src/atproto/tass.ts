@@ -1,9 +1,9 @@
 /**
  * Tass collections and their record builders.
  *
- * Each collection is its own NSID under com.superbfowle.tass.* — see
+ * Each collection is its own NSID under at.telluri.* — see
  * lexicons/ for the JSON schemas. Three actions target a Node (an at-uri
- * to a com.superbfowle.tass.node record, or eventually any "place where
+ * to an at.telluri.node record, or eventually any "place where
  * quintessence gathers") and carry an ISO timestamp for per-action LWW.
  *
  * Builders are fluent (bon-style): required fields are fluent setters that
@@ -14,10 +14,10 @@
  */
 
 export const TASS_COLLECTIONS = {
-	node: "com.superbfowle.tass.node",
-	tassilize: "com.superbfowle.tass.tassilize",
-	meditate: "com.superbfowle.tass.meditate",
-	enervate: "com.superbfowle.tass.enervate",
+	node: "at.telluri.node",
+	tassilize: "at.telluri.act.tassilize",
+	meditate: "at.telluri.act.meditate",
+	enervate: "at.telluri.act.enervate",
 } as const;
 
 export type TassCollection =
