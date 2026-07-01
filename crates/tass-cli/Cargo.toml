@@ -20,7 +20,6 @@ auth-store = [
     "dep:rpassword",
     "dep:base64",
     "tass-config/auth-store",
-    "dep:tass-repo-mage",
 ]
 
 [dependencies]
@@ -29,8 +28,10 @@ tass-quint = { path = "../tass-quint" }
 tass-mage = { path = "../tass-mage" }
 tass-repo = { path = "../tass-repo" }
 tass-stats = { path = "../tass-stats" }
-# Optional: mage-record DAO (quint write commands + authed-client). Gated by `auth-store`.
-tass-repo-mage = { path = "../tass-repo-mage", optional = true }
+# Mage-record DAO: the actor.rpg.stats read helpers (always) + QuintClient write
+# path (used by the auth-store quint command). Non-optional — its deps (tass-repo,
+# jacquard) are already in the base build, so it costs the lean CLI nothing.
+tass-repo-mage = { path = "../tass-repo-mage" }
 # Base config/profile model (figment2). The `auth-store` feature additionally
 # enables its `auth-store` feature for the AuthedClient path.
 tass-config = { path = "../tass-config" }

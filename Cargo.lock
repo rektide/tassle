@@ -5072,6 +5072,8 @@ dependencies = [
  "serde_json",
  "tass-mage",
  "tass-quint",
+ "tass-repo",
+ "tass-stats",
 ]
 
 [[package]]

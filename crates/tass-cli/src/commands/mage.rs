@@ -1,13 +1,9 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
-use jacquard_common::types::ident::AtIdentifier;
-use jacquard_common::xrpc::XrpcClient;
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
 use std::process::ExitCode;
-
-const STATS_COLLECTION: &str = "actor.rpg.stats";
 
 #[derive(Args, Debug)]
 pub struct MageArgs {
@@ -82,50 +78,6 @@ pub async fn run(
     }
 }
 
-async fn get_stats_record<C: XrpcClient + Sync + ?Sized>(
-    client: &C,
-    repo: AtIdentifier,
-    rkey: &str,
-) -> miette::Result<Option<tass_repo::RecordEnvelope>> {
-    tass_repo::get_record(client, repo, STATS_COLLECTION, rkey)
-        .await
-        .map_err(|e| miette::miette!("{e}"))
-}
-
-async fn list_stats_records<C: XrpcClient + Sync + ?Sized>(
-    client: &C,
-    repo: AtIdentifier,
-    pds: String,
-    args: &ListArgs,
-) -> miette::Result<StatsListOutput> {
-    if args.limit < 1 || args.limit > 100 {
-        miette::bail!("--limit must be between 1 and 100");
-    }
-    let repo_str = repo.as_str().to_owned();
-    let page = tass_repo::list_records(
-        client,
-        repo,
-        STATS_COLLECTION,
-        Some(args.limit),
-        args.cursor.clone(),
-        false,
-    )
-    .await
-    .map_err(|e| miette::miette!("{e}"))?;
-    let records = page
-        .records
-        .into_iter()
-        .map(|env| tass_stats::summarize_record(&env.uri, env.cid.as_deref(), &env.value))
-        .collect();
-
-    Ok(StatsListOutput {
-        repo: repo_str,
-        collection: STATS_COLLECTION.to_owned(),
-        pds,
-        cursor: page.cursor,
-        records,
-    })
-}
 
 async fn list(
     args: ListArgs,
@@ -144,7 +96,21 @@ async fn list(
     let pds = resolved.pds;
 
     if args.all {
-        let output = list_stats_records(&client, repo, pds, &args).await?;
+        if args.limit < 1 || args.limit > 100 {
+            miette::bail!("--limit must be between 1 and 100");
+        }
+        let repo_str = repo.as_str().to_owned();
+        let page =
+            tass_repo_mage::list_stats_records(&client, repo, Some(args.limit), args.cursor.clone(), false)
+                .await
+                .map_err(|e| miette::miette!("{e}"))?;
+        let output = StatsListOutput {
+            repo: repo_str,
+            collection: tass_repo_mage::STATS_COLLECTION.to_owned(),
+            pds,
+            cursor: page.cursor,
+            records: page.records,
+        };
         if format.is_json() {
             println!(
                 "{}",
@@ -173,7 +139,10 @@ async fn list(
     };
 
     for rkey in rkeys {
-        let Some(record) = get_stats_record(&client, repo.clone(), &rkey).await? else {
+        let Some(record) = tass_repo_mage::get_stats_record(&client, repo.clone(), &rkey)
+            .await
+            .map_err(|e| miette::miette!("{e}"))?
+        else {
             continue;
         };
         let summary = tass_stats::summarize_record(&record.uri, record.cid.as_deref(), &record.value);

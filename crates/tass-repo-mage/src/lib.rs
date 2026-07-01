@@ -49,6 +49,47 @@ pub const STATS_COLLECTION: &str = "actor.rpg.stats";
 /// Default rkey for the canonical modern mage record.
 pub const DEFAULT_RKEY: &str = "mage";
 
+/// One page of `actor.rpg.stats` records, each summarized by shape (see
+/// [`tass_stats::summarize_record`]).
+pub struct StatsPage {
+    pub cursor: Option<String>,
+    pub records: Vec<tass_stats::StatsSummary>,
+}
+
+/// Read one `actor.rpg.stats` record by `rkey`, or `Ok(None)` if absent.
+///
+/// The repo-touching read half of the mage DAO: it owns the collection NSID so
+/// callers don't. The client must already be pointed at the actor's PDS.
+pub async fn get_stats_record<C: XrpcClient + Sync + ?Sized>(
+    client: &C,
+    repo: AtIdentifier,
+    rkey: &str,
+) -> tass_repo::Result<Option<tass_repo::RecordEnvelope>> {
+    tass_repo::get_record(client, repo, STATS_COLLECTION, rkey).await
+}
+
+/// List an actor's `actor.rpg.stats` records, each summarized by shape. The
+/// client must already be pointed at the actor's PDS.
+pub async fn list_stats_records<C: XrpcClient + Sync + ?Sized>(
+    client: &C,
+    repo: AtIdentifier,
+    limit: Option<i64>,
+    cursor: Option<String>,
+    reverse: bool,
+) -> tass_repo::Result<StatsPage> {
+    let page =
+        tass_repo::list_records(client, repo, STATS_COLLECTION, limit, cursor, reverse).await?;
+    let records = page
+        .records
+        .into_iter()
+        .map(|env| tass_stats::summarize_record(&env.uri, env.cid.as_deref(), &env.value))
+        .collect();
+    Ok(StatsPage {
+        cursor: page.cursor,
+        records,
+    })
+}
+
 pub type Result<T> = std::result::Result<T, QuintError>;
 
 /// Errors from [`QuintClient`]. Hand-rolled (no thiserror) to keep the
