@@ -1,6 +1,6 @@
 //! Example Tass records.
 //!
-//! A committed snapshot of example `com.superbfowle.tass.*` records, regenerated
+//! A committed snapshot of example `at.telluri.*` records, regenerated
 //! from the generated builders by `cargo xtask samples`. The canonical lexicon
 //! schemas live in `tass-lex-schema`; this crate only ships fixture records.
 

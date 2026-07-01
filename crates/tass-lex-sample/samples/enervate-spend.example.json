@@ -1,7 +1,7 @@
 {
-  "$type": "com.superbfowle.tass.enervate",
+  "$type": "at.telluri.act.enervate",
   "amount": 2,
   "createdAt": "2026-06-21T12:00:00.000000Z",
   "purpose": "Lock the door behind us — looks like it was just unlocked all along.",
-  "tass": "at://did:plc:samplesamplesamplesample/com.superbfowle.tass.tassilize/3ksamplesample2"
+  "tass": "at://did:plc:samplesamplesamplesample/at.telluri.act.tassilize/3ksamplesample2"
 }
