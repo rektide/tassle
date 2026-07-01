@@ -5050,6 +5050,7 @@ name = "tass-listen"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "figment2",
  "miette",
  "serde",
  "tass-config",
@@ -5110,6 +5111,7 @@ version = "0.1.0"
 dependencies = [
  "jacquard",
  "jacquard-common",
+ "serde",
  "serde_json",
  "tass-engine",
  "tass-repo",

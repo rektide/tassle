@@ -15,7 +15,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cfg = SpacedustConfig::for_account(account);
     let mut sub = Subscriber::connect(&cfg).await?;
-    eprintln!("connected: watching {} at {}", cfg.account, cfg.endpoint);
+    eprintln!(
+        "connected: watching {} at {}",
+        cfg.account.as_deref().unwrap_or("(none)"),
+        cfg.endpoint
+    );
 
     while let Some(link) = sub.next_event().await? {
         println!(

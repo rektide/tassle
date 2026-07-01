@@ -15,7 +15,7 @@
 use serde::Deserialize;
 
 use tass_engine::Dispatcher;
-use tass_slingshot::SlingshotHydrator;
+use tass_slingshot::{SlingshotConfig, SlingshotHydrator};
 use tass_spacedust::{SpacedustConfig, SpacedustSource};
 
 /// CLI flags for the listener. Embeddable in `tass-cli` as a subcommand's args.
@@ -33,34 +33,34 @@ pub struct ListenArgs {
     pub slingshot: Option<String>,
 }
 
-/// The `[service.listen]` config block. Per-verb tables
-/// (`[service.listen.<verb>]`) fall through to these via `extract_cascade`
-/// once verbs exist.
+/// The `[service.listen]` config block — **composed from the fragments each
+/// crate owns**, not re-declared here:
+///
+/// - the Spacedust connection fields (`account`, `endpoint`, `wanted_sources`,
+///   `instant`) are [`tass_spacedust::SpacedustConfig`], flattened so they sit
+///   directly under `[service.listen]`;
+/// - the hydrator settings are [`tass_slingshot::SlingshotConfig`] under
+///   `[service.listen.slingshot]`.
+///
+/// ```toml
+/// [service.listen]
+/// account  = "did:plc:mage"
+/// endpoint = "wss://spacedust.microcosm.blue/subscribe"
+///
+/// [service.listen.slingshot]
+/// base = "https://slingshot.microcosm.blue"
+/// ```
+///
+/// Per-verb tables (`[service.listen.<verb>]`) fall through to these via
+/// `extract_cascade` once verbs exist.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ListenConfig {
-    /// Spacedust endpoint. Defaults to the public instance.
-    #[serde(default = "default_endpoint")]
-    pub endpoint: String,
-    /// The account we listen for (→ `wantedSubjectDids`). Required at runtime
-    /// (config or `--account`).
+    /// Spacedust connection fragment (owned by `tass-spacedust`).
+    #[serde(flatten)]
+    pub spacedust: SpacedustConfig,
+    /// Hydrator fragment (owned by `tass-slingshot`).
     #[serde(default)]
-    pub account: Option<String>,
-    /// Slingshot base URL for hydration. Defaults to the public instance.
-    #[serde(default = "default_slingshot")]
-    pub slingshot: String,
-    /// Optional `wantedSources` narrowing.
-    #[serde(default)]
-    pub wanted_sources: Vec<String>,
-    /// Bypass Spacedust's delay buffer (default false).
-    #[serde(default)]
-    pub instant: bool,
-}
-
-fn default_endpoint() -> String {
-    tass_spacedust::DEFAULT_ENDPOINT.to_string()
-}
-fn default_slingshot() -> String {
-    tass_slingshot::DEFAULT_BASE.to_string()
+    pub slingshot: SlingshotConfig,
 }
 
 /// Build the config (profile figment → `[service.listen]` → CLI overrides) and
@@ -70,36 +70,32 @@ pub async fn run(args: ListenArgs, profile: Option<&str>) -> miette::Result<()> 
     let mut cfg: ListenConfig =
         tass_config::config::extract_cascade(&figment, &["service.listen"])?;
 
-    // CLI flags override config fields.
+    // CLI flags override individual fragment fields.
     if let Some(account) = args.account {
-        cfg.account = Some(account);
+        cfg.spacedust.account = Some(account);
     }
     if let Some(endpoint) = args.endpoint {
-        cfg.endpoint = endpoint;
+        cfg.spacedust.endpoint = endpoint;
     }
     if let Some(slingshot) = args.slingshot {
-        cfg.slingshot = slingshot;
+        cfg.slingshot.base = slingshot;
     }
 
-    let account = cfg.account.ok_or_else(|| {
-        miette::miette!("no account to listen for: set [service.listen].account or pass --account")
-    })?;
+    if cfg.spacedust.account.is_none() {
+        miette::bail!(
+            "no account to listen for: set [service.listen].account or pass --account"
+        );
+    }
 
-    let spacedust = SpacedustConfig {
-        endpoint: cfg.endpoint,
-        account,
-        wanted_sources: cfg.wanted_sources,
-        instant: cfg.instant,
-    };
-    let hydrator = SlingshotHydrator::new(cfg.slingshot);
+    let hydrator = SlingshotHydrator::from_config(cfg.slingshot);
 
     tracing::info!(
-        account = %spacedust.account,
-        endpoint = %spacedust.endpoint,
+        account = cfg.spacedust.account.as_deref().unwrap_or_default(),
+        endpoint = %cfg.spacedust.endpoint,
         "starting listener",
     );
 
-    let source = SpacedustSource::connect(&spacedust, hydrator)
+    let source = SpacedustSource::connect(&cfg.spacedust, hydrator)
         .await
         .map_err(|e| miette::miette!("failed to connect to spacedust: {e}"))?;
 
@@ -109,4 +105,42 @@ pub async fn run(args: ListenArgs, profile: Option<&str>) -> miette::Result<()> 
     tass_engine::run(source, dispatcher).await;
     tracing::info!("listener stream ended");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use figment2::providers::{Format, Toml};
+    use figment2::Figment;
+
+    #[test]
+    fn listen_config_composes_fragments() {
+        let toml = r#"
+            [service.listen]
+            account  = "did:plc:mage"
+            endpoint = "wss://spacedust.example/subscribe"
+            instant  = true
+
+            [service.listen.slingshot]
+            base = "https://slingshot.example"
+        "#;
+        let figment = Figment::from(Toml::string(toml));
+        let cfg: ListenConfig =
+            tass_config::config::extract_cascade(&figment, &["service.listen"]).unwrap();
+
+        // Spacedust fragment (flattened) + slingshot fragment (nested).
+        assert_eq!(cfg.spacedust.account.as_deref(), Some("did:plc:mage"));
+        assert_eq!(cfg.spacedust.endpoint, "wss://spacedust.example/subscribe");
+        assert!(cfg.spacedust.instant);
+        assert_eq!(cfg.slingshot.base, "https://slingshot.example");
+    }
+
+    #[test]
+    fn absent_config_uses_fragment_defaults() {
+        let cfg: ListenConfig =
+            tass_config::config::extract_cascade(&Figment::new(), &["service.listen"]).unwrap();
+        assert_eq!(cfg.spacedust.account, None); // required later; validated in run()
+        assert_eq!(cfg.spacedust.endpoint, tass_spacedust::DEFAULT_ENDPOINT);
+        assert_eq!(cfg.slingshot.base, tass_slingshot::DEFAULT_BASE);
+    }
 }

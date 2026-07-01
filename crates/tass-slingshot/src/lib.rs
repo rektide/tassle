@@ -17,6 +17,27 @@ use tass_engine::{parse_at_uri, Hydrator};
 /// The public microcosm Slingshot instance.
 pub const DEFAULT_BASE: &str = "https://slingshot.microcosm.blue";
 
+/// The tass-slingshot config fragment. A service composes this into its own
+/// config (e.g. `[service.listen.slingshot]`) rather than re-declaring it.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SlingshotConfig {
+    /// Slingshot base URL. Defaults to the public instance ([`DEFAULT_BASE`]).
+    #[serde(default = "default_base")]
+    pub base: String,
+}
+
+fn default_base() -> String {
+    DEFAULT_BASE.to_string()
+}
+
+impl Default for SlingshotConfig {
+    fn default() -> Self {
+        Self {
+            base: default_base(),
+        }
+    }
+}
+
 /// Hydrates records by calling `getRecord` against a Slingshot instance.
 #[derive(Debug, Clone)]
 pub struct SlingshotHydrator {
@@ -32,6 +53,11 @@ impl SlingshotHydrator {
     /// The public microcosm instance ([`DEFAULT_BASE`]).
     pub fn public() -> Self {
         Self::new(DEFAULT_BASE)
+    }
+
+    /// Build from a [`SlingshotConfig`] fragment.
+    pub fn from_config(config: SlingshotConfig) -> Self {
+        Self::new(config.base)
     }
 }
 

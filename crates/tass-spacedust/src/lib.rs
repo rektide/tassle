@@ -44,8 +44,11 @@ pub struct SpacedustConfig {
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
     /// The DID we listen for — becomes `wantedSubjectDids`. This is the account
-    /// people address ("posts at us").
-    pub account: String,
+    /// people address ("posts at us"). Optional at parse time so config may omit
+    /// it and a CLI flag supply it; [`subscribe_url`](Self::subscribe_url) and
+    /// [`Subscriber::connect`] require it to be set.
+    #[serde(default)]
+    pub account: Option<String>,
     /// Optional `wantedSources` narrowing (e.g. only post replies/mentions).
     /// AND-ed with the subject filter server-side; empty = all sources.
     #[serde(default)]
@@ -65,7 +68,7 @@ impl SpacedustConfig {
     pub fn for_account(account: impl Into<String>) -> Self {
         Self {
             endpoint: default_endpoint(),
-            account: account.into(),
+            account: Some(account.into()),
             wanted_sources: Vec::new(),
             instant: false,
         }
@@ -73,11 +76,12 @@ impl SpacedustConfig {
 
     /// Build the full subscribe URL with query parameters (DID percent-encoded).
     pub fn subscribe_url(&self) -> Result<String, SpacedustError> {
+        let account = self.account.as_deref().ok_or(SpacedustError::NoAccount)?;
         let mut url =
             Url::parse(&self.endpoint).map_err(|e| SpacedustError::Url(e.to_string()))?;
         {
             let mut q = url.query_pairs_mut();
-            q.append_pair("wantedSubjectDids", &self.account);
+            q.append_pair("wantedSubjectDids", account);
             for source in &self.wanted_sources {
                 q.append_pair("wantedSources", source);
             }
@@ -122,6 +126,8 @@ struct ClientEvent {
 /// Errors from connecting to or reading from Spacedust.
 #[derive(Debug, thiserror::Error)]
 pub enum SpacedustError {
+    #[error("no account set: config [service.listen].account or --account is required")]
+    NoAccount,
     #[error("invalid endpoint URL: {0}")]
     Url(String),
     #[error("websocket connect failed: {0}")]
@@ -151,7 +157,11 @@ impl Subscriber {
     /// Connect and subscribe using `cfg`.
     pub async fn connect(cfg: &SpacedustConfig) -> Result<Self, SpacedustError> {
         let url = cfg.subscribe_url()?;
-        tracing::info!(endpoint = %cfg.endpoint, account = %cfg.account, "connecting to spacedust");
+        tracing::info!(
+            endpoint = %cfg.endpoint,
+            account = cfg.account.as_deref().unwrap_or_default(),
+            "connecting to spacedust",
+        );
         let (ws, _resp) = connect_async(url.as_str())
             .await
             .map_err(SpacedustError::Connect)?;
@@ -278,7 +288,7 @@ mod tests {
     fn subscribe_url_encodes_did_and_params() {
         let cfg = SpacedustConfig {
             endpoint: DEFAULT_ENDPOINT.to_string(),
-            account: "did:plc:abc123".to_string(),
+            account: Some("did:plc:abc123".to_string()),
             wanted_sources: vec!["app.bsky.feed.post:reply.parent.uri".to_string()],
             instant: false,
         };
