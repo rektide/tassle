@@ -99,9 +99,14 @@ pub async fn run(args: ListenArgs, profile: Option<&str>) -> miette::Result<()> 
         .await
         .map_err(|e| miette::miette!("failed to connect to spacedust: {e}"))?;
 
-    // Verbs (tass-act-*) register here.
+    // Verbs register here. Two flights of enervate:
+    //   - chat (keyword "burn my tass", Spacedust)  → mints the act record
+    //   - act  (at.telluri.act.enervate record)     → attests it
+    // The act flight only fires once a record source (tass-source-jetstream)
+    // feeds act records in; on the Spacedust source it simply never matches.
     let mut dispatcher = Dispatcher::new();
-    dispatcher.register(std::sync::Arc::new(tass_act_enervate::EnervateCommand));
+    dispatcher.register(std::sync::Arc::new(tass_chat_enervate::ChatEnervateCommand));
+    dispatcher.register(std::sync::Arc::new(tass_act_enervate::ActEnervateCommand));
 
     tass_engine::run(source, dispatcher).await;
     tracing::info!("listener stream ended");

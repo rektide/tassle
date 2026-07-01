@@ -39,10 +39,16 @@ pub struct Event {
     pub source_rev: String,
     /// The link target — carries the account we watch.
     pub subject: String,
-    /// Collection of the referring record (e.g. `app.bsky.feed.post`).
+    /// Collection of the referring record (e.g. `app.bsky.feed.post` for a chat
+    /// post, or `at.telluri.act.enervate` for an act record).
     pub collection: String,
-    /// Hydrated human text — what keyword spotting reads.
+    /// Hydrated human text — what keyword spotting reads (the post's `text`).
+    /// Empty for record events that carry no prose.
     pub text: String,
+    /// The hydrated record body, when available — the post for a chat event, or
+    /// the act record itself for a record event. Record-triggered verbs (Flight
+    /// 2) read their fields from here.
+    pub body: Option<serde_json::Value>,
 }
 
 /// The reusable effect vocabulary a verb's FSM composes from — a menu, not a
@@ -224,6 +230,7 @@ mod tests {
             subject: "at://did:plc:mage/app.bsky.feed.post/3k".into(),
             collection: "app.bsky.feed.post".into(),
             text: text.into(),
+            body: None,
         }
     }
 

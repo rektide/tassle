@@ -1,256 +1,180 @@
-//! The **enervate** verb, plugged into `tass-engine` as a [`Command`].
+//! **Flight 2 of enervate — the *act* flight.**
 //!
-//! Triggered by "burn (my) tass". It owns its own `tass-phase` FSM and a
-//! [`EnervateDriver`] that performs the effects — composing the effect
-//! vocabulary rather than sharing a generic machine (see
-//! `doc/discovery/spacedust.md`). The phase graph mirrors `tass-phase`'s
-//! `burn_chain` illustration, made real:
+//! Enervate is a dual flow pivoting on the `at.telluri.act.enervate` **record**
+//! (see `doc/act.md`). Flight 1 ([`tass-chat-enervate`](../tass_chat_enervate))
+//! turns a chat ("burn my tass") into that record in the user's repo. **This**
+//! crate is Flight 2: it reacts to the *record itself* — matched on the
+//! `at.telluri.act.enervate` **collection** (not a keyword), delivered by the
+//! record firehose (`tass-source-jetstream`, planned) — and:
 //!
-//! ```text
-//! Matched   → FoundTass ⇒ Resolved   | NoTass       ⇒ Skipped
-//! Resolved  → Owner     ⇒ Authorized [ReadBalance] | NotOwner ⇒ Denied
-//! Authorized→ Sufficient⇒ Enacting   [WriteEnervate]| Insufficient ⇒ Aborted
-//! Enacting  → Wrote     ⇒ Attesting  [WriteAttestation]
-//! Attesting → Attested  ⇒ Done
-//! ```
+//! 1. validates the enervate record, then
+//! 2. mints an **attestation** that **traces back to the enervate** (the
+//!    attestation references the enervate record's at-uri).
 //!
-//! This slice **reads** the actor's tass for real but **dry-runs writes**
-//! (`writes=off`): the enact/attest effects log what they *would* write. Real
-//! writes need a lent authed session (a later slice).
+//! **Attestation lives only here, gated on a record existing.** There is
+//! deliberately **no ledger / balance transfer** — the enervate record *is* the
+//! declared drain; Flight 2 witnesses and attests it. (The attestation may take
+//! the shape of an `equipment.rpg.give` traced to the enervate — open design.)
+//!
+//! Writes are **dry-run** for now: the attestation is authored by the service
+//! (Mage) identity, which is not yet wired (auth is shifting). The `Attest`
+//! effect logs the would-be attestation. Real writes are a later slice.
 
-use jacquard::client::BasicClient;
-use jacquard_common::types::ident::AtIdentifier;
 use rust_fsm::state_machine;
 use tass_engine::{Command, Event, Handled, Outcome};
 use tass_phase::{FsmJob, Job, Phases};
 
-/// The tassilize collection whose records hold a tass's quintessence.
-const TASSILIZE: &str = "com.superbfowle.tass.tassilize";
+/// The act-record collection this flight reacts to.
+pub const ENERVATE: &str = "at.telluri.act.enervate";
 
 state_machine! {
     #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-    enervate(Matched)
+    act_enervate(Received)
 
-    // A "burn tass" command matched. Gather + resolve the target tass.
-    Matched => {
-        FoundTass => Resolved,
-        NoTass => Skipped,                       // short-circuit: nothing to burn
+    // An at.telluri.act.enervate record arrived. Validate its fields.
+    Received => {
+        Valid => Validated,
+        Invalid => Rejected,          // short-circuit: malformed record
     },
-    // Target resolved. Authorize the actor (own-tass-only).
-    Resolved => {
-        Owner => Authorized [ReadBalance],
-        NotOwner => Denied,                      // short-circuit: not your tass
-    },
-    // Authorized + balance known. Enact if there is enough to draw.
-    Authorized => {
-        Sufficient => Enacting [WriteEnervate],
-        Insufficient => Aborted,                 // short-circuit: nothing available
-    },
-    // Enervate written. Attest the change.
-    Enacting(Wrote) => Attesting [WriteAttestation],
+    // Valid. Mint the attestation that traces back to this enervate.
+    Validated(Confirmed) => Attesting [Attest],
     // Attestation posted. Done.
     Attesting(Attested) => Done,
 }
 
-/// Terminal value of an enervate run.
+/// Terminal value of an act-enervate run.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EnervateOutcome {
-    /// Ran through enact + attest (dry-run in this slice).
-    Burned,
-    /// No tass to act on.
-    Skipped,
-    /// The actor did not own the tass.
-    Denied,
-    /// Nothing available to draw.
-    Aborted,
+pub enum ActOutcome {
+    /// Attested the enervate (dry-run in this slice).
+    Attested,
+    /// The record was malformed.
+    Rejected,
 }
 
-impl Phases for enervate::Impl {
-    type Final = EnervateOutcome;
+impl Phases for act_enervate::Impl {
+    type Final = ActOutcome;
 
-    fn is_terminal(state: &enervate::State) -> bool {
+    fn is_terminal(state: &act_enervate::State) -> bool {
         matches!(
             state,
-            enervate::State::Done
-                | enervate::State::Skipped
-                | enervate::State::Denied
-                | enervate::State::Aborted
+            act_enervate::State::Done | act_enervate::State::Rejected
         )
     }
 
-    fn finish(state: &enervate::State) -> EnervateOutcome {
+    fn finish(state: &act_enervate::State) -> ActOutcome {
         match state {
-            enervate::State::Done => EnervateOutcome::Burned,
-            enervate::State::Skipped => EnervateOutcome::Skipped,
-            enervate::State::Denied => EnervateOutcome::Denied,
-            enervate::State::Aborted => EnervateOutcome::Aborted,
+            act_enervate::State::Done => ActOutcome::Attested,
+            act_enervate::State::Rejected => ActOutcome::Rejected,
             other => unreachable!("finish on non-terminal phase {other:?}"),
         }
     }
 }
 
-/// Errors the driver can hit awaiting an event or performing an effect.
+/// Errors the driver can hit.
 #[derive(Debug, thiserror::Error)]
-pub enum EnervateError {
-    #[error("reading the actor's tass failed: {0}")]
-    Read(String),
-    #[error("invalid actor DID: {0}")]
-    Ident(String),
-    #[error("real writes are not wired yet (writes=off)")]
-    WritesNotWired,
+pub enum ActError {
     #[error("driver reached an unexpected phase: {0}")]
     Unexpected(String),
 }
 
-/// Drives the enervate FSM: real reads of the actor's tass, dry-run writes.
-pub struct EnervateDriver {
+/// Drives the act-enervate FSM: read the record from the event, dry-run attest.
+pub struct ActEnervateDriver {
     event: Event,
     dry_run: bool,
-    client: BasicClient,
-    // Gathered during the run:
-    tass_uri: Option<String>,
-    quintessence: i64,
+    // Parsed from the record during validation:
+    tass: Option<String>,
     amount: i64,
 }
 
-impl EnervateDriver {
-    /// A dry-run driver (`writes=off`) for `event`.
+impl ActEnervateDriver {
+    /// A dry-run driver (`writes=off`) for an enervate-record `event`.
     pub fn dry_run(event: Event) -> Self {
         Self {
             event,
             dry_run: true,
-            client: BasicClient::unauthenticated(),
-            tass_uri: None,
-            quintessence: 0,
+            tass: None,
             amount: 0,
         }
     }
 }
 
-impl tass_phase::Driver<enervate::Impl> for EnervateDriver {
-    type Error = EnervateError;
+impl tass_phase::Driver<act_enervate::Impl> for ActEnervateDriver {
+    type Error = ActError;
 
     async fn next_event(
         &mut self,
-        state: &enervate::State,
-    ) -> Result<enervate::Input, EnervateError> {
+        state: &act_enervate::State,
+    ) -> Result<act_enervate::Input, ActError> {
         match state {
-            // Gather: point at the actor's PDS, list their tass, pick one.
-            enervate::State::Matched => {
-                tass_repo::resolve_and_point(&self.client, &self.event.actor_did)
-                    .await
-                    .map_err(|e| EnervateError::Read(e.to_string()))?;
-                let repo = AtIdentifier::new_owned(&self.event.actor_did)
-                    .map_err(|e| EnervateError::Ident(e.to_string()))?;
-                let page = tass_repo::list_records(&self.client, repo, TASSILIZE, Some(100), None, false)
-                    .await
-                    .map_err(|e| EnervateError::Read(e.to_string()))?;
-
-                match pick_tass(&page.records, &self.event.text) {
-                    Some((uri, quintessence)) => {
-                        self.tass_uri = Some(uri);
-                        self.quintessence = quintessence;
-                        Ok(enervate::Input::FoundTass)
+            // Validate: the record must carry a `tass` at-uri (and an amount).
+            act_enervate::State::Received => {
+                let body = self.event.body.as_ref();
+                let tass = body
+                    .and_then(|b| b.get("tass"))
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                self.amount = body
+                    .and_then(|b| b.get("amount"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                match tass {
+                    Some(uri) => {
+                        self.tass = Some(uri);
+                        Ok(act_enervate::Input::Valid)
                     }
-                    None => Ok(enervate::Input::NoTass),
+                    None => Ok(act_enervate::Input::Invalid),
                 }
             }
-            // Authorize: we read the actor's *own* repo, so the tass is theirs.
-            enervate::State::Resolved => Ok(enervate::Input::Owner),
-            // Sufficiency: amount from the message, else the whole balance.
-            enervate::State::Authorized => {
-                self.amount = parse_amount(&self.event.text).unwrap_or(self.quintessence);
-                if self.amount > 0 && self.quintessence >= self.amount {
-                    Ok(enervate::Input::Sufficient)
-                } else {
-                    Ok(enervate::Input::Insufficient)
-                }
-            }
-            enervate::State::Enacting => Ok(enervate::Input::Wrote),
-            enervate::State::Attesting => Ok(enervate::Input::Attested),
-            other => Err(EnervateError::Unexpected(format!("{other:?}"))),
+            act_enervate::State::Validated => Ok(act_enervate::Input::Confirmed),
+            act_enervate::State::Attesting => Ok(act_enervate::Input::Attested),
+            other => Err(ActError::Unexpected(format!("{other:?}"))),
         }
     }
 
     async fn effect(
         &mut self,
-        effect: enervate::Output,
-        _state: &enervate::State,
-    ) -> Result<(), EnervateError> {
+        effect: act_enervate::Output,
+        _state: &act_enervate::State,
+    ) -> Result<(), ActError> {
         match effect {
-            enervate::Output::ReadBalance => {
-                tracing::debug!(tass = ?self.tass_uri, quintessence = self.quintessence, "read balance");
-            }
-            enervate::Output::WriteEnervate => {
-                if !self.dry_run {
-                    return Err(EnervateError::WritesNotWired);
-                }
+            // Mint the attestation, tracing back to the enervate record.
+            //
+            // TODO(auth): real write needs the service (Mage) identity — auth
+            // sourcing is being re-architected; see the auth notes. The
+            // attestation may be an equipment.rpg.give traced to the enervate.
+            act_enervate::Output::Attest => {
                 tracing::info!(
-                    tass = ?self.tass_uri,
+                    enervate = %self.event.source_record, // the record we attest
+                    tass = ?self.tass,
                     amount = self.amount,
-                    dry_run = true,
-                    "would write enervate",
+                    dry_run = self.dry_run,
+                    "would mint attestation tracing back to enervate",
                 );
-            }
-            enervate::Output::WriteAttestation => {
-                tracing::info!(dry_run = self.dry_run, "would write attestation");
             }
         }
         Ok(())
     }
 }
 
-/// Pick a tass from `records`: prefer one whose `form` word appears in the
-/// message, else the first. Returns its at-uri and current quintessence.
-fn pick_tass(records: &[tass_repo::RecordEnvelope], text: &str) -> Option<(String, i64)> {
-    let haystack = text.to_lowercase();
-    let quint = |r: &tass_repo::RecordEnvelope| {
-        r.value.get("quintessence").and_then(|v| v.as_i64()).unwrap_or(0)
-    };
+/// The act-enervate command: matches by **collection** (record-triggered), not
+/// by keyword.
+pub struct ActEnervateCommand;
 
-    // Name match on the tass's `form`.
-    for r in records {
-        if let Some(form) = r.value.get("form").and_then(|v| v.as_str()) {
-            if !form.is_empty() && haystack.contains(&form.to_lowercase()) {
-                return Some((r.uri.clone(), quint(r)));
-            }
-        }
-    }
-    // Fallback: the first tass.
-    records.first().map(|r| (r.uri.clone(), quint(r)))
-}
-
-/// Parse an explicit amount from the message (e.g. "burn 5 tass"): the first
-/// bare integer token. `None` means "the whole balance".
-fn parse_amount(text: &str) -> Option<i64> {
-    text.split(|c: char| !c.is_ascii_digit())
-        .filter(|s| !s.is_empty())
-        .find_map(|s| s.parse::<i64>().ok())
-}
-
-/// The enervate command: keyword-spots "burn ... tass" and runs the FSM.
-pub struct EnervateCommand;
-
-impl Command for EnervateCommand {
+impl Command for ActEnervateCommand {
     fn name(&self) -> &str {
-        "enervate"
+        "enervate-act"
     }
 
     fn matches(&self, event: &Event) -> bool {
-        let t = event.text.to_lowercase();
-        t.contains("burn") && t.contains("tass")
+        event.collection == ENERVATE
     }
 
     fn handle(&self, event: Event) -> Handled {
         Box::pin(async move {
-            let driver = EnervateDriver::dry_run(event);
-            let job = FsmJob::new(driver);
-            match job.run().await {
-                // Dry-run: a completed chain "would have burned".
-                Ok(EnervateOutcome::Burned) => Outcome::DryRun,
-                Ok(EnervateOutcome::Skipped) => Outcome::Skipped("no tass to burn"),
-                Ok(EnervateOutcome::Denied) => Outcome::Denied("not the actor's tass"),
-                Ok(EnervateOutcome::Aborted) => Outcome::Skipped("no quintessence available"),
+            let driver = ActEnervateDriver::dry_run(event);
+            match FsmJob::new(driver).run().await {
+                Ok(ActOutcome::Attested) => Outcome::DryRun, // dry-run; Acted once writes land
+                Ok(ActOutcome::Rejected) => Outcome::Skipped("malformed enervate record"),
                 Err(e) => Outcome::Failed(e.to_string()),
             }
         })
@@ -264,69 +188,79 @@ mod tests {
     use std::convert::Infallible;
     use tass_phase::{run, StateMachine};
 
-    #[test]
-    fn matches_burn_tass_only() {
-        let cmd = EnervateCommand;
-        let ev = |t: &str| Event {
-            actor_did: "did:plc:x".into(),
-            source_record: "at://did:plc:x/app.bsky.feed.post/1".into(),
+    fn record_event(body: Option<serde_json::Value>) -> Event {
+        Event {
+            actor_did: "did:plc:them".into(),
+            source_record: "at://did:plc:them/at.telluri.act.enervate/3l".into(),
             source_rev: "r".into(),
-            subject: "at://did:plc:mage/app.bsky.feed.post/2".into(),
-            collection: "app.bsky.feed.post".into(),
-            text: t.into(),
-        };
-        assert!(cmd.matches(&ev("please burn my tass")));
-        assert!(!cmd.matches(&ev("burn the toast")));
-        assert!(!cmd.matches(&ev("hello")));
+            subject: "at://did:plc:them/at.telluri.act.tassilize/3k".into(),
+            collection: ENERVATE.into(),
+            text: String::new(),
+            body,
+        }
     }
 
     #[test]
-    fn parses_amount_or_none() {
-        assert_eq!(parse_amount("burn 5 tass"), Some(5));
-        assert_eq!(parse_amount("burn my tass"), None);
+    fn matches_by_collection_not_keyword() {
+        let cmd = ActEnervateCommand;
+        assert!(cmd.matches(&record_event(None)));
+        let mut other = record_event(None);
+        other.collection = "app.bsky.feed.post".into();
+        assert!(!cmd.matches(&other));
     }
 
-    // A scripted driver (no network) to prove the phase graph — the burn_chain
-    // pattern, over the real enervate FSM.
-    struct Scripted(VecDeque<enervate::Input>);
-    impl tass_phase::Driver<enervate::Impl> for Scripted {
+    // Scripted driver to prove the phase graph without any I/O.
+    struct Scripted(VecDeque<act_enervate::Input>);
+    impl tass_phase::Driver<act_enervate::Impl> for Scripted {
         type Error = Infallible;
         async fn next_event(
             &mut self,
-            _s: &enervate::State,
-        ) -> Result<enervate::Input, Infallible> {
+            _s: &act_enervate::State,
+        ) -> Result<act_enervate::Input, Infallible> {
             Ok(self.0.pop_front().expect("script exhausted"))
         }
         async fn effect(
             &mut self,
-            _e: enervate::Output,
-            _s: &enervate::State,
+            _e: act_enervate::Output,
+            _s: &act_enervate::State,
         ) -> Result<(), Infallible> {
             Ok(())
         }
     }
 
-    async fn drive(events: impl IntoIterator<Item = enervate::Input>) -> EnervateOutcome {
-        let mut machine = StateMachine::<enervate::Impl>::new();
+    async fn drive(events: impl IntoIterator<Item = act_enervate::Input>) -> ActOutcome {
+        let mut machine = StateMachine::<act_enervate::Impl>::new();
         let mut d = Scripted(events.into_iter().collect());
         run(&mut machine, &mut d).await.unwrap()
     }
 
     #[tokio::test]
-    async fn happy_path_burns() {
-        use enervate::Input::*;
-        let out = drive([FoundTass, Owner, Sufficient, Wrote, Attested]).await;
-        assert_eq!(out, EnervateOutcome::Burned);
+    async fn attests_valid_record() {
+        use act_enervate::Input::*;
+        assert_eq!(drive([Valid, Confirmed, Attested]).await, ActOutcome::Attested);
     }
 
     #[tokio::test]
-    async fn short_circuits() {
-        use enervate::Input::*;
-        assert_eq!(drive([NoTass]).await, EnervateOutcome::Skipped);
-        assert_eq!(drive([FoundTass, NotOwner]).await, EnervateOutcome::Denied);
+    async fn rejects_malformed_record() {
         assert_eq!(
-            drive([FoundTass, Owner, Insufficient]).await,
-            EnervateOutcome::Aborted
+            drive([act_enervate::Input::Invalid]).await,
+            ActOutcome::Rejected
         );
+    }
+
+    #[tokio::test]
+    async fn real_driver_validates_body() {
+        // A well-formed enervate record body validates; a bodyless one rejects.
+        let good = record_event(Some(serde_json::json!({
+            "tass": "at://did:plc:them/at.telluri.act.tassilize/3k",
+            "amount": 5
+        })));
+        let mut m = StateMachine::<act_enervate::Impl>::new();
+        let mut d = ActEnervateDriver::dry_run(good);
+        assert_eq!(run(&mut m, &mut d).await.unwrap(), ActOutcome::Attested);
+
+        let mut m2 = StateMachine::<act_enervate::Impl>::new();
+        let mut d2 = ActEnervateDriver::dry_run(record_event(None));
+        assert_eq!(run(&mut m2, &mut d2).await.unwrap(), ActOutcome::Rejected);
     }
 }

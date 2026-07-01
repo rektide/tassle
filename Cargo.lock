@@ -5073,6 +5073,20 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 name = "tass-act-enervate"
 version = "0.1.0"
 dependencies = [
+ "rust-fsm",
+ "serde",
+ "serde_json",
+ "tass-engine",
+ "tass-phase",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "tass-chat-enervate"
+version = "0.1.0"
+dependencies = [
  "jacquard",
  "jacquard-common",
  "rust-fsm",
@@ -5130,6 +5144,7 @@ dependencies = [
 name = "tass-config"
 version = "0.1.0"
 dependencies = [
+ "bon",
  "figment2",
  "http",
  "jac-stores",
@@ -5210,6 +5225,7 @@ dependencies = [
  "miette",
  "serde",
  "tass-act-enervate",
+ "tass-chat-enervate",
  "tass-config",
  "tass-engine",
  "tass-slingshot",

@@ -1,19 +1,22 @@
 [package]
-name = "tass-act-enervate"
+name = "tass-chat-enervate"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Flight 2 of enervate: react to an at.telluri.act.enervate record (from the record firehose) — validate it and mint an attestation that traces back to the enervate. Attestation lives here, gated on a record. No ledger."
+description = "Flight 1 of enervate: the chat flight. Keyword-spot 'burn my tass' from a post at us, read the user's tass, and mint an at.telluri.act.enervate record in the USER'S OWN repo via their OAuth session. No transfer, no attestation (those are Flight 2)."
 
 [lib]
-name = "tass_act_enervate"
+name = "tass_chat_enervate"
 path = "src/lib.rs"
 
 [dependencies]
 tass-engine = { path = "../tass-engine" }
 tass-phase = { path = "../tass-phase" }
+tass-repo = { path = "../tass-repo" }
+jacquard = { workspace = true }
+jacquard-common = { workspace = true }
 rust-fsm = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

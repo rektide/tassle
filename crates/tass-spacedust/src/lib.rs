@@ -221,6 +221,7 @@ fn event_from(link: LinkEvent, record: &serde_json::Value) -> Result<Event, Spac
         source_rev: link.source_rev,
         subject: link.subject,
         text,
+        body: Some(record.clone()),
     })
 }
 
