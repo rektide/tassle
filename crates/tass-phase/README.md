@@ -2,63 +2,62 @@
 
 **Phased async work, driven by a pure state machine.**
 
-A small substrate for work that moves through a sequence of *phases*, performing
-async side effects between them, and returns a typed final value. The state
-machine is pure ([rust-fsm]); all I/O, timers, and context live in an async
-*driver*; an *executor* runs many such jobs concurrently and streams each result
-the instant it finishes.
+> The machine *decides*. The driver *does*. The executor runs the whole flock.
 
-It is a Rust port of a TypeScript "executor + job" idea, re-thought for async
-Rust. The original drove each job by **polling** it on a fixed interval. That
-polling model is deliberately **not** ported — here a job is **event-driven**: it
-`await`s reality (a reply, a timer, an exit), feeds the outcome into the machine,
-runs the emitted effect, and loops. It never spins on a clock.
+Some work isn't one `async fn` — it's a *sequence of phases*, each with its own
+decision, its own side effect, its own way to bail out early. Resolve a target,
+authorize, enact, attest, reply — where any step might skip, short-circuit, or
+park until later. `tass-phase` gives that shape a spine: a pure
+[rust-fsm] state machine for the *phases and decisions*, an async **driver** for
+the *effects and awaits*, and an **executor** that runs many such jobs at once
+and streams each result the instant it lands.
 
-The crate is runtime-agnostic (it only `await`s futures), but is built to run on
-tokio.
+It's a Rust port of a TypeScript "executor + job" idea — with one deliberate
+change. The original **polled** every job on a fixed interval. That's gone. Here
+a job is **event-driven**: it `await`s the actual thing a phase is blocked on — a
+reply, a timer, an exit — feeds the outcome into the machine, runs the emitted
+effect, and loops. Nothing ever wakes up just to find there's nothing to do.
 
 [rust-fsm]: https://github.com/eugene-babichenko/rust-fsm
 
 ---
 
-## The three layers
+## The idea in one breath
 
-| Layer | What it is | Where it lives |
-| --- | --- | --- |
-| **Pure machine** | A `rust_fsm` `StateMachineImpl`: states = *phases*, inputs = *events*, outputs = *effects to perform*. No I/O, no time. | `state_machine! { … }` + `impl Phases` |
-| **Driver** | The async bridge: `await`s the next event for the current phase, performs the effect a transition emits. All clients/sessions/timers live here. | `impl Driver<M>` |
-| **Executor** | Runs many jobs concurrently on one task, yielding each result as it completes. | `Executor` |
-
-`run(&mut machine, &mut driver)` glues a machine + driver into a loop that
-returns the typed final value. `FsmJob` packages the pair into a `Job`.
-
-## Core types
-
-```rust
-/// A rust-fsm machine whose states are phases, plus finish semantics.
-pub trait Phases: StateMachineImpl {
-    type Final;
-    fn is_terminal(state: &Self::State) -> bool;
-    fn finish(state: &Self::State) -> Self::Final;
-}
-
-/// The async bridge to the world. No polling: block on the real thing.
-pub trait Driver<M: Phases> {
-    type Error;
-    async fn next_event(&mut self, state: &M::State) -> Result<M::Input, Self::Error>;
-    async fn effect(&mut self, effect: M::Output, state: &M::State) -> Result<(), Self::Error>;
-}
-
-/// Drive a machine to a terminal phase, returning its final value.
-pub async fn run<M, D>(machine: &mut StateMachine<M>, driver: &mut D)
-    -> Result<M::Final, RunError<D::Error>>;
 ```
+            ┌─────────────────────────────────────────────┐
+            │  pure machine  (rust-fsm + Phases)           │
+   phase ──▶│  states = phases                             │──▶ Final
+            │  inputs = events   outputs = effects         │   (typed result)
+            └───────────▲───────────────────┬──────────────┘
+                        │                    │
+                 next_event()            effect()
+                        │                    │
+            ┌───────────┴────────────────────▼──────────────┐
+            │  Driver  (async, owns clients / session / time)│
+            │  awaits reality · performs side effects        │
+            └────────────────────────────────────────────────┘
+
+   Executor: runs many jobs concurrently, yields each Final as it finishes.
+```
+
+- **`Phases`** — your `rust_fsm` machine plus `is_terminal` + `finish`. States
+  are phases, inputs are events, outputs are the effects to perform. **No I/O, no
+  clock — fully unit-testable.**
+- **`Driver`** — the async bridge to the world. `next_event` blocks on the real
+  future a phase waits for; `effect` performs a transition's side effect. Every
+  HTTP client, session, and timer lives *here*.
+- **`Executor`** — runs many jobs on a single task and streams completions.
+- **`run` / `FsmJob`** — glue the machine and driver into a loop that returns a
+  typed `Final`; `FsmJob::resume` starts from a *persisted* phase.
+
+---
 
 ## Usage
 
-Define the phases with rust-fsm's DSL. States are phases, the items in `()` /
-before `=>` are events, the items in `[]` are effects. Short-circuits are just
-transitions to terminal phases:
+**1. Declare the phases** with rust-fsm's DSL. States are phases; the tokens
+around `=>` are events; the `[…]` items are effects. Short-circuits are just
+transitions into terminal states:
 
 ```rust
 use rust_fsm::state_machine;
@@ -69,27 +68,27 @@ state_machine! {
 
     Matched => {
         FoundTarget => Resolved,
-        NoTarget    => Skipped,                 // short-circuit
+        NoTarget    => Skipped,                  // short-circuit
     },
     Resolved => {
-        Owner    => Authorized [ReadBalance],   // effect on this transition
-        NotOwner => Denied,                     // short-circuit
+        Owner    => Authorized [ReadBalance],    // effect on this transition
+        NotOwner => Denied,                      // short-circuit
     },
     Authorized => {
         Sufficient   => Enacting [WriteEnervate],
-        Insufficient => Aborted,                // short-circuit
+        Insufficient => Aborted,                 // short-circuit
     },
-    Enacting(Wrote)    => Attesting [WriteAttestation],
+    Enacting(Wrote)     => Attesting [WriteAttestation],
     Attesting(Attested) => Done,
 }
 ```
 
-Teach it how to finish:
+**2. Teach it to finish:**
 
 ```rust
 use tass_phase::Phases;
 
-enum Outcome { Burned, Skipped, Denied, Aborted }
+pub enum Outcome { Burned, Skipped, Denied, Aborted }
 
 impl Phases for burn::Impl {
     type Final = Outcome;
@@ -108,7 +107,7 @@ impl Phases for burn::Impl {
 }
 ```
 
-Write the driver — this is where the `await`s and effects go:
+**3. Write the driver** — this is where the `await`s and effects go:
 
 ```rust
 use tass_phase::Driver;
@@ -117,14 +116,13 @@ impl Driver<burn::Impl> for MyDriver {
     type Error = anyhow::Error;
 
     async fn next_event(&mut self, state: &burn::State) -> Result<burn::Input, Self::Error> {
-        // Block on the actual thing this phase waits for: hydrate a post,
-        // read a balance, `tokio::time::sleep_until(due)`, … then report it.
+        // Block on the *specific* thing this phase waits for, then report it.
         Ok(match state {
-            burn::State::Matched   => self.resolve_target().await?,
-            burn::State::Resolved  => self.authorize().await?,
+            burn::State::Matched    => self.resolve_target().await?,
+            burn::State::Resolved   => self.authorize().await?,
             burn::State::Authorized => self.check_balance().await?,
-            burn::State::Enacting  => burn::Input::Wrote,
-            burn::State::Attesting => burn::Input::Attested,
+            burn::State::Enacting   => burn::Input::Wrote,
+            burn::State::Attesting  => burn::Input::Attested,
             _ => unreachable!("non-terminal phases only"),
         })
     }
@@ -142,7 +140,7 @@ impl Driver<burn::Impl> for MyDriver {
 }
 ```
 
-Run one job, or many:
+**4. Run one, or a whole flock:**
 
 ```rust
 use tass_phase::{Executor, FsmJob, Job};
@@ -150,107 +148,161 @@ use tass_phase::{Executor, FsmJob, Job};
 // one
 let outcome = FsmJob::new(MyDriver::new(/* … */)).run().await?;
 
-// many, streaming completions as they finish
+// many — completions stream out as each job finishes
 let mut exec = Executor::new();
 for cmd in commands {
     exec.spawn_job(FsmJob::new(MyDriver::for_command(cmd)));
 }
 while let Some(result) = exec.next().await {
-    record(result?);   // handled the instant each job completes
+    record(result?);   // handled the instant that job completes
 }
 ```
 
-### Resuming a parked job (the durability seam)
+The machine is pure, so every *decision* stays unit-testable with a synthetic
+driver — no network, no clock. See `tests/burn_chain.rs` for the full worked
+example: happy path, every short-circuit, park-and-resume, and concurrent
+execution.
+
+---
+
+## The concurrency model (and how to still fan out)
+
+The `Executor` runs on **one task** (a `FuturesUnordered`). Read that carefully:
+one task, not one core's worth of work.
+
+**An `.await` on I/O doesn't occupy the task or a core.** When a job awaits a
+network reply it *parks*, and the task moves on to the next job; the socket is
+driven by tokio's (multi-threaded) reactor. So a single task happily juggles
+**thousands of concurrent I/O-bound jobs** — it's just dispatching. The only
+thing that genuinely runs *on* the task, stealing from other jobs, is
+**synchronous CPU work between awaits** (crypto, big JSON walks) — or, the
+footgun, a *blocking* sync call.
+
+Why single-task? Not a tokio limitation — tokio's default runtime is
+multi-threaded and *wants* to spread work. It's a deliberate fit for a **borrow
+model**: single-task means jobs can hold non-`Send`/non-`'static` context — a
+lent `&session`, an un-`Clone`-able client — for the executor's lifetime. You get
+that ergonomic borrow *and* massive I/O concurrency.
+
+### Fan out anyway — per effect, not per job
+
+The single task is **coordination**. The heavy **labor** can still spread across
+cores: an effect is free to `tokio::spawn` / `spawn_blocking` its self-contained,
+owned, `Send` work and await the handle back on the driver task. **No change to
+`tass-phase` required** — the trait already allows it. Only owned data crosses
+the boundary; `&session` never does:
+
+```rust
+async fn effect(&mut self, e: burn::Output, _s: &burn::State) -> Result<(), Self::Error> {
+    match e {
+        // I/O + session → stays on the driver task (it's only awaiting anyway)
+        burn::Output::WriteEnervate => self.session.create_record(/* … */).await?,
+
+        // CPU, no session → hand owned data to the pool, await the result
+        burn::Output::WriteAttestation => {
+            let payload = self.diff.clone();                    // owned + Send
+            let blob = tokio::task::spawn_blocking(move || age_encrypt(payload)).await??;
+            self.session.post_attestation(blob).await?;         // …back on the task
+        }
+        _ => {}
+    }
+    Ok(())
+}
+```
+
+This lands a lovely alignment for free: **auth work is I/O-bound and stays home;
+CPU work needs no session, is `Send`, and fans out.** No two "execution modes,"
+no bifurcated `Job` types — just offload the heavy bit where it happens.
+
+Rules of thumb:
+
+- I/O-bound (session, network, fjall)? Leave it on the task.
+- CPU-heavy and self-contained? `spawn` / `spawn_blocking` it.
+- *Blocking* sync call? `spawn_blocking` it regardless — it stalls the whole
+  executor otherwise.
+
+> **Not yet handled: backpressure.** `spawn` is unbounded — off a firehose,
+> intake can outrun completion and grow memory without limit. A bounded-intake
+> `Executor` is the next real step (tracked as `tass-phase-backpressure`).
+
+---
+
+## Resuming a parked job — the durability seam
 
 `FsmJob::resume(phase, driver)` starts from a *persisted* phase instead of the
-initial one. Serialize `job.phase()` when a job parks (say, until a `dueAt`);
-rebuild it later in another process. The FSM state **is** the resume point:
+initial one. The FSM state **is** the resume point: serialize `job.phase()` when
+a job parks (say, until a `dueAt`), rebuild it later — even in another process.
 
 ```rust
 let parked: String = serde_json::to_string(job.phase())?;   // store it
-// …later…
+// …later, elsewhere…
 let phase: burn::State = serde_json::from_str(&parked)?;
 let outcome = FsmJob::resume(phase, MyDriver::new(/* … */)).run().await?;
 ```
 
-See `tests/burn_chain.rs` for the full worked example: happy path, every
-short-circuit, park-and-resume, and concurrent execution — all with a synthetic
-driver, so no network or clock is needed to test the machine.
-
----
-
-## Why event-driven, not polling
-
-The original ticked each job at a fixed interval and sampled the world every
-tick (`poll(now, alive)`). In async Rust that's wasteful and laggy. Here the
-driver `await`s the *specific* future a phase is blocked on — a reply, a child
-exit, `sleep_until(deadline)` — and a `FuturesUnordered`-backed executor
-interleaves many jobs on one task. A slow job never blocks a fast one, and
-nothing wakes up just to discover there's nothing to do.
-
-The executor is single-task and **not** `Send`-bound on purpose: jobs can borrow
-shared, non-`Send`/non-`'static` context (e.g. a lent `&session`) for the
-executor's lifetime. For CPU-bound or cross-thread parallelism, spawn onto a
-runtime task set instead.
+This is the seam a durable, scheduled queue builds on (see `tass-job` below).
 
 ---
 
 ## Possible tassle / spacedust applications
 
-> These are **illustrative possibilities**, not commitments. They sketch how the
-> primitive *could* be used in the listener daemon (see
-> `doc/discovery/spacedust.md`); the actual design lives in those tickets.
+> **Illustrative possibilities, not commitments** — sketches of how the primitive
+> *could* serve the listener daemon (`doc/discovery/spacedust.md`). The real
+> design lives in those tickets.
 
 - **Action chains as phased jobs.** A matched command ("burn my tass",
-  "meditate") could be modeled as a phase machine — `resolve character →
-  resolve tass → authorize → write record → attest → reply` — where each step
-  runs/skips/short-circuits. The driver does the network I/O (hydrate the post,
-  lend the Mage's authed session, write records); the typed `Final` is the
-  outcome the wide-event line reports.
-
+  "meditate") could be a phase machine — `resolve character → resolve tass →
+  authorize → write record → attest → reply` — each step run/skip/short-circuit.
+  The driver does the I/O (hydrate, lend the Mage's session, write records); the
+  typed `Final` is what the wide-event line reports.
 - **Deferred / due work.** A `meditate` that completes after an in-fiction
-  duration, or future node regen, could *park* its phase to fjall with a
-  `dueAt`, and a worker could `sleep_until(due)` (not poll) before resuming via
-  `FsmJob::resume`. The parked phase doubles as durable resume state.
-
+  duration, or future node regen, could *park* its phase to fjall with a `dueAt`
+  and a worker could `sleep_until(due)` (not poll) before resuming.
 - **Concurrent fan-out.** As commands stream off the firehose, an `Executor`
-  could run each command's chain concurrently and surface results as they land,
-  rather than serializing them.
-
-Because the machine is pure, the *decisions* of any such chain stay unit-testable
-with a synthetic driver, independent of fjall and atproto.
+  could run each chain concurrently and surface results as they land.
 
 ### Relationship to `tass-job`
 
-`tass-job` is a **planned crate** (a ticket in `doc/discovery/spacedust.md` §7
-and beads — there is no code yet), scoped as a *durable due-job queue + worker*:
-`{inputUri, inputCid, kind, dueAt, status, attempts}`, idempotent enactment,
-retry/backoff, backed by `jac-store-fjall`.
+`tass-job` is a **planned crate** (a ticket, no code yet), scoped as a *durable
+due-job queue + worker*: `{inputUri, inputCid, kind, dueAt, status, attempts}`,
+idempotent enactment, retry/backoff, backed by `jac-store-fjall`.
 
-`tass-phase` is the **generic, in-memory substrate** that such a queue would
-build on, not a competitor to it. The intended split:
+`tass-phase` is the **generic, in-memory substrate** it would build on — not a
+competitor:
 
 | | `tass-phase` (this crate) | `tass-job` (planned) |
 | --- | --- | --- |
 | Phase progression | ✅ `Phases` + `run` | reuses `tass-phase` |
 | Effects / awaiting | ✅ `Driver` | reuses `tass-phase` |
-| Concurrent run + streaming | ✅ `Executor` | extends it with scheduling |
+| Concurrent run + streaming | ✅ `Executor` | extends with scheduling |
 | Persist a parked phase | seam only (`resume`/`phase`) | ✅ fjall storage |
-| `dueAt` scheduling | ❌ (caller's job) | ✅ `sleep_until(due)` worker |
+| `dueAt` scheduling | ❌ (caller's job) | ✅ `sleep_until(due)` |
 | Retry / backoff / `attempts` | ❌ | ✅ |
 | Idempotency / dedupe ledger | ❌ | ✅ |
 
-In short: `tass-job` ≈ `tass-phase` + fjall persistence + `dueAt` scheduling +
-retry. If `tass-job` is built, it should depend on `tass-phase` for the phase
-engine and add only the durable/scheduling parts. The overlap is the `Executor`
-concurrency, which `tass-job`'s worker would specialize, not reinvent.
+In short: **`tass-job` ≈ `tass-phase` + fjall + `dueAt` + retry.** If built, it
+should depend on `tass-phase` for the engine and add only the durable/scheduling
+parts.
+
+---
+
+## Design notes
+
+- **Runtime-agnostic core.** The library only `await`s futures — deps are just
+  `rust-fsm` + `futures-util`. `tokio` is a dev-dependency (examples/tests).
+  Built to run on tokio; not welded to it.
+- **The machine never runs itself.** No actors, no internal timers, no `after`.
+  It transitions only when the driver feeds it an event — which is what makes it
+  trivially testable and safely resumable.
+- **Effects are Mealy outputs**, emitted on transitions, performed by the driver
+  keyed on the effect *or* the phase it entered.
 
 ---
 
 ## Status
 
-Early. The phase engine, driver bridge, executor, and the resume seam exist and
-are tested. Durability, scheduling, and retry are intentionally out of scope —
-that's a layer above (see `tass-job`).
+Early but real. The phase engine, driver bridge, executor, and resume seam exist
+and are tested. Durability, scheduling, retry (→ `tass-job`) and bounded intake
+(→ `tass-phase-backpressure`) are intentionally out of scope.
 
-Tracked in beads as `tass-hlr`.
+Tracked in beads as `tass-phase`.
