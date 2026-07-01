@@ -43,7 +43,7 @@ use crate::config::{self, CredentialSelector};
 
 /// The turso-backed OAuth session store (mirrors [`crate::auth::Store`] for the
 /// app-password side).
-type OAuthAuthStore = jac_store_fjall::OAuthStore<jac_store_fjall::TursoRepository>;
+type OAuthAuthStore = jac_stores::OAuthStore<jac_stores::TursoRepository>;
 
 /// A restored OAuth session over the turso OAuth store + public resolver.
 pub type OAuthReadSession = jacquard::oauth::client::OAuthSession<Resolver, OAuthAuthStore>;
@@ -333,11 +333,11 @@ fn absent(required: bool, profile: &str) -> Result<ReadClient, AuthError> {
 async fn active_account_at(
     store_path: &Path,
 ) -> Result<Option<Did>, AuthError> {
-    use jac_store_fjall::RepoCore;
+    use jac_stores::RepoCore;
     if !store_path.exists() {
         return Ok(None);
     }
-    let repo = jac_store_fjall::TursoRepository::open_local(store_path)
+    let repo = jac_stores::TursoRepository::open_local(store_path)
         .await
         .map_err(|e| AuthError::Store(e.to_string()))?;
     repo.active_account()
@@ -370,8 +370,8 @@ async fn resume_oauth(
     required: bool,
     profile: &str,
 ) -> Result<ReadClient, AuthError> {
-    use jac_store_fjall::OAuthRepo;
-    let repo = jac_store_fjall::TursoRepository::open_local(store_path)
+    use jac_stores::OAuthRepo;
+    let repo = jac_stores::TursoRepository::open_local(store_path)
         .await
         .map_err(|e| AuthError::Store(e.to_string()))?;
     let store = OAuthAuthStore::new(repo);

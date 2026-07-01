@@ -33,7 +33,7 @@ repository = "https://github.com/rektide/tassle"
 version = "0.1.0"
 
 [workspace.dependencies]
-# Jacquard 0.12 (crates.io) — version-aligned with jac-store-fjall.
+# Jacquard 0.12 (crates.io) — version-aligned with jac-stores.
 jacquard = { version = "0.12.1", default-features = false, features = ["api", "cache", "dns"] }
 jacquard-axum = "0.12.1"
 jacquard-common = "0.12.1"
@@ -45,7 +45,7 @@ jacquard-oauth = "0.12.1"
 # native-SQL turso backend (engine-v2 AuthRepository), so default features
 # (backend-fjall + parking_lot) are off: turso self-serializes via SQL and needs
 # no RMW lock.
-jac-store-fjall = { package = "jac-stores", path = "../jac-store-fjall", default-features = false, features = ["backend-turso"] }
+jac-stores = { path = "../jac-stores", default-features = false, features = ["backend-turso"] }
 # Local fork of figment2 with the ops/DropIns/select_profile_from_config
 # machinery we build the profile model on (see ~/src/figments-rs).
 figment2 = { path = "../figments-rs", features = ["toml"] }

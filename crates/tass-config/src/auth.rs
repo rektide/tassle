@@ -31,7 +31,7 @@ use crate::Login;
 ///
 /// Native-SQL turso backend (jac-store-fjall's engine-v2 `AuthRepository`): no
 /// byte codec, no RMW lock — turso self-serializes via SQL transactions.
-pub(crate) type Store = jac_store_fjall::AppPasswordStore<jac_store_fjall::TursoRepository>;
+pub(crate) type Store = jac_stores::AppPasswordStore<jac_stores::TursoRepository>;
 pub(crate) type Resolver = jacquard::identity::PublicResolver;
 
 /// A live app-password session over the turso-backed store + public resolver.
@@ -231,10 +231,10 @@ pub(crate) async fn open_session_at(store_path: &Path) -> Result<AppPasswordSess
     if let Some(parent) = store_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;
     }
-    let repo = jac_store_fjall::TursoRepository::open_local(store_path)
+    let repo = jac_stores::TursoRepository::open_local(store_path)
         .await
         .map_err(|e| AuthError::Store(e.to_string()))?;
-    let store = Arc::new(jac_store_fjall::AppPasswordStore::new(repo));
+    let store = Arc::new(jac_stores::AppPasswordStore::new(repo));
     let resolver = Arc::new(JacquardResolver::default());
     Ok(CredentialSession::new(store, resolver))
 }
@@ -257,10 +257,10 @@ pub async fn stored_access_jwt(
     let Ok(did) = Did::new_owned(did) else {
         return Ok(None);
     };
-    let repo = jac_store_fjall::TursoRepository::open_local(store_path)
+    let repo = jac_stores::TursoRepository::open_local(store_path)
         .await
         .map_err(|e| AuthError::Store(e.to_string()))?;
-    let store = jac_store_fjall::AppPasswordStore::new(repo);
+    let store = jac_stores::AppPasswordStore::new(repo);
     let key = SessionKey::new(did, session_id.unwrap_or("session"));
     Ok(store
         .get(&key)

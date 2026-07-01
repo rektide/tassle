@@ -13,10 +13,10 @@ path = "src/main.rs"
 
 [features]
 default = []
-# Auth/session store backend (jac-store-fjall, turso native-SQL) + interactive
+# Auth/session store backend (jac-stores, turso native-SQL) + interactive
 # password prompt. Off by default so the base record-generator CLI stays lean.
 auth-store = [
-    "dep:jac-store-fjall",
+    "dep:jac-stores",
     "dep:rpassword",
     "dep:base64",
     "tass-config/auth-store",
@@ -44,7 +44,7 @@ jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
 figment2.workspace = true
 # Optional: durable auth-session store + interactive login. Gated by `auth-store`.
-jac-store-fjall = { workspace = true, optional = true }
+jac-stores = { workspace = true, optional = true }
 rpassword = { version = "7", optional = true }
 base64 = { version = "0.22", optional = true }
 # Optional: the listener daemon, exposed as `tassle listen`. Gated by `listen`.
