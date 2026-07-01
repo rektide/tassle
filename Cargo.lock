@@ -4974,6 +4974,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tass-engine"
+version = "0.1.0"
+dependencies = [
+ "tass-phase",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "tass-ledger"
 version = "0.1.0"
 dependencies = [

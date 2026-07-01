@@ -19,6 +19,7 @@ members = [
     "crates/tass-cli",
     "crates/tass-ledger",
     "crates/tass-spacedust",
+    "crates/tass-engine",
     "xtask",
 ]
 

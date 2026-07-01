@@ -1,0 +1,20 @@
+[package]
+name = "tass-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The non-domain listener mechanism: source stream -> dispatcher -> command handlers on a tass-phase Executor, with per-command wide-event tracing. No verbs — those live in tass-act-* crates."
+
+[lib]
+name = "tass_engine"
+path = "src/lib.rs"
+
+[dependencies]
+tass-phase = { path = "../tass-phase" }
+tracing = "0.1"
+tokio = { version = "1", features = ["rt", "time", "macros"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
