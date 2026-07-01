@@ -104,16 +104,80 @@ Mechanically (per the atproto spec, `~/archive/bluesky-social/atproto-website`,
 
 Everything else is Jacquard's; the client-auth **keyset** is ours to manage:
 
-- generate an ES256 keypair once; persist it (candidate: a dedicated
-  keyspace/table in the same `jac-store-fjall` store, or a mounted secret file);
+- generate an ES256 key on first run; persist it as a **secret file** under
+  `<state>/keyset/` (decision below — *not* the auth store);
 - publish the **public** half via JWKS in the client metadata;
-- support **>1 key** so rotation is add-new → publish-both → drain-old → remove;
+- support **>1 key** so rotation is add-new → publish-both → drain-old → remove
+  (jacquard's `Keyset` is a `Vec<Jwk>`, so the set *is* the rotation unit);
 - **never** let the private key touch a cookie or a log.
 
-Open question: do we store the keyset in the auth store, or keep it as
-deployment config (env/secret file)? Leaning secret-file/env for prod (ops
-rotate it out of band) with an in-store option for single-binary dev. → track as
-a ticket.
+## Config shape (`tassle-config`: `[service]` / `[service.oauth]`)
+
+The web service's config is a `ServiceConfig` bucket in `tassle-config`, read via
+`extract_cascade(&figment, &["service", "service.<variant>"])` so a base
+`[service]` can be refined per variant (`[service.web]`, `[service.reader]`) — see
+[`tass-config-service-shape`]. `bind` (local listen) and `public_url` (the public
+HTTPS origin = the OAuth identity root, **not** the same as `bind`) live in
+`[service]`; the OAuth-specific knobs in `[service.oauth]`.
+
+```toml
+[service]
+bind         = "127.0.0.1:3000"       # local listen (behind tunnel/proxy)
+public_url   = "https://telluri.at"   # public origin — THE oauth identity root
+cookie_paths = ["current"]            # <state>/cookie/current.key ; ordered, [0] = active
+
+[service.oauth]
+scopes       = ["atproto", "transition:generic"]
+keyset_paths = ["current"]            # <state>/keyset/current.json ; ordered, [0] = active signer
+client_name  = "Telluri.at"
+logo_path    = "/logo.png"            # -> logo_uri
+tos_path     = "/tos"                 # -> tos_uri
+privacy_path = "/privacy"             # -> privacy_policy_uri
+```
+
+### Three key *roles* (split by role, not per key)
+
+| Role | Where | Plural? | Managed by |
+|---|---|---|---|
+| Client-auth **keyset** (ES256, `private_key_jwt`) | `[service.oauth] keyset_paths` | **yes — a JWK set** | us: generate / rotate / persist |
+| Per-session **DPoP** keys | the DB (`ClientSessionData`) | yes (1/session) | **jacquard**, automatically |
+| **Cookie** signing key | `[service] cookie_paths` | single today (keyring later) | us (web layer) |
+
+- **`keyset_paths` / `cookie_paths`** are ordered arrays; bare names resolve under
+  the assumed dirs **`<state>/keyset/`** and **`<state>/cookie/`** (absolute paths
+  verbatim). Index `[0]` is active; the rest are published/validators. Files are
+  **generated on first run** if missing. Rotation = **prepend** a new key file —
+  no config churn, the plural shape is already in place. (Cookie keyring
+  verification is modeled now, honoured when it lands; today only `[0]` is used.)
+- **No `kid` config field, no globs.** jacquard's `find_key` picks the signer by
+  algorithm-preference then first-in-set, so a single-algo (ES256) keyset means
+  `[0]` *is* the signer — order alone decides. `kid` lives inside each key file
+  (jacquard requires it) for JWS headers + rotation bookkeeping.
+
+### DPoP is not a knob; client type is *emergent*
+
+`dpop_bound_access_tokens` is hardcoded `true`, and every OAuth path — including
+the localhost loopback — is bound on `DpopExt`. atproto mandates DPoP for all
+clients, so **no local mode disables it.** What *does* vary is auto-derived, never
+toggled:
+
+- `application_type` = `native` iff `client_id` is `http://localhost`, else `web`;
+- `token_endpoint_auth_method` = `private_key_jwt` iff a keyset is present, else `none`.
+
+So **dev/public** = `public_url` on `http://localhost` + no keyset; **prod/confidential**
+= `https://…` + keyset. Emergent from `public_url` + keyset presence — no
+`dpop`/`application_type`/`auth_method` config fields.
+
+### Routes belong to `OAuthWebConfig` (don't reinvent)
+
+jacquard-axum's `OAuthWebConfig` owns the route paths with defaults —
+`start_auth_path=/oauth/start`, `callback_path=/oauth/callback` (this *is* the
+redirect path), `logout_path=/oauth/logout`, `login_page_path=/oauth/login`,
+`after_callback_redirect=/`. So we **don't** define `redirect_paths` /
+`metadata_path` in config: `redirect_uris = public_url + callback_path`, and we
+expose thin `OAuthWebConfig` overrides only if a deployment wants non-default
+routes. The derived metadata values (`client_id`, `redirect_uris`, `jwks_uri`,
+`client_uri`) all come from `public_url` + these paths + jacquard's fixed fields.
 
 ## Scopes: ask for the minimum, start transitional
 
@@ -219,17 +283,51 @@ on `tassle-web-auth` + `axum`, and picks a `jac-store-fjall` backend feature
 
 ## Open questions to resolve before coding
 
-1. **Keyset storage** — in the auth store vs. secret file/env. (leaning: env/file
-   for prod, in-store for dev)
-2. **Session `Key` (cookie encryption) source** — env secret; rotation story?
-3. **Which `jac-store-fjall` backend** for `tassle-web` (fjall single-process is
-   fine for one deployment; turso if multi-process).
+1. ~~**Keyset storage**~~ — **resolved:** secret files under `<state>/keyset/`,
+   generate-on-first-run, ordered `keyset_paths` (`[0]` = active). Not the auth
+   store. See "Config shape" above.
+2. ~~**Session `Key` (cookie) source + rotation**~~ — **resolved:** secret files
+   under `<state>/cookie/`, ordered `cookie_paths` (`[0]` = active, tail =
+   validators). Keyring modeled now, honoured when verification lands.
+3. **Which `jac-store-fjall` backend** for `tassle-web` — settled elsewhere as
+   **turso** (the universal local `[store]`, shared with the CLI); see
+   `tass-config-db-selection`.
 4. **Scopes default** — ship `atproto`-only until a webapp needs repo writes,
    then `transition:generic`? (recommended yes)
 5. **Deployment / `client_id` URL** — needs a real public HTTPS origin for
    confidential mode; confirm the domain so metadata `client_id` is stable.
+   (`client_name = "Telluri.at"` implies `https://telluri.at`.)
 6. **jacquard source/version pin** — resolve §2.1 (git vs crates.io) before the
    crate boundary can compile.
+
+## Work plan (tickets)
+
+**Config foundation** (`tassle-config`) — **done & merged:**
+
+- `tass-config-profile-generic` — profile ≠ login; the `Login` model.
+- `tass-config-xdg-dirs` — XDG dirs + `TASSLE_APPNAME`; DB relocated under `<state>`.
+- `tass-config-db-selection` — top-level `[store]`; `@appname`/`@profile` sentinels.
+- `tass-config-db-lifecycle` — `store.create` / `store.update` flags.
+- `tass-config-cascade` — `extract_cascade` (`[table]` < `[table.child]`).
+- `tass-cli-config-flags` — `--config-dir` / `--appname`.
+- `tass-auth-store-turso`, `tass-cli-config-dedup`.
+
+**Next** (this doc's plan, in order):
+
+1. `tass-config-service-shape` — `ServiceConfig` + `[service]` / `[service.oauth]`
+   types + derivation over `extract_cascade` (the shape settled in this doc:
+   `keyset_paths` / `cookie_paths`, assumed dirs, `logo/tos/privacy_path`, no
+   DPoP/route knobs).
+2. `tass-web-auth-crate` — the `tassle-web-auth` + `tassle-web` crates: build the
+   `OAuthClient` from `ServiceConfig` + keyset + the shared turso `[store]`, wire
+   `jacquard-axum::oauth::routes`, serve the login page. (Below the config cutoff.)
+3. `tass-config-login-kinds` — `Login.kind` (app-password | oauth) + the CLI
+   loopback OAuth flow (jacquard `loopback.rs`).
+
+**Parked:**
+
+- `tass-store-update-enforce` (P4) — enforce `store.update = false` once
+  jac-store-fjall exposes schema-version introspection.
 
 ## References
 
