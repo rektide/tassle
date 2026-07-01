@@ -4811,6 +4811,15 @@ name = "tass-lex-schema"
 version = "0.1.0"
 
 [[package]]
+name = "tass-mage"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tass-quint",
+]
+
+[[package]]
 name = "tass-phase"
 version = "0.1.0"
 dependencies = [
