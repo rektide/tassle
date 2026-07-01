@@ -34,12 +34,13 @@ version = "0.1.0"
 
 [workspace.dependencies]
 # Jacquard 0.12 (crates.io) — version-aligned with jac-store-fjall.
-jacquard = { version = "0.12", default-features = false, features = ["api", "cache", "dns"] }
-jacquard-common = "0.12"
-jacquard-derive = "0.12"
-jacquard-identity = "0.12"
-jacquard-lexicon = "0.12"
-jacquard-oauth = "0.12"
+jacquard = { version = "0.12.1", default-features = false, features = ["api", "cache", "dns"] }
+jacquard-axum = "0.12.1"
+jacquard-common = "0.12.1"
+jacquard-derive = "0.12.1"
+jacquard-identity = "0.12.1"
+jacquard-lexicon = "0.12.1"
+jacquard-oauth = "0.12.1"
 # Local path dep — version-aligned on jacquard 0.12. The auth store runs on the
 # native-SQL turso backend (engine-v2 AuthRepository), so default features
 # (backend-fjall + parking_lot) are off: turso self-serializes via SQL and needs
