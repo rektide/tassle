@@ -165,9 +165,9 @@ The ledger work should land as read commands first:
 
 | Command | Purpose |
 |---|---|
-| `tassle ledger balance` | Show Node ambient pools, Tass balances, Mage pattern delta, and anomalies. |
-| `tassle ledger history` | Show ordered ledger events with source/target/amount/purpose and AT-URIs. |
-| `tassle ledger inspect <uri>` | Explain how one Node or Tass balance was derived. |
+| `tass ledger balance` | Show Node ambient pools, Tass balances, Mage pattern delta, and anomalies. |
+| `tass ledger history` | Show ordered ledger events with source/target/amount/purpose and AT-URIs. |
+| `tass ledger inspect <uri>` | Explain how one Node or Tass balance was derived. |
 
 Top-level aliases can come later if they are genuinely more usable, but the implementation should live under a ledger module so it does not get conflated with `mage list`.
 

@@ -18,14 +18,14 @@ three disconnected halves:
 
 On the Rust side today:
 
-- `generate node` (`crates/tassle-cli/src/commands/generate/node.rs`) builds +
+- `generate node` (`crates/tass-cli/src/commands/generate/node.rs`) builds +
   validates but **does not publish**, and **silently drops the
   `ambientQuintessence` default** when the flag is omitted
   (`generate/node.rs:67-69`) — a behavior regression vs TS.
-- The jacquard-generated builders (`crates/tassle-lexicons/.../tassilize.rs`)
+- The jacquard-generated builders (`crates/tass-lexicons/.../tassilize.rs`)
   are type-state, schema-only, no defaults, no cross-field rules.
 - Sample definitions live **inside the CLI command**
-  (`crates/tassle-cli/src/commands/samples.rs:53`); the corpus
+  (`crates/tass-cli/src/commands/samples.rs:53`); the corpus
   (`crates/tass-lex-sample`) only embeds the output behind its `samples`
   feature (`Cargo.toml:15`).
 - Output is split three ways: record `OutputFormat` + `emit()`
@@ -138,7 +138,7 @@ schema cannot express goes in a `validate_semantic()` companion to
 
 ### Open questions
 
-- Does `tass-factory` depend on `tass-lex` (renamed `tassle-lexicons`), or do we
+- Does `tass-factory` depend on `tass-lex` (renamed `tass-lexicons`), or do we
   re-export the generated types through it? Lean: depend on `tass-lex`, re-export
   the record types the factory constructs so consumers have one import path.
 - Should `Spec` expose a `builder()` too (bon-style) for programmatic

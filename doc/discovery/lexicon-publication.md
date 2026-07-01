@@ -9,7 +9,7 @@
 
 This is a discovery document, not a finalized design. It captures the
 understanding needed to turn publication into tickets and, later, into
-`tassle lex` / `tassle dns` commands.
+`tass lex` / `tass dns` commands.
 
 ---
 
@@ -249,7 +249,7 @@ Open account-setup questions (manual, one-time):
 - Does it take `telluri.at` as its handle? (Clean, but needs the `_atproto`
   TXT — deferred; not blocking.)
 - Who holds its credentials / OAuth session in `tassle`'s config? (Likely a
-  named profile, e.g. `tassle auth login --profile telluri`.)
+  named profile, e.g. `tass auth login --profile telluri`.)
 
 Scope requirements for the publisher session:
 
@@ -277,7 +277,7 @@ Scope requirements for the publisher session:
   ([`tass-auth-mvp`](#), [`tass-config-login-kinds`](#)), then publish from the
   canonical Rust CLI. **No stopgap TS/manual script** — avoid throwaway code.
 - **Tooling scope:** publication becomes **reusable CLI commands**
-  (`tassle lex ...`, `tassle dns ...`), not one-off scripts. Lexicons evolve
+  (`tass lex ...`, `tass dns ...`), not one-off scripts. Lexicons evolve
   during dev, so re-publish must be a normal operation.
 - **Doc scope:** MVP-focused. `node` + the three actions are documented
   fully; `resonance` and `form` are reserved-but-deferred.
@@ -304,36 +304,36 @@ These sit outside the existing product layering (`repo` / `mage` / `ledger`)
 placement is a design decision (a top-level `lex` + `dns` group, or nested
 under an `infra` umbrella).
 
-### `tassle lex` — lexicon lifecycle
+### `tass lex` — lexicon lifecycle
 
 ```
-tassle lex publish [--all | --collection <nsid>]
+tass lex publish [--all | --collection <nsid>]
     # read crates/tass-lex-schema/lexicons/*.json, write
     # com.atproto.lexicon.schema records (rkey = NSID) to the publisher
     # profile. Validates each against the meta-schema first; --all is the
     # normal "re-publish everything" op after a schema change.
 
-tassle lex list [--repo <did>]
+tass lex list [--repo <did>]
     # list published com.atproto.lexicon.schema records (verify what's live)
 
-tassle lex show <nsid>
+tass lex show <nsid>
     # fetch one published lexicon record back
 
-tassle lex resolve <nsid>
+tass lex resolve <nsid>
     # exercise the full resolution path (DNS TXT -> DID -> PDS -> getRecord),
     # reporting each hop. The end-to-end glue debugger.
 ```
 
-### `tassle dns` — marque DNS management
+### `tass dns` — marque DNS management
 
 ```
-tassle dns set-lexicon <authority-domain> [--did <did>]
+tass dns set-lexicon <authority-domain> [--did <did>]
     # upsert the _lexicon TXT entry in the at.marque.dns zone record for the
     # given authority domain (e.g. "telluri.at" -> entry name "_lexicon";
     # "act.telluri.at" -> entry name "_lexicon.act"). Wraps at.marque.dns
     # putRecord under the at.marque.authFull scope.
 
-tassle dns show <domain>
+tass dns show <domain>
     # thin wrapper over at.marque.dns.getRecords — show the active zone
 ```
 
@@ -357,10 +357,10 @@ To file against beads (prefix from `bd config get issue_prefix`):
   [`src/samples/generate.ts`](../../src/samples/generate.ts), then
   `cargo xtask codegen` + `cargo xtask samples`. Reserve (don't delete)
   `resonance` and `form` files, or move them aside.
-- **`tass-lex-publish`** — the `tassle lex publish/list/show/resolve` command
+- **`tass-lex-publish`** — the `tass lex publish/list/show/resolve` command
   group. Gated on Rust writes. Reads lexicon JSON, writes
   `com.atproto.lexicon.schema` records.
-- **`tass-dns-marque`** — the `tassle dns set-lexicon/show` command group.
+- **`tass-dns-marque`** — the `tass dns set-lexicon/show` command group.
   Gated on Rust writes + `at.marque.authFull` scope. Wraps `at.marque.dns`
   putRecord + `at.marque.dns.getRecords`.
 - **`tass-publisher-account`** — manual setup epic: create the dedicated
@@ -385,7 +385,7 @@ To file against beads (prefix from `bd config get issue_prefix`):
    quirk. Decide per-record.
 4. **Schema evolution discipline** — once published, lexicons are frozen under
    the evolution rules (new fields optional, no type/rename changes). The
-   `tassle lex publish` command should warn on breaking diffs against the
+   `tass lex publish` command should warn on breaking diffs against the
    currently-published version. Worth building into the command from the start?
 5. **Resonance authority** — if/when resonance lands, does it share
    `telluri.at` with `node`, or get its own `resonance.telluri.at` (a third

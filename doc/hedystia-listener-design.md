@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft notes for moving Tassle from a CLI-only energy ledger into an embedded Rust listener/enactor service. This builds on the local rpg.actor reference lexicons in [`doc/ref/`](/doc/ref/) and Hydrant's embeddable/indexer API in [`~/archive/ptr.pet/hydrant`](/home/rektide/archive/ptr.pet/hydrant). The Rust CLI should compile this surface only when `tassle-cli` is built with a `hydrant` cargo feature.
+Draft notes for moving Tassle from a CLI-only energy ledger into an embedded Rust listener/enactor service. This builds on the local rpg.actor reference lexicons in [`doc/ref/`](/doc/ref/) and Hydrant's embeddable/indexer API in [`~/archive/ptr.pet/hydrant`](/home/rektide/archive/ptr.pet/hydrant). The Rust CLI should compile this surface only when `tass-cli` is built with a `hydrant` cargo feature.
 
 The older TypeScript/Bun Hedystia shape remains useful as product language, but the first implementation should follow Hydrant's embedded `examples/statusphere.rs` pattern: build a `hydrant::config::Config`, create `Hydrant::new`, configure filters, call `subscribe(cursor)`, and run Hydrant and the listener in the same Tokio process.
 
@@ -104,8 +104,8 @@ The pragmatic integration is same-process embedding in the Rust CLI, gated behin
 
 Implementation flow:
 
-1. Add an optional `hydrant` dependency to `crates/tassle-cli` and expose it through a `hydrant` feature.
-2. In feature builds, compile `tassle hydrant`, `tassle listen`, `tassle worker`, `tassle serve`, and `tassle dev-service` command modules behind `#[cfg(feature = "hydrant")]`.
+1. Add an optional `hydrant` dependency to `crates/tass-cli` and expose it through a `hydrant` feature.
+2. In feature builds, compile `tass hydrant`, `tass listen`, `tass worker`, `tass serve`, and `tass dev-service` command modules behind `#[cfg(feature = "hydrant")]`.
 3. Build a `hydrant::config::Config` from Hydrant env plus Tassle CLI defaults. Default `database_path` should live under the Tassle data dir, not the current working directory.
 4. Configure `FilterMode::Filter`, `set_signals`, and `set_collections` for Tassle collections before `run()`, as in `examples/statusphere.rs`.
 5. Load the last committed listener cursor from the Tassle service store and call `hydrant.subscribe(Some(cursor))`. Use `Some(0)` for a full replay/rebuild.
@@ -113,7 +113,7 @@ Implementation flow:
 7. The listener stores raw stream events, normalized ledger events, anomalies, and the advanced cursor in one durable commit. The cursor only advances after that commit succeeds.
 8. The listener uses `hydrant.repos` for public indexed reads and authenticated ATProto OAuth sessions for writes.
 
-Candidate Hydrant environment for `tassle hydrant env`:
+Candidate Hydrant environment for `tass hydrant env`:
 
 ```text
 HYDRANT_DATABASE_PATH=.data/hydrant
@@ -127,11 +127,11 @@ HYDRANT_ENABLE_CRAWLER=true
 
 Hydrant's HTTP API is optional in the embedded service. Do not expose Hydrant management endpoints publicly. If public access is needed, only proxy `/xrpc/*`, `/stream`, `/stats`, and health endpoints.
 
-The sidecar mode can remain a later escape hatch through `tassle hydrant run --api-bind ...`, but it should not be the first architecture.
+The sidecar mode can remain a later escape hatch through `tass hydrant run --api-bind ...`, but it should not be the first architecture.
 
 ## Data Dirs
 
-Use one Tassle data root for all durable state. In development, `.data` is fine. For installed CLI use, prefer `TASSLE_DATA_DIR`, then `XDG_DATA_HOME/tassle`, then `~/.local/share/tassle`.
+Use one Tassle data root for all durable state. In development, `.data` is fine. For installed CLI use, prefer `TASS_DATA_DIR`, then `XDG_DATA_HOME/tass`, then `~/.local/share/tass`.
 
 Suggested layout:
 
@@ -177,30 +177,30 @@ Auth tokens belong in the Tassle service store, not Hydrant. Hydrant is an index
 Start with process-level embedding of Hydrant.
 
 ```text
-tassle hydrant env             # print Hydrant/Tassle env for the embedded filtered indexer
-tassle hydrant run             # run embedded Hydrant only, optionally with local API
-tassle listen                  # run embedded Hydrant + listener fold loop
-tassle worker                  # run due-job scheduler/enactor loop
-tassle serve                   # run Tassle HTTP app only
-tassle dev-service             # run Hydrant + listener + worker + HTTP app for local dev
+tass hydrant env             # print Hydrant/Tassle env for the embedded filtered indexer
+tass hydrant run             # run embedded Hydrant only, optionally with local API
+tass listen                  # run embedded Hydrant + listener fold loop
+tass worker                  # run due-job scheduler/enactor loop
+tass serve                   # run Tassle HTTP app only
+tass dev-service             # run Hydrant + listener + worker + HTTP app for local dev
 ```
 
 Implementation modules:
 
 ```text
-crates/tassle-cli/src/commands/hydrant.rs       # env + raw Hydrant run commands
-crates/tassle-cli/src/commands/listen.rs        # embedded Hydrant + listener entrypoint
-crates/tassle-cli/src/commands/worker.rs        # due-job worker entrypoint
-crates/tassle-cli/src/commands/serve.rs         # HTTP app entrypoint
-crates/tassle-cli/src/service/data_dir.rs       # Tassle data-root resolution
-crates/tassle-cli/src/service/hydrant.rs        # Config defaults + filter setup
-crates/tassle-cli/src/service/listener.rs       # cursor-aware EventStream consumer
-crates/tassle-cli/src/service/processor.rs      # classify records into intents, attestations, effects
-crates/tassle-cli/src/service/ledger_store.rs   # LedgerStore trait + fjall layouts
-crates/tassle-cli/src/service/verifier.rs       # ownership, attestation, energy, and sheet checks
-crates/tassle-cli/src/service/scheduler.rs      # due jobs
-crates/tassle-cli/src/service/enactor.rs        # PDS writes + sheet patches
-crates/tassle-cli/src/web/app.rs                # HTTP app routes
+crates/tass-cli/src/commands/hydrant.rs       # env + raw Hydrant run commands
+crates/tass-cli/src/commands/listen.rs        # embedded Hydrant + listener entrypoint
+crates/tass-cli/src/commands/worker.rs        # due-job worker entrypoint
+crates/tass-cli/src/commands/serve.rs         # HTTP app entrypoint
+crates/tass-cli/src/service/data_dir.rs       # Tassle data-root resolution
+crates/tass-cli/src/service/hydrant.rs        # Config defaults + filter setup
+crates/tass-cli/src/service/listener.rs       # cursor-aware EventStream consumer
+crates/tass-cli/src/service/processor.rs      # classify records into intents, attestations, effects
+crates/tass-cli/src/service/ledger_store.rs   # LedgerStore trait + fjall layouts
+crates/tass-cli/src/service/verifier.rs       # ownership, attestation, energy, and sheet checks
+crates/tass-cli/src/service/scheduler.rs      # due jobs
+crates/tass-cli/src/service/enactor.rs        # PDS writes + sheet patches
+crates/tass-cli/src/web/app.rs                # HTTP app routes
 ```
 
 The immediate implementation can start with `hydrant env`, `hydrant run`, and `listen` only. `worker`, `serve`, and `dev-service` should be compiled under the same feature but can land as tickets once storage and folding are stable.
@@ -212,7 +212,7 @@ The immediate implementation can start with `hydrant env`, `hydrant run`, and `l
 3. Add data-root resolution and a `LedgerStore` trait with a per-DID fjall implementation.
 4. Add embedded Hydrant setup, filter defaults, and cursor persistence without enacting anything.
 5. Normalize and index incoming `com.superbfowle.tass.*` events into the ledger store.
-6. Add `tassle ledger balance/history/inspect` reads over the materialized fold.
+6. Add `tass ledger balance/history/inspect` reads over the materialized fold.
 7. Add Node ownership/attestation records and strong refs.
 8. Add DB-backed OAuth stores behind the existing auth adapter seam so the service can restore user agents.
 9. Add scheduler and idempotent effect emission.
@@ -227,4 +227,4 @@ The immediate implementation can start with `hydrant env`, `hydrant run`, and `l
 - Should scheduled Node regen be eager timed emission, or lazy mint on touch? Lazy mint keeps energy bounded and is probably safer.
 - Which attestation primitive ships first: keytrace-style field signatures, atproto-attestation-style whole-record signatures, or service-published strong-ref attestations without cryptographic signatures?
 - Should Tassle use Hydrant's `user-keyspace` feature to share one fjall database, or keep `<data>/hydrant` and `<data>/ledger/<did-key>` physically separate for lifecycle isolation?
-- Should `tassle listen` expose Hydrant's local HTTP API by default, or only when explicitly requested?
+- Should `tass listen` expose Hydrant's local HTTP API by default, or only when explicitly requested?

@@ -399,8 +399,8 @@ A reality is what an account publishes to declare "this is a game reality I run"
   "domainUri": "at://did:plc:kwgllf365cwmxbnxitx4pjdj/pub.layers.graph.graphNode/<rpg-cosmology-node>",
   "kind": "expert-panel",
   "ontologyRefs": [
-    "at://did:plc:<tassle-authority>/pub.layers.ontology.ontology/<mage-cosmology-rkey>",
-    "at://did:plc:<tassle-authority>/pub.layers.ontology.ontology/<reverie-cosmology-rkey>"
+    "at://did:plc:<tass-authority>/pub.layers.ontology.ontology/<mage-cosmology-rkey>",
+    "at://did:plc:<tass-authority>/pub.layers.ontology.ontology/<reverie-cosmology-rkey>"
   ],
   "knowledgeRefs": [
     { "source": "custom", "identifier": "mage-revised", "uri": "https://whitewolf.fandom.com/wiki/Mage:_The_Ascension", "label": "Mage Revised" }

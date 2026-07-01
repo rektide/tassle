@@ -1,4 +1,4 @@
-# Discovery: tassle auth CLI surface + session store
+# Discovery: tass auth CLI surface + session store
 
 > **This document is a subagent prompt.** It is not a design doc — it is a
 > detailed brief for an investigative agent that surveys prior art and
@@ -14,8 +14,8 @@ surface and session-store schema.
 
 We have two open design questions:
 
-1. **Auth CLI surface** — what subcommands should `tassle auth ...` expose?
-   How should top-level aliases (`tassle login` ≡ `tassle auth login`) work?
+1. **Auth CLI surface** — what subcommands should `tass auth ...` expose?
+   How should top-level aliases (`tass login` ≡ `tass auth login`) work?
    What conveniences / modes / output formats are worth copying?
 2. **Auth data storage** — what does the session store actually need to
    hold? What's the right shape for a SQLite/Turso schema that backs it?
@@ -33,7 +33,7 @@ using [Jacquard](https://github.com/rsform/jacquard)** as the canonical
 atproto toolkit. See [`doc/jacquard-use.md`](../jacquard-use.md) for the
 full rationale.
 
-The current Rust skeleton lives at `crates/tassle-cli/` with a single
+The current Rust skeleton lives at `crates/tass-cli/` with a single
 `generate node` subcommand. No auth yet. Auth is the next layer.
 
 **Hard constraints**:
@@ -41,9 +41,9 @@ The current Rust skeleton lives at `crates/tassle-cli/` with a single
   `jacquard-identity` / `jacquard::client` — do not re-implement OAuth
   primitives.
 - The CLI uses clap v4 derive (per repo convention; see existing
-  `crates/tassle-cli/src/main.rs`).
-- Auth subcommands live under `tassle auth <verb>` (e.g.
-  `tassle auth login`). Top-level aliases like `tassle login` are
+  `crates/tass-cli/src/main.rs`).
+- Auth subcommands live under `tass auth <verb>` (e.g.
+  `tass auth login`). Top-level aliases like `tass login` are
   **hidden from `--help`** but functional. (Concretely: clap subcommand
   with `#[command(hide = true)]` alias, or flatten both routes to the
   same handler.)
@@ -304,7 +304,7 @@ Also investigate:
   ([github.com/rsform/jacquard](https://github.com/rsform/jacquard)).
   Don't suggest atrium-rs unless comparing-for-contrast.
 - **Hidden alias pattern**: every auth verb has both a canonical
-  `tassle auth <verb>` form and a top-level alias `tassle <verb>` that
+  `tass auth <verb>` form and a top-level alias `tassle <verb>` that
   is hidden from `--help`. Show how this is done in clap v4 derive.
 - **Turso for the session store**: schema must be SQLite-compatible
   (no Postgres-only types). Open a follow-up ticket in the report for
@@ -354,11 +354,11 @@ Return a single structured markdown report with these sections:
    with sensitivity/frequency/Jacquard-format columns. No final
    schema.
 
-6. **Recommended `tassle auth` surface**: your proposed command list,
+6. **Recommended `tass auth` surface**: your proposed command list,
    one line each. Mark which are required-for-MVP vs nice-to-have.
 
 7. **Top-level aliases** to expose (hidden from `--help`):
-   e.g. `tassle login`, `tassle whoami`, `tassle logout`.
+   e.g. `tass login`, `tass whoami`, `tass logout`.
 
 8. **Bells and whistles worth copying**: a small list of polish items
    that aren't strictly required but seem worth the effort.

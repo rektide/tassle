@@ -3,7 +3,7 @@
 > Distillation of [`discovery/cli-surface.md`](discovery/cli-surface.md) +
 > [`discovery/cli-surface-findings.md`](discovery/cli-surface-findings.md),
 > re-scoped to **app-password first, OAuth later**, and built on three existing
-> libraries rather than a new tassle auth crate.
+> libraries rather than a new tass auth crate.
 >
 > **Amends** [`adr/0001-profile-config-before-auth.md`](adr/0001-profile-config-before-auth.md)
 > follow-up ("Implement real OAuth under the same `auth login`"): real auth lands
@@ -23,22 +23,22 @@ App-password MVP drops most OAuth complexity: no DPoP key, no nonces, no PAR
 state, no scopes. The persisted secret is **two JWTs** (`access_jwt`,
 `refresh_jwt`) per session.
 
-## 2. Architecture — compose three libraries, no tassle-auth crate
+## 2. Architecture — compose three libraries, no tass-auth crate
 
 Rektide's constraint: **don't** wrap jacquard + jac-store-fjall in a confusing
 layer, **and don't** leave all auth in the CLI crate. Resolution: auth is
-*startup wiring* that lives in a **shared application crate** (`tassle-app`),
-not a wrapper. `tassle-app` is the composition root + the domain actions; both
-`tassle-cli` and a future `tassle-web` are thin front-ends on it.
+*startup wiring* that lives in a **shared application crate** (`tass-app`),
+not a wrapper. `tass-app` is the composition root + the domain actions; both
+`tass-cli` and a future `tass-web` are thin front-ends on it.
 
 ```mermaid
 flowchart TD
     FIG["figments-rs  (~/src/figments-rs, = figment2 fork)<br/>config engine + Profile switch"]
     JACSTORE["jac-store-fjall  (~/src/jac-store-fjall)<br/>fjall/canopy SessionStore + ClientAuthStore<br/>+ the config module we'll help land"]
     JAC["jacquard  (rsform/jacquard, 0.12)<br/>CredentialSession / OAuthSession / Agent"]
-    APP["crates/tassle-app  (NEW: shared domain library)<br/>Runtime::bootstrap(profile) -> Agent<br/>+ tassle domain actions (node, ledger, …)"]
-    CLI["crates/tassle-cli  (clap front-end)"]
-    WEB["crates/tassle-web  (future: hedystia or axum)"]
+    APP["crates/tass-app  (NEW: shared domain library)<br/>Runtime::bootstrap(profile) -> Agent<br/>+ tassle domain actions (node, ledger, …)"]
+    CLI["crates/tass-cli  (clap front-end)"]
+    WEB["crates/tass-web  (future: hedystia or axum)"]
     FIG --> APP
     JACSTORE --> APP
     JAC --> APP
@@ -52,14 +52,14 @@ flowchart TD
   module upstream (§6 asks a/b/e).
 - **`jacquard`** = the auth logic (`CredentialSession`, `Agent`). We do **not**
   re-wrap its APIs.
-- **`crates/tassle-app`** = bootstrap + domain. `Runtime::from_profile(figment,
+- **`crates/tass-app`** = bootstrap + domain. `Runtime::from_profile(figment,
   profile)` does: extract profile → boot that profile's store → construct the
   matching jacquard session → `Agent`. Domain methods take the `Agent` and do
   tassle things. **This is where the ~30 lines of auth wiring live** — shared by
   CLI and web, not a wrapper around jacquard's primitives, not stranded in CLI.
-- tassle CLI commands and the future web service both call `tassle-app`.
+- tassle CLI commands and the future web service both call `tass-app`.
 
-> Why not a `tassle-auth` crate (the earlier proposal)? It would be a thin
+> Why not a `tass-auth` crate (the earlier proposal)? It would be a thin
 > wrapper over jacquard + jac-store-fjall that re-exposes their APIs — exactly
 > the "confusing layer" to avoid. The bootstrap wiring is small and belongs with
 > the domain it boots. If the wiring ever grows a personality (CEL selectors,
@@ -68,7 +68,7 @@ flowchart TD
 ### 2.1 Source/version alignment (integration task)
 
 `tassle` currently pulls `jacquard` from **git** (`Cargo.toml:19-20` +
-`crates/tassle-cli/Cargo.toml:17-19`). `jac-store-fjall` pulls `jacquard = "0.12"`
+`crates/tass-cli/Cargo.toml:17-19`). `jac-store-fjall` pulls `jacquard = "0.12"`
 from **crates.io** (`Cargo.toml:23-27`). These must resolve to the same version
 or Cargo will compile jacquard twice and the trait impls won't type-check across
 the boundary. **Decide: pin tassle to `jacquard = "0.12"` (crates.io) to match
@@ -80,17 +80,17 @@ figment2 has a built-in `Profile` type (`src/profile.rs`) and extraction model
 (`src/lib.rs:195-284`): a `Figment` holds `Map<Profile, Dict>`; `Toml::file(..).nested()`
 treats top-level `[sections]` as profiles; `figment.select("X").extract::<T>()`
 returns the merged view of `default` + `global` + `X`. Profile names are
-arbitrary case-insensitive strings; `Profile::from_env("TASSLE_PROFILE")` and
+arbitrary case-insensitive strings; `Profile::from_env("TASS_PROFILE")` and
 `Figment::profiles()` (the iterator of known profiles, `src/figment.rs:832`) both
 exist.
 
 We repurpose this as the **login switcher**: one figment profile per login.
 
 ```toml
-# ${XDG_CONFIG_HOME:-~/.config}/tassle/config.toml  (nested profiles)
+# ${XDG_CONFIG_HOME:-~/.config}/tass/config.toml  (nested profiles)
 [default]                       # applies to every profile unless overridden
 auth_mode = "app_password"      # default auth mode
-store_path = "${XDG_CONFIG_HOME}/tassle/default.fjall"   # default store location
+store_path = "${XDG_CONFIG_HOME}/tass/default.fjall"   # default store location
 
 [global]                        # overrides everything (rare; e.g. user_agent)
 
@@ -103,7 +103,7 @@ session_id = "primary"
 did = "did:plc:player..."       #   -> "multiple logins to one account"
 auth_mode = "oauth"
 session_id = "oauth-test"
-store_path = "${XDG_CONFIG_HOME}/tassle/profiles/player-oauth.fjall"
+store_path = "${XDG_CONFIG_HOME}/tass/profiles/player-oauth.fjall"
 
 [storyteller]                   # a second account
 did = "did:plc:st..."
@@ -112,10 +112,10 @@ auth_mode = "app_password"
 
 Switching the active login = selecting a figment profile, via any of:
 - `--profile <name>` global flag
-- `TASSLE_PROFILE=<name>` env var (`Profile::from_env`)
+- `TASS_PROFILE=<name>` env var (`Profile::from_env`)
 - an `active_profile` key in a non-nested `tassle` section (the persisted default)
 
-`tassle auth list` = `figment.profiles()`. `tassle auth switch <name>` = write
+`tass auth list` = `figment.profiles()`. `tass auth switch <name>` = write
 `active_profile`. **No new switching mechanism is invented** — it's figment all
 the way down.
 
@@ -169,7 +169,7 @@ Refs: `FjallAuth::open`/`builder` `src/engine/fjall.rs:235-293`; `.app_password(
 /`.oauth()` `src/engine/fjall.rs:295-304`; `CredentialSession::new`
 `jacquard…/client/credential_session.rs:242`; `resume` returns `LoginRequired` as
 a value, not an error (`:44-48`, `:528-530`). Verified by
-`crates/tassle-cli/examples/auth_spike.rs`.
+`crates/tass-cli/examples/auth_spike.rs`.
 
 Reassuring built-ins for our design:
 - `RepoCore` **already tracks active account**: `active_account()`,
@@ -193,7 +193,7 @@ features. A profile selects the *path* and the *login*, not the backend type.
 This keeps `Runtime::bootstrap` returning a concrete
 `Agent<CredentialSession<AppPasswordStore<KvRepository<FjallEngine, Cbor>>>>` —
 no boxing, no facade trait. If the web service later needs Turso (multi-process),
-that's a separate build of `tassle-app` or an enum-of-impls facade (ask e) — not
+that's a separate build of `tass-app` or an enum-of-impls facade (ask e) — not
 day-one.
 
 ## 5. The present configuration interface (what rektide asked for)
@@ -236,9 +236,9 @@ Each: **what / why / size / touches**. "Status" = today, as-written.
 | **α** | **engine-v2 landing + bon builders.** Domain `AuthRepository` boundary, deletion of the old `store/` layer, bon builders re-added on the new repo types. | Prerequisite for *any* use. | ~~Medium~~ **DONE** (recent cleanup) · `src/engine/{fjall,canopy}.rs`, `src/repo/`, `README.md`. Was `jacfj-engine-v2`. |
 | **β** | **Re-scope `jacfj-figment-spike`** (premise restored). figment2 → `Config{path, backend, codec, lock, …}` → `FjallStore::builder()` (bon). Decide runtime codec/backend selection given both are non-object-safe (likely: fix at build time, §4.3). | The config keystone for profile-switching. | Design · **open ticket** · beads `jacfj-figment-spike`. |
 | **a** | **Build the `config` module.** A `Config` struct (figment-deserialized) + a constructor that, given a `figment2::Profile` (or resolved layered config), returns a booted store. The spike (β) made concrete. | Selecting a figment profile = selecting the active login + its storage. Central to the whole design. | Medium (after β decided) · **MISSING** · replace `src/config.rs:1-4`; reuses `FjallEngine::open`, `KvRepository::new`, `OAuthStore::new`/`AppPasswordStore::new`. |
-| **b** | **Per-profile path convention + XDG helper.** A documented `StorePaths::for_profile(name) -> PathBuf` computing e.g. `${XDG_CONFIG_HOME}/tassle/profiles/<name>.fjall`, behind the `config` feature (add `xdg-basedir`). | Per-profile storage so each login's creds + active pointer + sweep ledger are isolated. CLI + web both need it. | **Small, additive** · **PARTIALLY SOLVED** (primitive exists, convention/helper doesn't) · new helper in `src/config.rs` or `src/path.rs`; flows into `FjallEngine::open`. |
-| **e** | **Shared boot helper.** `fn stores_for_profile(cfg, profile) -> (OAuthStore<…>, AppPasswordStore<…>)` so neither tassle-cli nor tassle-web writes the wiring. | "Must work for CLI *and* web; no wrapper crate." Keeps wiring in one place. | Constrained by §4.3: with backend/codec fixed at build time, returns **concrete** types — **small**. Runtime selection would need a new object-safe facade — **design change**, defer. · **MISSING** · new in `src/config.rs`. |
-| **c** | **Per-DID session enumeration.** Add `AppPasswordRepo::all_by_did(did)` / `OAuthRepo::all_sessions_by_did(did)` (mirror `first_by_did` but don't `Scan::Stop`). | `tassle auth status` listing all logins for one account; selecting a specific `session_id`. (Specific-session select already works via `SessionHint::Key`, `src/repo/mod.rs:178,249`.) | **Small, additive** (prefix-scan machinery exists at `src/repo/kv.rs:89-91,109-111`) · **MISSING** (only `first_by_did`) · `src/repo/mod.rs:100-115,122-153` + impls `src/repo/kv.rs:320-328,499-507`. |
+| **b** | **Per-profile path convention + XDG helper.** A documented `StorePaths::for_profile(name) -> PathBuf` computing e.g. `${XDG_CONFIG_HOME}/tass/profiles/<name>.fjall`, behind the `config` feature (add `xdg-basedir`). | Per-profile storage so each login's creds + active pointer + sweep ledger are isolated. CLI + web both need it. | **Small, additive** · **PARTIALLY SOLVED** (primitive exists, convention/helper doesn't) · new helper in `src/config.rs` or `src/path.rs`; flows into `FjallEngine::open`. |
+| **e** | **Shared boot helper.** `fn stores_for_profile(cfg, profile) -> (OAuthStore<…>, AppPasswordStore<…>)` so neither tass-cli nor tass-web writes the wiring. | "Must work for CLI *and* web; no wrapper crate." Keeps wiring in one place. | Constrained by §4.3: with backend/codec fixed at build time, returns **concrete** types — **small**. Runtime selection would need a new object-safe facade — **design change**, defer. · **MISSING** · new in `src/config.rs`. |
+| **c** | **Per-DID session enumeration.** Add `AppPasswordRepo::all_by_did(did)` / `OAuthRepo::all_sessions_by_did(did)` (mirror `first_by_did` but don't `Scan::Stop`). | `tass auth status` listing all logins for one account; selecting a specific `session_id`. (Specific-session select already works via `SessionHint::Key`, `src/repo/mod.rs:178,249`.) | **Small, additive** (prefix-scan machinery exists at `src/repo/kv.rs:89-91,109-111`) · **MISSING** (only `first_by_did`) · `src/repo/mod.rs:100-115,122-153` + impls `src/repo/kv.rs:320-328,499-507`. |
 | **g** | **Status discoverability.** Expose resolved path/codec/backend/lock so `auth status` can print "player → fjall@…/player.fjall (cbor)". | Dev/cred-flow UX. | **Small** · **PARTIAL** (lock inspectable via `RmwLock::kind()`; path not retained on `FjallEngine` `src/engine/fjall.rs:48-52`; codec/backend only knowable from the config that built the store). Cleanest: status comes from the figment `Config`, not the live store. |
 | **d** | **Storage-domain partitioning** (a `Domain` param on `TreeName`). | "Profile may declare its own other-domain storage." | **Recommend REJECT.** `TreeName` is a closed 8-variant enum (`src/engine/mod.rs:26-43`); adding `Domain` reshapes key encoding + bootstrap — over-engineering. Per-domain = per-profile **path** (b) or `FjallEngine::from_db` cohabitation on disjoint keyspace names (`src/engine/fjall.rs:95-102`). See §7. |
 | **f** | **Cross-process locking** (CLI + web sharing one store). | "Eventually a web service doing the same actions." | **Recommend DON'T ASK here.** All `LockKind`s are `cross_process: false`; fjall takes an exclusive file lock at open (single-owner DB). Out of scope per `README.md:824-826` (punted to a future `fseqlock`) and `doc/async.md:230-232`. Route around: per-profile single-writer (b), or `jac-store-turso` for the web tier. |
@@ -282,28 +282,28 @@ Resolves beads `tass-config-command-shape`. `★` MVP, `☆` nice-to-have.
 
 ```
 # config (generic) — backed by figments-rs
-tassle config get|set|unset <key>            ★
-tassle config files                          ★  (loaded fragments + precedence)
+tass config get|set|unset <key>            ★
+tass config files                          ★  (loaded fragments + precedence)
 
-# auth (login + session) — backed by tassle-app + jac-store-fjall
-tassle auth login [<did-or-handle>]          ★  prompts app-password; createSession;
+# auth (login + session) — backed by tass-app + jac-store-fjall
+tass auth login [<did-or-handle>]          ★  prompts app-password; createSession;
    [--password <p>] [--pds <url>]               writes profile + persists session
    [--profile <name>] [--auth-mode app_password|oauth]
-tassle auth status                           ★  figment.profiles() x store: each login,
+tass auth status                           ★  figment.profiles() x store: each login,
                                                  active marked, JWT exp, storage path
-tassle auth logout [<profile|did>]           ★  deleteSession + drop session; --all
-tassle auth switch <profile>                 ★  set active_profile (no token work)
-tassle auth list                             ☆  profiles, machine-friendly
-tassle auth token [<profile>]                ☆  print (refreshed) access_jwt for piping
+tass auth logout [<profile|did>]           ★  deleteSession + drop session; --all
+tass auth switch <profile>                 ★  set active_profile (no token work)
+tass auth list                             ☆  profiles, machine-friendly
+tass auth token [<profile>]                ☆  print (refreshed) access_jwt for piping
 
 # global flags
 --profile <name>        (selects figment profile for this invocation)
 --format json|table     (global; not per-command --json)
 --account <did|handle>  (overrides the profile's DID for one call)
-env: TASSLE_PROFILE, TASSLE_IDENTIFIER, TASSLE_PASSWORD, TASSLE_PDS
+env: TASS_PROFILE, TASS_IDENTIFIER, TASS_PASSWORD, TASS_PDS
 
 # hidden top-level aliases (#[command(hide = true)])
-tassle login / logout / whoami / switch / token
+tass login / logout / whoami / switch / token
 ```
 
 `auth refresh` (OAuth scope expansion) is dropped — app-password has no scopes.
@@ -322,22 +322,22 @@ the next.
 3. **(jac-store-fjall)** re-scope `jacfj-figment-spike` (β) and land the `config`
    module: `Config` struct + `stores_for_profile` + XDG `StorePaths::for_profile`
    (asks a/b/e), with backend=fjall/codec=Cbor fixed at build time.
-4. **(tassle)** extract `crates/tassle-app`: `Runtime::from_profile` bootstrap +
-   move domain actions out of `tassle-cli/src/commands/`.
-5. **(tassle)** `tassle config …` on figments-rs; deprecate `auth set` as alias.
+4. **(tassle)** extract `crates/tass-app`: `Runtime::from_profile` bootstrap +
+   move domain actions out of `tass-cli/src/commands/`.
+5. **(tassle)** `tass config …` on figments-rs; deprecate `auth set` as alias.
    (Closes `tass-figments-config`, `tass-config-command-shape`.)
-6. **(tassle)** `tassle auth login/status/logout/switch` + `--profile`/`--format`
+6. **(tassle)** `tass auth login/status/logout/switch` + `--profile`/`--format`
    global flags; hidden aliases. `auth login` gains real createSession (replacing
    the ADR-0001 profile stub).
 7. **(jac-store-fjall)** ask (c) per-DID enumeration lands whenever multi-login
    `status` needs it.
-8. **(later)** OAuth loopback as a `tassle-app` mode gated on jacquard's
+8. **(later)** OAuth loopback as a `tass-app` mode gated on jacquard's
    `loopback` feature; `player-oauth`-style profiles light up. Web service
-   (`tassle-web`/hedystia) reuses `tassle-app`; multi-process → `jac-store-turso`.
+   (`tass-web`/hedystia) reuses `tass-app`; multi-process → `jac-store-turso`.
 
 ## 11. Open decisions for rektide
 
-1. **No `tassle-auth` crate; bootstrap lives in `crates/tassle-app`?** (Recommended.
+1. **No `tass-auth` crate; bootstrap lives in `crates/tass-app`?** (Recommended.
    This is the resolution to "no wrapper, not all in CLI".)
 2. **Fix backend=fjall / codec=Cbor at build time for MVP?** (Recommended; §4.3.
    Runtime selection deferred.)
@@ -349,7 +349,7 @@ the next.
    more idiomatic fit; the `.d` layout can survive as figment providers merging
    multiple files.)
 5. **`active_profile` persistence**: a key in a non-nested `[tassle]` section, or
-   `TASSLE_PROFILE` only?
+   `TASS_PROFILE` only?
 6. **`--format` global vs `--json` per-command**: recommended global.
 7. **Store the app password** for silent re-auth? Recommended **no** for MVP (§8).
 
@@ -359,5 +359,5 @@ the next.
 - Cross-process locking / fseqlock — use per-profile single-writer or turso.
 - Turso⇄hedystia (Bun/libsql) interop proof.
 - CBOR output (free once `--format` is global).
-- A `tassle-auth` crate (explicitly rejected; see §2).
+- A `tass-auth` crate (explicitly rejected; see §2).
 - Reconciling with legacy TS `src/auth/*` (reference only).

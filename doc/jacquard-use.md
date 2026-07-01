@@ -64,11 +64,11 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
     Cargo.toml                  # workspace
     crates/
     ├── tass-lex-schema/        # canonical lexicon JSON corpus
-    ├── tassle-lexicons/         # generated, .gitignore'd or committed?
+    ├── tass-lexicons/         # generated, .gitignore'd or committed?
     │   └── src/...              # output of jacquard-codegen
-    └── tassle-codegen/          # thin binary wrapping jacquard-lexgen
+    └── tass-codegen/          # thin binary wrapping jacquard-lexgen
         ├── Cargo.toml           # git dep on rsform/jacquard
-        └── src/main.rs          # read tass-lex-schema/lexicons, write tassle-lexicons/
+        └── src/main.rs          # read tass-lex-schema/lexicons, write tass-lexicons/
     ```
 
 2. **A `lexicons.kdl`** at project root:
@@ -80,7 +80,7 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
    ```
    Future: add `source "mage-canonical" type="atproto" { endpoint "did:plc:..." }` when canonical Mage resonances get published.
 
-3. **CI step**: `cargo run -p tassle-codegen && git diff --exit-code crates/tassle-lexicons/` — fails if generated types drifted from the corpus.
+3. **CI step**: `cargo run -p tass-codegen && git diff --exit-code crates/tass-lexicons/` — fails if generated types drifted from the corpus.
 
 4. **Make the Rust CLI primary.** The TypeScript CLI stays as a legacy/reference implementation while OAuth and write flows are ported.
 
@@ -91,5 +91,5 @@ For our `com.superbfowle.tass.*` lexicons, jacquard produces:
 ## Open questions
 
 - Do we depend on jacquard via git (it's not all published on crates.io) or vendor the subset?
-- Do we commit generated `crates/tassle-lexicons/` or generate in CI? (Committing gives reviewers visibility but adds churn.)
+- Do we commit generated `crates/tass-lexicons/` or generate in CI? (Committing gives reviewers visibility but adds churn.)
 - Do we ever want the reverse direction (`#[derive(LexiconSchema)]`) — authoring lexicons in Rust and emitting JSON? Probably not for tassle, but worth knowing it's there.

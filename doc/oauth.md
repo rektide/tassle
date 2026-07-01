@@ -1,14 +1,14 @@
-# Web login — `tassle-web-auth` + `tassle-web`
+# Web login — `tass-web-auth` + `tass-web`
 
 > **Status:** early design, exploring. Goal: a small Axum web server whose one
 > job (for now) is to let people **log in with their atproto account** so they
-> can use webapps. Two crates: **`tassle-web-auth`** (reusable OAuth-login
-> plumbing) consumed by **`tassle-web`** (the app). Tenancy: **one app, many
+> can use webapps. Two crates: **`tass-web-auth`** (reusable OAuth-login
+> plumbing) consumed by **`tass-web`** (the app). Tenancy: **one app, many
 > users** — a single `client_id` / keyset, N end-user sessions.
 >
 > **Supersedes** the web/OAuth parts of
-> [`auth-design.md`](auth-design.md): the `tassle-app` composition-root crate is
-> abandoned. Auth-web wiring lives in its own crate (`tassle-web-auth`), which is
+> [`auth-design.md`](auth-design.md): the `tass-app` composition-root crate is
+> abandoned. Auth-web wiring lives in its own crate (`tass-web-auth`), which is
 > the "grows a personality → split out" case that doc's §2 anticipated.
 > Related: [`jacquard-use.md`](jacquard-use.md).
 
@@ -40,9 +40,9 @@ already uses it as the session store per [`auth-design.md`](auth-design.md) §4.
 So the stack already exists end to end:
 
 ```
-   tassle-web  (the app: pages, "protected" routes, session UI)
+   tass-web  (the app: pages, "protected" routes, session UI)
         │  consumes
-   tassle-web-auth  (thin: build the OAuthClient, config, login page, wiring)
+   tass-web-auth  (thin: build the OAuthClient, config, login page, wiring)
         │  ├── jacquard-axum::oauth   ── extractors + /oauth/* routes + cookies
         │  └── jacquard-oauth         ── OAuthClient (start_auth / callback / restore)
         │           │ persists through
@@ -51,7 +51,7 @@ So the stack already exists end to end:
         └────► jac-store-fjall        ── durable fjall/turso/canopy backend
 ```
 
-**`tassle-web-auth`'s actual job is wiring, not protocol.** It:
+**`tass-web-auth`'s actual job is wiring, not protocol.** It:
 
 1. constructs one `OAuthClient` from (a) a `jac-store-fjall` store and (b) our
    client metadata + keyset;
@@ -59,7 +59,7 @@ So the stack already exists end to end:
 3. exposes app state that satisfies `jacquard-axum`'s
    `OAuthWebState` / `FromRef` bounds;
 4. serves a **static-ish login page** (the one bit of real UI);
-5. re-exports the extractors so `tassle-web` route handlers just ask for
+5. re-exports the extractors so `tass-web` route handlers just ask for
    `BrowserOAuthSession(session)`.
 
 The risk in this project is *not* "can we implement OAuth" — it's picking the
@@ -70,7 +70,7 @@ correctly. The rest of this doc is those knobs.
 
 atproto OAuth clients are either **public** (no server-side signing key) or
 **confidential** (a web service holds an ES256 client-auth key, advertised via
-JWKS). Since `tassle-web` *is* a web service, it should be a **confidential
+JWKS). Since `tass-web` *is* a web service, it should be a **confidential
 client**:
 
 - **longer session / token lifetimes** — the reason to bother;
@@ -111,9 +111,9 @@ Everything else is Jacquard's; the client-auth **keyset** is ours to manage:
   (jacquard's `Keyset` is a `Vec<Jwk>`, so the set *is* the rotation unit);
 - **never** let the private key touch a cookie or a log.
 
-## Config shape (`tassle-config`: `[service]` / `[service.oauth]`)
+## Config shape (`tass-config`: `[service]` / `[service.oauth]`)
 
-The web service's config is a `ServiceConfig` bucket in `tassle-config`, read via
+The web service's config is a `ServiceConfig` bucket in `tass-config`, read via
 `extract_cascade(&figment, &["service", "service.<variant>"])` so a base
 `[service]` can be refined per variant (`[service.web]`, `[service.reader]`) — see
 [`tass-config-service-shape`]. `bind` (local listen) and `public_url` (the public
@@ -191,7 +191,7 @@ Rules that matter for us:
   DID in `sub`.
 - **Login-only** (which is our stated purpose today) needs *only* `atproto`. A
   pure "Login with atproto" client requests just `atproto`, still runs the full
-  flow, and verifies the `sub` DID. If all `tassle-web` does for now is
+  flow, and verifies the `sub` DID. If all `tass-web` does for now is
   authenticate people, **`atproto` alone is the honest scope.**
 - The moment a webapp wants to read/write the user's repo, add
   **`transition:generic`** (App-Password-equivalent: read/write any record,
@@ -210,7 +210,7 @@ flow.
 
 ## The login flow (what actually happens)
 
-Matches `jacquard-axum::oauth` route names; `tassle-web` mounts
+Matches `jacquard-axum::oauth` route names; `tass-web` mounts
 `oauth::routes(&config)` and adds a login page.
 
 ```
@@ -261,7 +261,7 @@ later, separate decision — don't pull one in for a single form.
 
 ## Crate boundary — what goes where
 
-| | `tassle-web-auth` (library) | `tassle-web` (binary/app) |
+| | `tass-web-auth` (library) | `tass-web` (binary/app) |
 |---|---|---|
 | OAuthClient construction (store + metadata + keyset) | ✅ owns | consumes |
 | `OAuthWebConfig`, cookie `Key`, app-state `FromRef` glue | ✅ owns | supplies secrets/config |
@@ -270,14 +270,14 @@ later, separate decision — don't pull one in for a single form.
 | Keyset generation / rotation / persistence | ✅ owns | provides key material |
 | App pages, protected routes, business logic | — | ✅ owns |
 
-`tassle-web-auth` depends on: `jacquard-axum` (oauth feature), `jacquard-oauth`,
-`jac-store-fjall`, `axum` + `axum-extra` (PrivateCookieJar). `tassle-web` depends
-on `tassle-web-auth` + `axum`, and picks a `jac-store-fjall` backend feature
+`tass-web-auth` depends on: `jacquard-axum` (oauth feature), `jacquard-oauth`,
+`jac-store-fjall`, `axum` + `axum-extra` (PrivateCookieJar). `tass-web` depends
+on `tass-web-auth` + `axum`, and picks a `jac-store-fjall` backend feature
 (`backend-fjall` by default; `backend-turso` if it wants multi-process/SQL).
 
 > **jacquard version alignment** — same trap [`auth-design.md`](auth-design.md)
 > §2.1 flags: tassle pulls `jacquard` from git; `jac-store-fjall` pulls
-> `jacquard = "0.12"` from crates.io. `tassle-web-auth` sits on the boundary
+> `jacquard = "0.12"` from crates.io. `tass-web-auth` sits on the boundary
 > between them, so the trait impls only type-check if both resolve to one
 > jacquard. Pin them together before wiring.
 
@@ -289,7 +289,7 @@ on `tassle-web-auth` + `axum`, and picks a `jac-store-fjall` backend feature
 2. ~~**Session `Key` (cookie) source + rotation**~~ — **resolved:** secret files
    under `<state>/cookie/`, ordered `cookie_paths` (`[0]` = active, tail =
    validators). Keyring modeled now, honoured when verification lands.
-3. **Which `jac-store-fjall` backend** for `tassle-web` — settled elsewhere as
+3. **Which `jac-store-fjall` backend** for `tass-web` — settled elsewhere as
    **turso** (the universal local `[store]`, shared with the CLI); see
    `tass-config-db-selection`.
 4. **Scopes default** — ship `atproto`-only until a webapp needs repo writes,
@@ -302,10 +302,10 @@ on `tassle-web-auth` + `axum`, and picks a `jac-store-fjall` backend feature
 
 ## Work plan (tickets)
 
-**Config foundation** (`tassle-config`) — **done & merged:**
+**Config foundation** (`tass-config`) — **done & merged:**
 
 - `tass-config-profile-generic` — profile ≠ login; the `Login` model.
-- `tass-config-xdg-dirs` — XDG dirs + `TASSLE_APPNAME`; DB relocated under `<state>`.
+- `tass-config-xdg-dirs` — XDG dirs + `TASS_APPNAME`; DB relocated under `<state>`.
 - `tass-config-db-selection` — top-level `[store]`; `@appname`/`@profile` sentinels.
 - `tass-config-db-lifecycle` — `store.create` / `store.update` flags.
 - `tass-config-cascade` — `extract_cascade` (`[table]` < `[table.child]`).
@@ -318,7 +318,7 @@ on `tassle-web-auth` + `axum`, and picks a `jac-store-fjall` backend feature
    types + derivation over `extract_cascade` (the shape settled in this doc:
    `keyset_paths` / `cookie_paths`, assumed dirs, `logo/tos/privacy_path`, no
    DPoP/route knobs).
-2. `tass-web-auth-crate` — the `tassle-web-auth` + `tassle-web` crates: build the
+2. `tass-web-auth-crate` — the `tass-web-auth` + `tass-web` crates: build the
    `OAuthClient` from `ServiceConfig` + keyset + the shared turso `[store]`, wire
    `jacquard-axum::oauth::routes`, serve the login page. (Below the config cutoff.)
 3. `tass-config-login-kinds` — `Login.kind` (app-password | oauth) + the CLI
@@ -340,6 +340,6 @@ on `tassle-web-auth` + `axum`, and picks a `jac-store-fjall` backend feature
   `guides/about-oauth`, and the interactive scope builder.
 - Reference starter (SvelteKit, non-authoritative):
   <https://tangled.org/charlebois.info/sveltekit-atproto-starter>.
-- tassle: [`auth-design.md`](auth-design.md) (app-password MVP; `tassle-app` now
+- tassle: [`auth-design.md`](auth-design.md) (app-password MVP; `tass-app` now
   dead), [`jacquard-use.md`](jacquard-use.md).
 </content>

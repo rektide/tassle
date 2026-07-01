@@ -12,12 +12,12 @@ The CLI also needs multi-profile support from the start. A future user may have 
 
 ## Decision
 
-Add `tassle auth login <did-or-handle>` now as a profile-login stub. It does not authenticate yet. It resolves the actor through Jacquard, stores DID/handle/PDS metadata, and makes that profile usable as the default repo for read commands.
+Add `tass auth login <did-or-handle>` now as a profile-login stub. It does not authenticate yet. It resolves the actor through Jacquard, stores DID/handle/PDS metadata, and makes that profile usable as the default repo for read commands.
 
 Profile config lives under the XDG config directory:
 
 ```text
-${XDG_CONFIG_HOME:-~/.config}/tassle/config.toml.d/
+${XDG_CONFIG_HOME:-~/.config}/tass/config.toml.d/
 ├── did:plc:<profile-a>.toml
 └── did:plc:<profile-b>.toml
 ```

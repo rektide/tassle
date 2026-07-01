@@ -97,7 +97,7 @@ Each verb is a unit of **phased async work** modeled with the **`tass-phase`** c
 - **Driver (async bridge):** awaits reality (`next_event`) and performs effects (`effect`). Both take `&mut self`, so **the Driver is the data accumulator** — the pure FSM carries no payload, so `Gather` stashes the fetched mages/tass into the Driver and later steps read them back out. All context lives here: the hydrated post, resolvers, shared turso db, and the **lent `tass-config` `AuthedClient` session**.
 - **Executor:** runs many verb jobs concurrently on one task and streams each result the instant it finishes. This is "a model to track what work needs to happen" — every in-flight command is a job on the Executor.
 
-The **effect vocabulary** (`Gather`, `ResolveTarget`, `Authorize`, `ReadState`, `WriteEffect`, `Attest`, `Reply`) and the `Driver` trait glue live in **`tass-engine` (mechanism, no verbs)**. The verbs themselves are fine-grained crates — **`tass-act-enervate`, `tass-act-meditate`** — each owning its FSM + Driver + domain parameters, depending on `tass-engine` for the vocabulary and on the domain crates (`tassle-ledger` / `tass-quint` / `tass-config`) for what the effects actually do.
+The **effect vocabulary** (`Gather`, `ResolveTarget`, `Authorize`, `ReadState`, `WriteEffect`, `Attest`, `Reply`) and the `Driver` trait glue live in **`tass-engine` (mechanism, no verbs)**. The verbs themselves are fine-grained crates — **`tass-act-enervate`, `tass-act-meditate`** — each owning its FSM + Driver + domain parameters, depending on `tass-engine` for the vocabulary and on the domain crates (`tass-ledger` / `tass-quint` / `tass-config`) for what the effects actually do.
 
 The **"gather dependencies, then search/solve with matchers"** shape maps directly onto the front phases: a *Gather* phase whose effect fetches the actor's context (their mage character records and available tass), then a *Resolve* phase where the matchers run over the message **with that context** to solve for a concrete intent (or short-circuit). Sketch (extending the `burn_chain` FSM):
 
@@ -172,11 +172,11 @@ tass-engine             MECHANISM ONLY — source stream → dispatcher → Exec
 tass-act-enervate       the enervate verb: own FSM + Driver + domain params
 tass-act-meditate       the meditate verb: own FSM + Driver + domain params
 tass-listen             small standalone binary: load [service.listen], tass_engine::run()
-tassle-cli              `tassle listen` behind a feature → same tass_engine::run()   [low-pri]
+tass-cli              `tass listen` behind a feature → same tass_engine::run()   [low-pri]
 tass-config           jacquard auth (AuthedClient) + [service.listen] fall-through config
 ```
 
-Engine is mechanism; the verbs are `tass-act-*` crates that depend on it and on the domain crates (`tassle-ledger` / `tass-quint`). Mage auth is `tass-config`; storage is turso. Both the standalone `tass-listen` binary and the `tassle listen` CLI subcommand are thin wrappers over one `tass_engine::run(config)` — a small focused daemon **and** the omni-CLI, from one brain.
+Engine is mechanism; the verbs are `tass-act-*` crates that depend on it and on the domain crates (`tass-ledger` / `tass-quint`). Mage auth is `tass-config`; storage is turso. Both the standalone `tass-listen` binary and the `tass listen` CLI subcommand are thin wrappers over one `tass_engine::run(config)` — a small focused daemon **and** the omni-CLI, from one brain.
 
 ---
 

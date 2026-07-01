@@ -217,9 +217,9 @@ tassle/
 ### Auth Commands
 
 ```text
-tassle login <handle>
-tassle whoami
-tassle logout
+tass login <handle>
+tass whoami
+tass logout
 ```
 
 `login` performs the full OAuth loopback lifecycle and stores session data in `~/.config/tassle/`.
@@ -227,9 +227,9 @@ tassle logout
 ### Sheet Commands
 
 ```text
-tassle sheet
-tassle sheet --json
-tassle sheet --repo jauntywk.bsky.social --rkey self
+tass sheet
+tass sheet --json
+tass sheet --repo jauntywk.bsky.social --rkey self
 ```
 
 Default behavior should read the logged-in user's `actor.rpg.stats/self` record. For development, a named reference can point to:
@@ -243,9 +243,9 @@ uri:  at://did:plc:zjbq26wybii5ojoypkso2mso/actor.rpg.stats/self
 ### Tassle Action Commands
 
 ```text
-tassle tassilize --node <node> --amount <n> [--form <text>] [--note <text>]
-tassle meditate --node <node> --amount <n> [--note <text>]
-tassle enervate --source <source> --amount <n> [--purpose <text>] [--note <text>]
+tass tassilize --node <node> --amount <n> [--form <text>] [--note <text>]
+tass meditate --node <node> --amount <n> [--note <text>]
+tass enervate --source <source> --amount <n> [--purpose <text>] [--note <text>]
 ```
 
 Each command writes to its own collection using `com.atproto.repo.putRecord`.

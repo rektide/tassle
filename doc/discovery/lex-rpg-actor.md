@@ -42,7 +42,7 @@ These are working notes, not commitments. Bigger-picture cross-ecosystem ideas g
 
 ### `actor.rpg.stats` — the host record
 
-TheMage sheet is tassle's anchor. The per-system rkey migration matters here: tassle should write `actor.rpg.stats/mage` (canonical modern path) rather than only patching the legacy `actor.rpg.stats/self > mage` field. The lexicon defines a dedicated `mageStats` def with `arete`, `quintessence`, `paradox`, `willpower`, and the nine spheres, plus a `mageVariableStat` shape for free-form fields. Tassle's `com.superbfowle.tass.{tassilize,meditate,enervate}` records reference this sheet via their `sheet` AT-URI field; the eventual "patch the sheet" command (`tassle sheet --update`) should write back into `mageStats.quintessence` and friends.
+TheMage sheet is tassle's anchor. The per-system rkey migration matters here: tassle should write `actor.rpg.stats/mage` (canonical modern path) rather than only patching the legacy `actor.rpg.stats/self > mage` field. The lexicon defines a dedicated `mageStats` def with `arete`, `quintessence`, `paradox`, `willpower`, and the nine spheres, plus a `mageVariableStat` shape for free-form fields. Tassle's `com.superbfowle.tass.{tassilize,meditate,enervate}` records reference this sheet via their `sheet` AT-URI field; the eventual "patch the sheet" command (`tass sheet --update`) should write back into `mageStats.quintessence` and friends.
 
 ### `actor.rpg.master` — the validation template
 

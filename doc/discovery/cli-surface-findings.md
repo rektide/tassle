@@ -1,4 +1,4 @@
-# Findings: tassle auth CLI surface + session store
+# Findings: tass auth CLI surface + session store
 
 > **Research pass** for [`cli-surface.md`](./cli-surface.md). This document
 > gathers raw, cross-comparable facts (with `file:line` citations) about how
@@ -46,7 +46,7 @@ gaps": *"Additional session storage backends (SQLite, etc.)"*). **Tassle
 must build its own store** — and in doing so fills a Jacquard gap we could
 upstream.
 
-**One-sentence recommendation (provisional).** Model `tassle auth` on `gh`'s
+**One-sentence recommendation (provisional).** Model `tass auth` on `gh`'s
 verb set (`login`, `status`, `logout`, `switch`, `refresh`, `token`) but
 back it with Jacquard OAuth-loopback + a Turso `ClientAuthStore`, keeping
 `CredentialSession` (app-password) as a fallback; expose ~6 auth verbs with
@@ -236,7 +236,7 @@ log; the load-bearing ideas:
 - **`auth status`** iterates *all known hosts + all accounts per host*,
   reports the active one, and detects the token's **source** (cred store
   vs. env vs. file). `--show-token` prints it; `--hostname` filters. This
-  is the model for `tassle auth status` with multi-account.
+  is the model for `tass auth status` with multi-account.
 - **`auth refresh`** is purpose-built for **scope expansion**:
   `--scopes`, `--remove-scopes` (idempotent), `--reset-scopes`, re-opens
   the browser. Crucially: "if you have multiple accounts … you must `auth
@@ -536,7 +536,7 @@ Takeaways: **~30 lines to a working authenticated call**. The `resume`
 → `LoginRequired` → `login_from_challenge` pattern
 ([`credential_session.rs:514-589`](https://github.com/rsform/jacquard/blob/main/crates/jacquard/src/client/credential_session.rs))
 is the idiomatic "resume-or-login" shape and maps cleanly onto a CLI
-`tassle login` that's also invoked implicitly by any authenticated
+`tass login` that's also invoked implicitly by any authenticated
 command. `OAuthClient` has the equivalent:
 `resume_or_start_auth` / `resume_or_start_auth_for` returning
 `OAuthResumeOrLogin::{Resumed, LoginUrl, NeedsInput}`
@@ -576,7 +576,7 @@ the `websocket`/`streaming` features unless we subscribe to a firehose.
 | **No encryption at rest** | tokens & DPoP key are plaintext | Our problem. Either rely on OS keyring for the *whole* blob (markbennett/Rust-tangled-cli pattern) or encrypt sensitive columns in Turso. Decide in design. |
 | **No cross-process refresh lock** | two `tassle` processes could race on refresh | `SessionRegistry` uses an **in-process** per-`(DID,session_id)` `tokio::Mutex` (`session.rs:438-541`). For a single-user CLI this is fine; document as a limitation. A DB-level advisory lock is possible later. |
 | **No "active account" notion** | CLI must know which DID is default | Add our own one-row pointer (like skyboard's `session.json`, `gh`'s `user:` key). Jacquard's `SessionHint::Any` returns *an* arbitrary session, not "the chosen default". |
-| **No CLI at all** | we're the first | Build the `tassle auth` surface ourselves; contribute learnings/examples upstream. |
+| **No CLI at all** | we're the first | Build the `tass auth` surface ourselves; contribute learnings/examples upstream. |
 
 ## 5. Area C — Data store requirements
 
@@ -690,20 +690,20 @@ future web-tier ticket; the AGENTS.md "Known gaps" note about "jti
 tracking" appears slightly stale — the trait exists, but a shared/distributed
 impl does not.
 
-## 6. Draft recommended `tassle auth` surface *(provisional — for the design call)*
+## 6. Draft recommended `tass auth` surface *(provisional — for the design call)*
 
 Modelled on `gh`'s verb set, scoped to what Jacquard makes easy. `★` =
 required-for-MVP, `☆` = nice-to-have.
 
 | Verb | Purpose | MVP |
 |---|---|---|
-| `tassle auth login [handle-or-did]` | OAuth loopback (default) or `--app-password` (CredentialSession). `--json`, `--scopes`, `--pds`. | ★ |
-| `tassle auth status` | List **all** stored accounts, mark active, show PDS + scope summary + token-expiry. `--json`. | ★ |
-| `tassle auth logout [<did>]` | Delete one session (default: active); `--all`. OAuth path calls `OAuthSession::logout` (revoke+delete). | ★ |
-| `tassle auth switch <did-or-handle>` | Set active account pointer. ≥2 accounts auto-disambiguate like `gh`. | ★ (multi-account is a stated hard-requirement) |
-| `tassle auth token [<did>]` | Print the current (refreshed) access token for piping. `--json`. Mirrors `gh auth token`. | ☆ |
-| `tassle auth refresh [--scopes …]` | Re-authorize to expand/shrink scopes (new OAuth grant; preserves account). Without args, force a token refresh. | ☆ |
-| `tassle auth list` | Alias-ish for `status --json` filtered to accounts only. | ☆ |
+| `tass auth login [handle-or-did]` | OAuth loopback (default) or `--app-password` (CredentialSession). `--json`, `--scopes`, `--pds`. | ★ |
+| `tass auth status` | List **all** stored accounts, mark active, show PDS + scope summary + token-expiry. `--json`. | ★ |
+| `tass auth logout [<did>]` | Delete one session (default: active); `--all`. OAuth path calls `OAuthSession::logout` (revoke+delete). | ★ |
+| `tass auth switch <did-or-handle>` | Set active account pointer. ≥2 accounts auto-disambiguate like `gh`. | ★ (multi-account is a stated hard-requirement) |
+| `tass auth token [<did>]` | Print the current (refreshed) access token for piping. `--json`. Mirrors `gh auth token`. | ☆ |
+| `tass auth refresh [--scopes …]` | Re-authorize to expand/shrink scopes (new OAuth grant; preserves account). Without args, force a token refresh. | ☆ |
+| `tass auth list` | Alias-ish for `status --json` filtered to accounts only. | ☆ |
 
 Notes:
 - **Machine output**: prefer the Rust tangled-cli's **global `--format
@@ -711,7 +711,7 @@ Notes:
   a future web server consuming the same CLI. (Decide in design.)
 - **Global `--account <did-or-handle>`** on every account-scoped command
   (overrides the active pointer for one invocation), per the brief.
-- **App-password fallback**: `tassle auth login --app-password` switches
+- **App-password fallback**: `tass auth login --app-password` switches
   to `CredentialSession`. Same store, different table/key-prefix.
 
 ## 7. Top-level hidden aliases *(provisional)*
@@ -719,11 +719,11 @@ Notes:
 Hidden from `--help` (`#[command(hide = true)]` alias, or flatten to the
 same handler) per the brief:
 
-- `tassle login` ≡ `tassle auth login`
-- `tassle logout` ≡ `tassle auth logout`
-- `tassle whoami` ≡ `tassle auth status` (single-account convenience)
-- `tassle switch` ≡ `tassle auth switch`
-- *(maybe)* `tassle token` ≡ `tassle auth token`
+- `tass login` ≡ `tass auth login`
+- `tass logout` ≡ `tass auth logout`
+- `tass whoami` ≡ `tass auth status` (single-account convenience)
+- `tass switch` ≡ `tass auth switch`
+- *(maybe)* `tass token` ≡ `tass auth token`
 
 Clap v4 derive sketch (one of two viable shapes — decide in design):
 
@@ -754,7 +754,7 @@ enum Command {
   instead of per-command `--json`.
 - **`--with-token` stdin** (gh) and **env-var fallback for every flag**
   (create-tangled-repo) — cheap, great for CI/scripting. e.g.
-  `TASSLE_HANDLE`, `TASSLE_ACCOUNT`, `TASSLE_PDS`.
+  `TASS_HANDLE`, `TASS_ACCOUNT`, `TASS_PDS`.
 - **Plaintext active-account pointer separate from secrets**
   (skyboard/markbennett/gh all do this) so `status` works without
   unlocking the secret store. Even with Turso, keep a non-secret
@@ -796,13 +796,13 @@ enum Command {
 9. **Interop with existing TS `~/.config/tassle/` store.** Brief says
    "lovely but not required". Confirm we're free to start fresh.
 10. **Upstream the Turso store?** It fills a stated Jacquard gap; do we
-    design it as a standalone crate (`tassle-auth-store` or
+    design it as a standalone crate (`tass-auth-store` or
     `jacquard-sqlite-store`) from day one to ease contributing back?
 
 ## 10. Tickets to file
 
 - [ ] **hedystia ⇄ Turso/libsql interop proof.** Verify a Bun/TS hedystia
-  can open the same libsql DB tassle-cli writes, read the session JSON
+  can open the same libsql DB tass-cli writes, read the session JSON
   blobs, and round-trip a `ClientSessionData`. (Brief explicitly asks for
   this follow-up.)
 - [ ] **Implement `ClientAuthStore` (and optionally `SessionStore<_,AtpSession>`)
@@ -810,8 +810,8 @@ enum Command {
 - [ ] **Encryption-at-rest decision & impl** for high-sensitivity fields
   (DPoP key, tokens) if Turso is the chosen store.
 - [ ] **Active-account pointer** design (schema row vs. sidecar file).
-- [ ] **`tassle auth` CLI surface**: implement verbs from §6 behind the
-  clap structure in `crates/tassle-cli/src/main.rs`.
+- [ ] **`tass auth` CLI surface**: implement verbs from §6 behind the
+  clap structure in `crates/tass-cli/src/main.rs`.
 - [ ] **Jacquard gap report / upstream offer**: "Additional session
   storage backends (SQLite, etc.)" is listed in
   [`AGENTS.md`](https://github.com/rsform/jacquard/blob/main/AGENTS.md)
