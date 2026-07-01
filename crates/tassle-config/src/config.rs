@@ -165,6 +165,37 @@ pub fn precheck_store(path: &Path, lifecycle: &StoreLifecycle) -> miette::Result
     Ok(())
 }
 
+/// Extract `T` by cascading a chain of dotted-key config layers, later layers
+/// overriding earlier ones **per key** (a deep merge, not a wholesale replace).
+/// Missing layers are skipped, so `T`'s serde `default`s form the base of the
+/// stack: `defaults < layer[0] < layer[1] < …`.
+///
+/// This is the mechanism behind hierarchical config such as `[service]` refined
+/// by `[service.web]`:
+///
+/// ```ignore
+/// let web: ServiceConfig = extract_cascade(&figment, &["service", "service.web"])?;
+/// ```
+///
+/// (Figment already merges base `config.toml` under the selected profile's
+/// drop-in, so the value found at each layer is itself the profile-resolved one;
+/// this stacks the `[table]` → `[table.child]` refinement on top.)
+pub fn extract_cascade<T>(figment: &Figment, layers: &[&str]) -> miette::Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    // Seed with an empty dict so the target key always exists even when every
+    // layer is absent (then serde defaults fill `T`).
+    let mut acc = Figment::new().merge(Serialized::default("layer", figment2::value::Dict::new()));
+    for key in layers {
+        if let Ok(value) = figment.find_value(key) {
+            acc = acc.merge(Serialized::default("layer", value));
+        }
+    }
+    acc.extract_inner::<T>("layer")
+        .map_err(|e| miette::miette!("failed to extract cascaded config {layers:?}: {e}"))
+}
+
 /// The DB filename stem from a [`StoreConfig`]: the shared appname by default,
 /// the profile name for the [`STORE_DB_PER_PROFILE`] sentinel, else the literal
 /// `store.db` value.
@@ -267,6 +298,46 @@ mod tests {
             StoreConfig { db: Some("shared".into()), ..Default::default() },
         ));
         assert_eq!(store_config(&fig).unwrap().db.as_deref(), Some("shared"));
+    }
+
+    // Feasibility proof for `[service]` + `[service.web]` hierarchical config:
+    // a child table cascades over its parent (defaults < base < child), using
+    // only figment2's public merge/coalesce (deep dict merge, later wins).
+    #[test]
+    fn service_child_cascades_over_base() {
+        use figment2::providers::{Format, Toml};
+
+        #[derive(Debug, Default, serde::Deserialize)]
+        #[serde(default)]
+        struct Svc {
+            bind: Option<String>,
+            public_url: Option<String>,
+        }
+
+        let toml = r#"
+[service]
+bind = "127.0.0.1:8080"
+public_url = "https://base.example"
+
+[service.web]
+public_url = "https://web.example"
+
+[service.reader]
+bind = "127.0.0.1:9090"
+"#;
+        let fig = Figment::new().merge(Toml::string(toml));
+
+        let web: Svc = extract_cascade(&fig, &["service", "service.web"]).unwrap();
+        assert_eq!(web.bind.as_deref(), Some("127.0.0.1:8080")); // inherited from [service]
+        assert_eq!(web.public_url.as_deref(), Some("https://web.example")); // [service.web] override
+
+        let reader: Svc = extract_cascade(&fig, &["service", "service.reader"]).unwrap();
+        assert_eq!(reader.bind.as_deref(), Some("127.0.0.1:9090")); // [service.reader] override
+        assert_eq!(reader.public_url.as_deref(), Some("https://base.example")); // inherited
+
+        // No layers present at all => the struct's serde defaults.
+        let empty: Svc = extract_cascade(&fig, &["nope", "nope.child"]).unwrap();
+        assert!(empty.bind.is_none() && empty.public_url.is_none());
     }
 
     #[test]
