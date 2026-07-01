@@ -23,6 +23,7 @@ members = [
     "crates/tass-listen",
     "crates/tass-act-enervate",
     "crates/tass-web",
+    "crates/tass-web-auth",
     "xtask",
 ]
 

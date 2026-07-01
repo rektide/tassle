@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The Hedystia web server: axum-based HTTP service for the tass web flow. Reuses the auth core from tass-config."
+description = "The tass web server: axum OAuth login service over the shared turso store. Wires tass-web-auth."
 
 [[bin]]
 name = "tass-web"
@@ -13,13 +13,13 @@ path = "src/main.rs"
 
 [dependencies]
 tass-config = { path = "../tass-config" }
-axum = "0.8"
+tass-web-auth = { path = "../tass-web-auth" }
+jacquard = { workspace = true }
 jacquard-axum = { workspace = true }
+jac-stores = { workspace = true }
+axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-figment2 = { workspace = true }
 clap = { version = "~4.4", features = ["derive"] }
 miette = { version = "7", features = ["fancy"] }
