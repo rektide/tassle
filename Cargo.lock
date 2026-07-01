@@ -4890,6 +4890,7 @@ dependencies = [
  "tass-quint",
  "tass-repo",
  "tass-repo-mage",
+ "tass-stats",
  "tassle-config",
  "tassle-lexicons",
  "tempfile",

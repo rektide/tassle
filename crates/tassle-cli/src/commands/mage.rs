@@ -48,7 +48,7 @@ pub struct ListArgs {
 #[serde(rename_all = "camelCase")]
 struct StatsOutput {
     source: StatsSource,
-    summary: StatsSummary,
+    summary: tass_stats::StatsSummary,
     mage: Option<tass_mage::NormalizedMageStats>,
     raw: Value,
 }
@@ -60,7 +60,7 @@ struct StatsListOutput {
     collection: String,
     pds: String,
     cursor: Option<String>,
-    records: Vec<StatsSummary>,
+    records: Vec<tass_stats::StatsSummary>,
 }
 
 #[derive(Serialize)]
@@ -70,17 +70,6 @@ struct StatsSource {
     cid: Option<String>,
     rkey: String,
     shape: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StatsSummary {
-    uri: String,
-    cid: Option<String>,
-    rkey: String,
-    shape: String,
-    system: Option<String>,
-    fields: Vec<String>,
 }
 
 pub async fn run(args: MageArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
@@ -122,7 +111,7 @@ async fn list_stats_records(
     let records = page
         .records
         .into_iter()
-        .map(|env| summarize_record(&env.uri, env.cid.as_deref(), &env.value))
+        .map(|env| tass_stats::summarize_record(&env.uri, env.cid.as_deref(), &env.value))
         .collect();
 
     Ok(StatsListOutput {
@@ -132,64 +121,6 @@ async fn list_stats_records(
         cursor: page.cursor,
         records,
     })
-}
-
-fn rkey_from_uri(uri: &str) -> &str {
-    uri.rsplit('/').next().unwrap_or(uri)
-}
-
-fn object<'a>(value: &'a Value, field: &str) -> Option<&'a serde_json::Map<String, Value>> {
-    value.get(field)?.as_object()
-}
-
-fn fields(value: &Value) -> Vec<String> {
-    value
-        .as_object()
-        .map(|object| object.keys().cloned().collect())
-        .unwrap_or_default()
-}
-
-fn stats_payload(value: &Value, rkey: &str) -> (Option<Value>, String, Option<String>) {
-    if let Some(system) = value.get("system").and_then(Value::as_str) {
-        if let Some(data) = value.get("data") {
-            return (
-                Some(data.clone()),
-                "per-system-envelope".to_owned(),
-                Some(system.to_owned()),
-            );
-        }
-    }
-
-    if rkey == "self" {
-        return (None, "legacy-self-aggregate".to_owned(), None);
-    }
-
-    if let Some(system) = object(value, rkey) {
-        return (
-            Some(Value::Object(system.clone())),
-            "legacy-inline-system".to_owned(),
-            Some(rkey.to_owned()),
-        );
-    }
-
-    (None, "unknown".to_owned(), None)
-}
-
-fn summarize_record(uri: &str, cid: Option<&str>, value: &Value) -> StatsSummary {
-    let rkey = rkey_from_uri(uri).to_owned();
-    let (payload, shape, system) = stats_payload(value, &rkey);
-    let summary_fields = payload
-        .as_ref()
-        .map(fields)
-        .unwrap_or_else(|| fields(value));
-    StatsSummary {
-        uri: uri.to_owned(),
-        cid: cid.map(ToOwned::to_owned),
-        rkey,
-        shape,
-        system,
-        fields: summary_fields,
-    }
 }
 
 async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
@@ -238,15 +169,15 @@ async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::
         let Some(record) = get_stats_record(&client, repo.clone(), &rkey).await? else {
             continue;
         };
-        let summary = summarize_record(&record.uri, record.cid.as_deref(), &record.value);
+        let summary = tass_stats::summarize_record(&record.uri, record.cid.as_deref(), &record.value);
         let value = record.value;
         let raw = if rkey == "mage" || rkey == "self" {
             tass_mage::mage_block(&value)
                 .map(|block| Value::Object(block.clone()))
                 .unwrap_or_else(|| value.clone())
         } else {
-            stats_payload(&value, &rkey)
-                .0
+            tass_stats::stats_payload(&value, &rkey)
+                .data
                 .unwrap_or_else(|| value.clone())
         };
         let mage = if summary.system.as_deref() == Some("mage") || rkey == "self" {
@@ -280,7 +211,7 @@ async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::
     miette::bail!("no actor.rpg.stats record found for requested rkey")
 }
 
-fn print_summary(record: &StatsSummary) {
+fn print_summary(record: &tass_stats::StatsSummary) {
     println!("  {} ({})", record.rkey, record.shape);
     println!("    uri: {}", record.uri);
     if let Some(system) = &record.system {

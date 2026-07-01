@@ -28,6 +28,7 @@ tassle-lexicons = { path = "../tassle-lexicons" }
 tass-quint = { path = "../tass-quint" }
 tass-mage = { path = "../tass-mage" }
 tass-repo = { path = "../tass-repo" }
+tass-stats = { path = "../tass-stats" }
 # Optional: mage-record DAO (quint write commands + authed-client). Gated by `auth-store`.
 tass-repo-mage = { path = "../tass-repo-mage", optional = true }
 # Base config/profile model (figment2). The `auth-store` feature additionally

@@ -32,53 +32,14 @@ pub struct StatsArgs {
 struct SelfOutput {
     uri: String,
     cid: Option<String>,
-    systems: Vec<SystemSummary>,
+    systems: Vec<tass_stats::SystemSummary>,
     raw: Value,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SystemSummary {
-    key: String,
-    kind: String,
-    fields: Vec<String>,
 }
 
 pub async fn run(args: SelfArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     match args.kind {
         SelfKind::Stats(args) | SelfKind::List(args) => stats(args, format).await,
     }
-}
-
-fn summarize_systems(raw: &Value) -> Vec<SystemSummary> {
-    let Some(obj) = raw.as_object() else {
-        return Vec::new();
-    };
-    let mut systems = Vec::new();
-    for (key, value) in obj {
-        if key.starts_with('$') || matches!(key.as_str(), "createdAt" | "updatedAt") {
-            continue;
-        }
-        let kind = match value {
-            Value::Object(_) => "object",
-            Value::Array(_) => "array",
-            Value::String(_) => "string",
-            Value::Number(_) => "number",
-            Value::Bool(_) => "bool",
-            Value::Null => "null",
-        };
-        let fields = value
-            .as_object()
-            .map(|object| object.keys().cloned().collect())
-            .unwrap_or_default();
-        systems.push(SystemSummary {
-            key: key.clone(),
-            kind: kind.to_owned(),
-            fields,
-        });
-    }
-    systems.sort_by(|a, b| a.key.cmp(&b.key));
-    systems
 }
 
 async fn stats(args: StatsArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
@@ -101,7 +62,7 @@ async fn stats(args: StatsArgs, format: crate::commands::OutputFormat) -> miette
     let output = SelfOutput {
         uri: env.uri,
         cid: env.cid,
-        systems: summarize_systems(&raw),
+        systems: tass_stats::summarize_systems(&raw),
         raw,
     };
 
