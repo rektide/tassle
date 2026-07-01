@@ -44,7 +44,7 @@ pub fn active_login() -> miette::Result<Login> {
 }
 
 #[cfg(feature = "auth-store")]
-pub use auth::{AppPasswordSession, AuthError, AuthedClient};
+pub use auth::{stored_access_jwt, AppPasswordSession, AuthError, AuthedClient, LoginOutcome};
 
 #[cfg(test)]
 mod tests {

@@ -13,9 +13,13 @@
 //! `tass-config-session-source` ticket and the upstream refresh-coordination
 //! issue).
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use jacquard::client::credential_session::{CredentialResumeResult, CredentialSession};
+use figment2::Figment;
+use jacquard::client::credential_session::{
+    CredentialLoginOptions, CredentialResumeResult, CredentialSession,
+};
 use jacquard::common::session::SessionHint;
 use jacquard::identity::JacquardResolver;
 use jacquard_common::deps::fluent_uri::Uri;
@@ -101,15 +105,7 @@ impl AuthedClient {
         config::precheck_store(&store_path, &lifecycle)
             .map_err(|e| AuthError::Store(e.to_string()))?;
 
-        if let Some(parent) = store_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;
-        }
-        let repo = jac_store_fjall::TursoRepository::open_local(&store_path)
-            .await
-            .map_err(|e| AuthError::Store(e.to_string()))?;
-        let store = Arc::new(jac_store_fjall::AppPasswordStore::new(repo));
-        let resolver = Arc::new(JacquardResolver::default());
-        let session = CredentialSession::new(store, resolver);
+        let session = open_session_at(&store_path).await?;
 
         let hint = SessionHint::from_optional_input(login.account());
         match session.resume(&hint).await {
@@ -135,6 +131,59 @@ impl AuthedClient {
         Self::for_profile(None).await
     }
 
+    /// App-password login for the profile selected by `figment`: resume-or-
+    /// `createSession` against that profile's store. `actor` is the DID/handle
+    /// to log in as; `password` is the app password (prompting stays with the
+    /// caller). On success the store durably holds the fresh session JWTs and
+    /// the returned [`LoginOutcome`] carries the non-secret identity for the
+    /// caller to persist into the profile fragment.
+    ///
+    /// Unlike [`AuthedClient::for_profile`], a missing session is not an error:
+    /// `LoginRequired` drives the `createSession`. This is the one authed-client
+    /// construction path — CLI login and any future web/backfill login share it
+    /// rather than re-deriving the store + `CredentialSession` dance.
+    pub async fn login(
+        figment: &Figment,
+        actor: &str,
+        password: String,
+    ) -> Result<LoginOutcome, AuthError> {
+        let name = config::active_name(figment);
+        let store_path = config::resolve_store_path(figment, &name)
+            .map_err(|e| AuthError::Store(e.to_string()))?;
+        let lifecycle =
+            config::store_lifecycle(figment).map_err(|e| AuthError::Store(e.to_string()))?;
+        config::precheck_store(&store_path, &lifecycle)
+            .map_err(|e| AuthError::Store(e.to_string()))?;
+
+        let session = open_session_at(&store_path).await?;
+        let hint = SessionHint::from_optional_input(Some(actor));
+        let atp = match session.resume(&hint).await {
+            Ok(CredentialResumeResult::Resumed(s)) => s,
+            Ok(CredentialResumeResult::LoginRequired(challenge)) => session
+                .login_from_challenge(
+                    challenge,
+                    CredentialLoginOptions {
+                        password: password.into(),
+                        identifier: Some(actor.to_string().into()),
+                        allow_takendown: None,
+                        auth_factor_token: None,
+                        pds: None,
+                    },
+                )
+                .await
+                .map_err(|e| AuthError::Resume(e.to_string()))?,
+            Err(e) => return Err(AuthError::Resume(e.to_string())),
+        };
+
+        Ok(LoginOutcome {
+            profile_name: name,
+            store_path,
+            did: atp.did.to_string(),
+            handle: atp.handle.to_string(),
+            pds: atp.pds.as_ref().map(ToString::to_string),
+        })
+    }
+
     /// Lend the live session. Consumers (e.g.
     /// `QuintClient::new(authed.session())`) borrow it; the session stays owned
     /// here and is shared by every borrower.
@@ -158,4 +207,63 @@ impl AuthedClient {
     pub fn pds(&self) -> Option<&str> {
         self.login.pds.as_deref()
     }
+}
+
+/// The non-secret identity produced by a successful [`AuthedClient::login`], for
+/// the caller to persist into the profile fragment. The session JWTs themselves
+/// are already durably in the store — this is only what belongs in config.
+#[derive(Debug, Clone)]
+pub struct LoginOutcome {
+    /// The profile name the login was performed under.
+    pub profile_name: String,
+    /// The store DB the session was persisted into.
+    pub store_path: PathBuf,
+    pub did: String,
+    pub handle: String,
+    pub pds: Option<String>,
+}
+
+/// Open the profile's turso app-password store at `store_path` and build a
+/// fresh (unresumed) [`CredentialSession`] over it. The single store-open path,
+/// shared by [`AuthedClient::for_profile`] and [`AuthedClient::login`] so the
+/// `TursoRepository` + `AppPasswordStore` + resolver dance lives in one place.
+async fn open_session_at(store_path: &Path) -> Result<AppPasswordSession, AuthError> {
+    if let Some(parent) = store_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;
+    }
+    let repo = jac_store_fjall::TursoRepository::open_local(store_path)
+        .await
+        .map_err(|e| AuthError::Store(e.to_string()))?;
+    let store = Arc::new(jac_store_fjall::AppPasswordStore::new(repo));
+    let resolver = Arc::new(JacquardResolver::default());
+    Ok(CredentialSession::new(store, resolver))
+}
+
+/// Read the access JWT of the session stored for `did`/`session_id` in the store
+/// at `store_path`, if present. Returns `Ok(None)` when the store file or the
+/// session is absent — it never creates the store. Expiry/liveness decoding is
+/// intentionally left to the caller so this crate needs no base64/JWT deps.
+pub async fn stored_access_jwt(
+    store_path: &Path,
+    did: &str,
+    session_id: Option<&str>,
+) -> Result<Option<String>, AuthError> {
+    use jacquard::common::session::{SessionKey, SessionStore};
+    use jacquard::common::types::did::Did;
+
+    if !store_path.exists() {
+        return Ok(None);
+    }
+    let Ok(did) = Did::new_owned(did) else {
+        return Ok(None);
+    };
+    let repo = jac_store_fjall::TursoRepository::open_local(store_path)
+        .await
+        .map_err(|e| AuthError::Store(e.to_string()))?;
+    let store = jac_store_fjall::AppPasswordStore::new(repo);
+    let key = SessionKey::new(did, session_id.unwrap_or("session"));
+    Ok(store
+        .get(&key)
+        .await
+        .map(|s| s.access_jwt.as_str().to_string()))
 }
