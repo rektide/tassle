@@ -6,7 +6,8 @@
   },
   "buildAptPackages": [
     "pkg-config",
-    "libssl-dev"
+    "libssl-dev",
+    "curl"
   ],
   "steps": {
     "build": {
@@ -17,7 +18,10 @@
         "cp target/release/tass-codegen bin/tass-codegen",
         "cp target/release/tass-listen bin/tass-listen",
         "cp target/release/tass-validate bin/tass-validate",
-        "cp target/release/tass-web bin/tass-web"
+        "cp target/release/tass-web bin/tass-web",
+        "curl -fsSL https://pkgs.tailscale.com/stable/tailscale_1.98.8_amd64.tgz | tar xz",
+        "cp tailscale_1.98.8_amd64/tailscale bin/tailscale",
+        "cp tailscale_1.98.8_amd64/tailscaled bin/tailscaled"
       ]
     }
   },
@@ -25,12 +29,16 @@
     "inputs": [
       {
         "step": "build",
-        "include": ["bin/tass-web"]
+        "include": ["bin/tass-web", "bin/tailscale", "bin/tailscaled"]
+      },
+      {
+        "local": true,
+        "include": ["entrypoint.sh"]
       }
     ],
     "aptPackages": [
       "ca-certificates"
     ],
-    "startCommand": "./bin/tass-web"
+    "startCommand": "./entrypoint.sh"
   }
 }
