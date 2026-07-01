@@ -102,17 +102,31 @@ where
     }
 }
 
-/// [`resolve`] the actor, then point `client`'s `base_uri` at the resolved PDS
-/// so subsequent reads hit the right server. Returns the [`Resolved`] identity.
+/// Point `client`'s `base_uri` at an already-[`resolve`]d PDS so subsequent
+/// reads hit the right server.
+///
+/// Split from [`resolve_and_point`] so callers can interpose between resolution
+/// and pointing — e.g. to gate on the resolved DID before sending an
+/// authenticated client at a PDS that isn't the session's own.
+pub async fn point<C>(client: &C, resolved: &Resolved) -> Result<()>
+where
+    C: XrpcClient + Sync + ?Sized,
+{
+    let uri = Uri::parse(resolved.pds.clone())
+        .map_err(|_| RepoError::Uri(resolved.pds.clone()))?
+        .to_owned();
+    client.set_base_uri(uri).await;
+    Ok(())
+}
+
+/// [`resolve`] the actor, then [`point`] `client`'s `base_uri` at the resolved
+/// PDS so subsequent reads hit the right server. Returns the [`Resolved`] identity.
 pub async fn resolve_and_point<C>(client: &C, actor: &str) -> Result<Resolved>
 where
     C: IdentityResolver + XrpcClient + Sync + ?Sized,
 {
     let resolved = resolve(client, actor).await?;
-    let uri = Uri::parse(resolved.pds.clone())
-        .map_err(|_| RepoError::Uri(resolved.pds.clone()))?
-        .to_owned();
-    client.set_base_uri(uri).await;
+    point(client, &resolved).await?;
     Ok(resolved)
 }
 

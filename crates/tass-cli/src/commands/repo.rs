@@ -82,10 +82,11 @@ async fn list(
         None => profile_config::default_did()?,
     };
     // Generic record access (tass-repo): resolve + point + list; the command
-    // only maps the normalized envelope onto its output shape.
-    let resolved = tass_repo::resolve_and_point(&client, &repo_input)
-        .await
-        .map_err(|e| miette::miette!("{e}"))?;
+    // only maps the normalized envelope onto its output shape. `resolve_read`
+    // also applies the cross-PDS guard (an authed client for another identity
+    // is downgraded before it touches this repo's PDS).
+    let (client, resolved) = crate::commands::resolve_read(client, &repo_input)
+        .await?;
     let page = tass_repo::list_records(
         &client,
         resolved.did.clone(),

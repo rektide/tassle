@@ -60,6 +60,42 @@ pub async fn acquire_read_client(
     Ok(jacquard::client::BasicClient::unauthenticated())
 }
 
+/// Resolve `actor` and point the returned client at its PDS, ready to read.
+///
+/// The cross-PDS guard lives here: identity resolution (PLC/DNS) runs first and
+/// is safe, then — before pointing at the actor's PDS — an authed client that
+/// belongs to a *different* identity is downgraded to unauthenticated
+/// ([`ReadClient::for_target`](tass_config::ReadClient::for_target)), so a
+/// session's bearer token is never sent to another actor's PDS. Reading your
+/// own repo stays authenticated.
+#[cfg(feature = "auth-store")]
+pub async fn resolve_read(
+    client: tass_config::ReadClient,
+    actor: &str,
+) -> miette::Result<(tass_config::ReadClient, tass_repo::Resolved)> {
+    let resolved = tass_repo::resolve(&client, actor)
+        .await
+        .map_err(|e| miette::miette!("{e}"))?;
+    let client = client.for_target(resolved.did.as_str());
+    tass_repo::point(&client, &resolved)
+        .await
+        .map_err(|e| miette::miette!("{e}"))?;
+    Ok((client, resolved))
+}
+
+/// Without `auth-store` the client is already unauthenticated, so there is
+/// nothing to guard: resolve + point in one step.
+#[cfg(not(feature = "auth-store"))]
+pub async fn resolve_read(
+    client: jacquard::client::BasicClient,
+    actor: &str,
+) -> miette::Result<(jacquard::client::BasicClient, tass_repo::Resolved)> {
+    let resolved = tass_repo::resolve_and_point(&client, actor)
+        .await
+        .map_err(|e| miette::miette!("{e}"))?;
+    Ok((client, resolved))
+}
+
 /// Emit a serializable record in the requested format.
 /// `Table` has no tabular form for a single record, so it falls back to
 /// pretty-printed JSON (the same as `Json`).

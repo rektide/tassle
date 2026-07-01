@@ -137,10 +137,9 @@ async fn list(
         Some(actor) => actor,
         None => profile_config::default_did()?,
     };
-    // Generic record access (tass-repo): resolve + point the client at the PDS.
-    let resolved = tass_repo::resolve_and_point(&client, &actor)
-        .await
-        .map_err(|e| miette::miette!("{e}"))?;
+    // Resolve + point (tass-repo), with the cross-PDS guard: an authed client
+    // for another identity is downgraded before touching this actor's PDS.
+    let (client, resolved) = crate::commands::resolve_read(client, &actor).await?;
     let repo = resolved.did;
     let pds = resolved.pds;
 

@@ -51,13 +51,68 @@ pub type OAuthReadSession = jacquard::oauth::client::OAuthSession<Resolver, OAut
 /// A read client resolved from a [`CredentialSelector`]: unauthenticated, an
 /// app-password session, or a restored OAuth session — one type consumers can
 /// hold and pass to `tass_repo` regardless of how auth was resolved.
-pub enum ReadClient {
+///
+/// Carries the authed identity's DID ([`own_did`](Self::own_did)) so a caller
+/// can gate cross-actor reads: see [`for_target`](Self::for_target).
+pub struct ReadClient {
+    inner: Inner,
+    /// The DID this client authenticates as; `None` when unauthenticated.
+    own_did: Option<String>,
+}
+
+/// The three underlying client shapes, unified by a shared `HttpClient::Error`.
+enum Inner {
     /// Public reads with no credential ([`BasicClient::unauthenticated`]).
     Unauthenticated(Box<BasicClient>),
     /// Reads over a resumed app-password [`CredentialSession`].
     AppPassword(Box<AppPasswordSession>),
     /// Reads over a restored OAuth session ([`OAuthReadSession`]).
     OAuth(Box<OAuthReadSession>),
+}
+
+impl ReadClient {
+    /// A fresh unauthenticated client (public reads).
+    pub fn unauthenticated() -> ReadClient {
+        ReadClient {
+            inner: Inner::Unauthenticated(Box::new(BasicClient::unauthenticated())),
+            own_did: None,
+        }
+    }
+
+    fn app_password(session: AppPasswordSession, own_did: String) -> ReadClient {
+        ReadClient {
+            inner: Inner::AppPassword(Box::new(session)),
+            own_did: Some(own_did),
+        }
+    }
+
+    fn oauth(session: OAuthReadSession, own_did: String) -> ReadClient {
+        ReadClient {
+            inner: Inner::OAuth(Box::new(session)),
+            own_did: Some(own_did),
+        }
+    }
+
+    /// The DID this client is authenticated as, or `None` if unauthenticated.
+    pub fn own_did(&self) -> Option<&str> {
+        self.own_did.as_deref()
+    }
+
+    /// A client safe to read `target_did`'s repo with: `self` when it is
+    /// unauthenticated or authed for that same identity, otherwise a fresh
+    /// **unauthenticated** client.
+    ///
+    /// This is the cross-PDS guard. An authed session's bearer token is scoped
+    /// to its own PDS; pointing it at another actor's PDS (to read their repo)
+    /// would ship that token to a server that has no business seeing it. Reads
+    /// of *other* actors therefore drop to unauthenticated. Identity resolution
+    /// (PLC/DNS) is unaffected — only the record read against the PDS is gated.
+    pub fn for_target(self, target_did: &str) -> ReadClient {
+        match self.own_did.as_deref() {
+            Some(did) if did != target_did => ReadClient::unauthenticated(),
+            _ => self,
+        }
+    }
 }
 
 // --- Trait delegation: mirror jacquard's own `impl … for Agent<A>`, matching on
@@ -72,10 +127,10 @@ impl HttpClient for ReadClient {
         request: http::Request<Vec<u8>>,
     ) -> impl Future<Output = Result<http::Response<Vec<u8>>, Self::Error>> + Send {
         async move {
-            match self {
-                ReadClient::Unauthenticated(c) => c.send_http(request).await,
-                ReadClient::AppPassword(c) => c.send_http(request).await,
-                ReadClient::OAuth(c) => c.send_http(request).await,
+            match &self.inner {
+                Inner::Unauthenticated(c) => c.send_http(request).await,
+                Inner::AppPassword(c) => c.send_http(request).await,
+                Inner::OAuth(c) => c.send_http(request).await,
             }
         }
     }
@@ -87,34 +142,34 @@ impl HttpClient for ReadClient {
 #[allow(clippy::manual_async_fn)]
 impl XrpcClient for ReadClient {
     async fn base_uri(&self) -> Uri<String> {
-        match self {
-            ReadClient::Unauthenticated(c) => c.base_uri().await,
-            ReadClient::AppPassword(c) => c.base_uri().await,
-            ReadClient::OAuth(c) => c.base_uri().await,
+        match &self.inner {
+            Inner::Unauthenticated(c) => c.base_uri().await,
+            Inner::AppPassword(c) => c.base_uri().await,
+            Inner::OAuth(c) => c.base_uri().await,
         }
     }
 
     async fn set_base_uri(&self, uri: Uri<String>) {
-        match self {
-            ReadClient::Unauthenticated(c) => c.set_base_uri(uri).await,
-            ReadClient::AppPassword(c) => c.set_base_uri(uri).await,
-            ReadClient::OAuth(c) => c.set_base_uri(uri).await,
+        match &self.inner {
+            Inner::Unauthenticated(c) => c.set_base_uri(uri).await,
+            Inner::AppPassword(c) => c.set_base_uri(uri).await,
+            Inner::OAuth(c) => c.set_base_uri(uri).await,
         }
     }
 
     async fn opts(&self) -> CallOptions {
-        match self {
-            ReadClient::Unauthenticated(c) => c.opts().await,
-            ReadClient::AppPassword(c) => c.opts().await,
-            ReadClient::OAuth(c) => c.opts().await,
+        match &self.inner {
+            Inner::Unauthenticated(c) => c.opts().await,
+            Inner::AppPassword(c) => c.opts().await,
+            Inner::OAuth(c) => c.opts().await,
         }
     }
 
     async fn set_opts(&self, opts: CallOptions) {
-        match self {
-            ReadClient::Unauthenticated(c) => c.set_opts(opts).await,
-            ReadClient::AppPassword(c) => c.set_opts(opts).await,
-            ReadClient::OAuth(c) => c.set_opts(opts).await,
+        match &self.inner {
+            Inner::Unauthenticated(c) => c.set_opts(opts).await,
+            Inner::AppPassword(c) => c.set_opts(opts).await,
+            Inner::OAuth(c) => c.set_opts(opts).await,
         }
     }
 
@@ -125,10 +180,10 @@ impl XrpcClient for ReadClient {
         Self: Sync,
     {
         async move {
-            match self {
-                ReadClient::Unauthenticated(c) => c.send(request).await,
-                ReadClient::AppPassword(c) => c.send(request).await,
-                ReadClient::OAuth(c) => c.send(request).await,
+            match &self.inner {
+                Inner::Unauthenticated(c) => c.send(request).await,
+                Inner::AppPassword(c) => c.send(request).await,
+                Inner::OAuth(c) => c.send(request).await,
             }
         }
     }
@@ -144,10 +199,10 @@ impl XrpcClient for ReadClient {
         Self: Sync,
     {
         async move {
-            match self {
-                ReadClient::Unauthenticated(c) => c.send_with_opts(request, opts).await,
-                ReadClient::AppPassword(c) => c.send_with_opts(request, opts).await,
-                ReadClient::OAuth(c) => c.send_with_opts(request, opts).await,
+            match &self.inner {
+                Inner::Unauthenticated(c) => c.send_with_opts(request, opts).await,
+                Inner::AppPassword(c) => c.send_with_opts(request, opts).await,
+                Inner::OAuth(c) => c.send_with_opts(request, opts).await,
             }
         }
     }
@@ -156,10 +211,10 @@ impl XrpcClient for ReadClient {
 #[allow(clippy::manual_async_fn)]
 impl IdentityResolver for ReadClient {
     fn options(&self) -> &ResolverOptions {
-        match self {
-            ReadClient::Unauthenticated(c) => c.options(),
-            ReadClient::AppPassword(c) => c.options(),
-            ReadClient::OAuth(c) => c.options(),
+        match &self.inner {
+            Inner::Unauthenticated(c) => c.options(),
+            Inner::AppPassword(c) => c.options(),
+            Inner::OAuth(c) => c.options(),
         }
     }
 
@@ -171,10 +226,10 @@ impl IdentityResolver for ReadClient {
         Self: Sync,
     {
         async move {
-            match self {
-                ReadClient::Unauthenticated(c) => c.resolve_handle(handle).await,
-                ReadClient::AppPassword(c) => c.resolve_handle(handle).await,
-                ReadClient::OAuth(c) => c.resolve_handle(handle).await,
+            match &self.inner {
+                Inner::Unauthenticated(c) => c.resolve_handle(handle).await,
+                Inner::AppPassword(c) => c.resolve_handle(handle).await,
+                Inner::OAuth(c) => c.resolve_handle(handle).await,
             }
         }
     }
@@ -187,10 +242,10 @@ impl IdentityResolver for ReadClient {
         Self: Sync,
     {
         async move {
-            match self {
-                ReadClient::Unauthenticated(c) => c.resolve_did_doc(did).await,
-                ReadClient::AppPassword(c) => c.resolve_did_doc(did).await,
-                ReadClient::OAuth(c) => c.resolve_did_doc(did).await,
+            match &self.inner {
+                Inner::Unauthenticated(c) => c.resolve_did_doc(did).await,
+                Inner::AppPassword(c) => c.resolve_did_doc(did).await,
+                Inner::OAuth(c) => c.resolve_did_doc(did).await,
             }
         }
     }
@@ -212,17 +267,13 @@ pub async fn read_client(
     cli_profile: Option<&str>,
 ) -> Result<ReadClient, AuthError> {
     match selector {
-        CredentialSelector::None => Ok(unauthenticated()),
+        CredentialSelector::None => Ok(ReadClient::unauthenticated()),
         CredentialSelector::Active => resume(cli_profile, Target::Active, true).await,
         CredentialSelector::ActiveIfAvailable => resume(cli_profile, Target::Active, false).await,
         CredentialSelector::Named(name) => {
             resume(cli_profile, Target::Named(name.clone()), true).await
         }
     }
-}
-
-fn unauthenticated() -> ReadClient {
-    ReadClient::Unauthenticated(Box::new(BasicClient::unauthenticated()))
 }
 
 /// Which identity's session to resume.
@@ -273,7 +324,7 @@ fn absent(required: bool, profile: &str) -> Result<ReadClient, AuthError> {
             profile: profile.to_string(),
         })
     } else {
-        Ok(unauthenticated())
+        Ok(ReadClient::unauthenticated())
     }
 }
 
@@ -303,7 +354,11 @@ async fn resume_app_password(
     let session = open_session_at(store_path).await?;
     let hint = SessionHint::from_optional_input(ident);
     match session.resume(&hint).await {
-        Ok(CredentialResumeResult::Resumed(_)) => Ok(ReadClient::AppPassword(Box::new(session))),
+        // Take the DID from the resumed session (authoritative — the `ident` may
+        // have been a handle), so the cross-PDS gate compares real DIDs.
+        Ok(CredentialResumeResult::Resumed(atp)) => {
+            Ok(ReadClient::app_password(session, atp.did.to_string()))
+        }
         Ok(CredentialResumeResult::LoginRequired(_)) => absent(required, profile),
         Err(e) => Err(AuthError::Resume(e.to_string())),
     }
@@ -332,6 +387,7 @@ async fn resume_oauth(
     let Some(key) = key else {
         return absent(required, profile);
     };
+    let own_did = key.did().to_string();
 
     // Restore (store-only; no interactive auth) with the native localhost client
     // metadata (public client, no keyset) — the CLI OAuth shape.
@@ -340,5 +396,5 @@ async fn resume_oauth(
         .restore(&key.did(), key.session_id())
         .await
         .map_err(|e| AuthError::Resume(e.to_string()))?;
-    Ok(ReadClient::OAuth(Box::new(session)))
+    Ok(ReadClient::oauth(session, own_did))
 }
