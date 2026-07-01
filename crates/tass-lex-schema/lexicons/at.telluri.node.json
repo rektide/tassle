@@ -1,6 +1,6 @@
 {
 	"lexicon": 1,
-	"id": "com.superbfowle.tass.node",
+	"id": "at.telluri.node",
 	"defs": {
 		"main": {
 			"type": "record",

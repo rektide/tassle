@@ -1,6 +1,6 @@
 {
 	"lexicon": 1,
-	"id": "com.superbfowle.tass.tassilize",
+	"id": "at.telluri.act.tassilize",
 	"defs": {
 		"main": {
 			"type": "record",
@@ -13,7 +13,7 @@
 					"node": {
 						"type": "string",
 						"format": "at-uri",
-						"description": "AT-URI of the Node where this tass formed (e.g. at://did:plc:.../com.superbfowle.tass.node/rkey)"
+						"description": "AT-URI of the Node where this tass formed (e.g. at://did:plc:.../at.telluri.node/rkey)"
 					},
 					"quintessence": {
 						"type": "integer",

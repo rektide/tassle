@@ -1,6 +1,6 @@
 {
 	"lexicon": 1,
-	"id": "com.superbfowle.tass.meditate",
+	"id": "at.telluri.act.meditate",
 	"defs": {
 		"main": {
 			"type": "record",

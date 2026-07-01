@@ -1,6 +1,6 @@
 {
 	"lexicon": 1,
-	"id": "com.superbfowle.tass.resonance",
+	"id": "at.telluri.resonance",
 	"description": "Canonical resonance type registry + the reusable value/profile defs that entities (nodes, tass, avatars) embed to declare their resonance characterization.",
 	"defs": {
 		"main": {
