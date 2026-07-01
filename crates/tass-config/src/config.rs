@@ -191,13 +191,12 @@ pub const STORE_DB_APPNAME: &str = "@appname";
 pub const STORE_DB_PER_PROFILE: &str = "@profile";
 
 /// Extract the `[store]` bucket from a figment, defaulting when it is absent.
+///
+/// Uses [`extract_cascade`] — the same one-layer read every config fragment
+/// uses (`StoreConfig` here, `ListenConfig` in tass-listen, etc.); the empty
+/// seed makes an absent `[store]` fall back to `StoreConfig`'s serde defaults.
 pub fn store_config(figment: &Figment) -> miette::Result<StoreConfig> {
-    if !figment.contains("store") {
-        return Ok(StoreConfig::default());
-    }
-    figment
-        .extract_inner::<StoreConfig>("store")
-        .map_err(|e| miette::miette!("failed to extract [store] config: {e}"))
+    extract_cascade(figment, &["store"])
 }
 
 /// Resolve the turso auth-store DB path for the active profile.
