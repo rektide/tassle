@@ -16,7 +16,7 @@ Awakened beings carry quintessence in their own pattern (capped at their **Avata
 
 ## Actions
 
-Records published to act on the energy ledger. Each is its own collection under `com.superbfowle.tass.*`:
+Records published to act on the energy ledger. Each is its own collection under `at.telluri.*`:
 
 - **`tassilize`** — formation of tass at a node; genesis record of a tass object and its energy endowment
 - **`meditate`** — pull quintessence from a node's ambiance into the mage's pattern
@@ -36,7 +36,7 @@ Rust/Jacquard is now the primary CLI path. The older TypeScript CLI remains in-t
 | Rust sample generator (`samples`) | ✅ |
 | TypeScript OAuth loopback login and writes | ✅ legacy/reference |
 | Read Mage data from `actor.rpg.stats/self` in TS | ✅ legacy/reference |
-| Lexicons authored under `com.superbfowle.tass.*` | ✅ |
+| Lexicons authored under `at.telluri.*` (telluri.at authority) | ✅ |
 | Rust Mage stats read (`mage list` / `mage stats`) | ✅, command shape still settling |
 | CEL filters/projections for read commands | ⏳ next |
 | Rust OAuth/write commands | ⏳ next |
@@ -100,7 +100,7 @@ The CLI is split into three layers:
 |---|---|
 | `repo` | Canonical public ATProto record access. It knows about repos, collections, rkeys, cursors, record envelopes, filtering, and selection. |
 | `mage` | Mage-specific interpretation of rpg.actor data. It preconfigures common `repo` reads against `actor.rpg.stats` and normalizes Mage fields, but it should not hide that `actor.rpg.stats` is the canonical source record. |
-| `ledger` | Future derived Tassle energy fold over `com.superbfowle.tass.*` records. It answers balance/history/provenance questions and must stay separate from character stats. |
+| `ledger` | Future derived Tassle energy fold over `at.telluri.*` records. It answers balance/history/provenance questions and must stay separate from character stats. |
 
 `actor.rpg.stats` is the rpg.actor term we should keep visible. Avoid adding a separate `sheet` command unless it provides a concrete capability that `repo` plus `mage stats` cannot express.
 
@@ -249,18 +249,17 @@ Required setters take strict types and `build()` throws if missing. Optional set
 
 # Lexicons
 
-Six collections authored under `com.superbfowle.tass.*`:
+Five collections authored under `at.telluri.*` (authority `telluri.at` / `act.telluri.at`):
 
 | NSID | Kind | Purpose |
 |---|---|---|
-| `com.superbfowle.tass.node` | record | A Node — place where quintessence gathers. Rated 1-5, ambient pool defaults to `rating * 5`. |
-| `com.superbfowle.tass.tassilize` | record | Genesis record of tass forming at a Node. |
-| `com.superbfowle.tass.meditate` | record | Pull quintessence from a Node's ambiance. |
-| `com.superbfowle.tass.enervate` | record | Drain/expend tass. |
-| `com.superbfowle.tass.resonance` | record + defs | Canonical resonance type registry. Reusable `#resonanceValue` and `#resonanceProfile` defs entities embed. |
-| `com.superbfowle.tass.form` | record | Named Tass form (physical shape) with `materializeCost` and `totalCapacity`. |
+| `at.telluri.node` | record | A Node — place where quintessence gathers. Rated 1-5, ambient pool defaults to `rating * 5`. |
+| `at.telluri.act.tassilize` | record | Genesis record of tass forming at a Node. |
+| `at.telluri.act.meditate` | record | Pull quintessence from a Node's ambiance. |
+| `at.telluri.act.enervate` | record | Drain/expend tass. |
+| `at.telluri.resonance` | record + defs | Canonical resonance type registry. Reusable `#resonanceValue` and `#resonanceProfile` defs entities embed. Reserved/deferred — not yet part of the MVP publish set. |
 
-Records are currently written with `validate: false` on the PDS — lexicons aren't yet registered there via `com.atproto.lexicon` records. Schema is enforced client-side via the builders.
+The `.act` segment is a distinct DNS authority (`act.telluri.at`); see [`doc/discovery/lexicon-publication.md`](doc/discovery/lexicon-publication.md) for the publication + DNS plan. The `com.superbfowle.tass.form` collection was dropped (unreferenced aspirational registry).
 
 # Samples
 
@@ -295,9 +294,9 @@ Legacy TypeScript toolchain: gunshi, `@atproto/api`, `@atproto/oauth-client-node
 # Deferred
 
 - **Hedystia web server** — `webProfile()` is already stubbed in `src/auth/profile.ts`; will swap in a hedystia/db-backed session store impl and a `/callback` route. Auth core stays shared.
-- **Ontology restructure** — move resonance to its own authority root (not `com.superbfowle.tass.*`), adopt `pub.layers.ontology` pattern: small per-resonance ontologies (Dynamic, Static, Primordial) instead of one flat vocabulary. Parameterized authority since domains aren't fixed yet (`tass.superbfowle.com`, `resonance.superbfowle.com`, `tassleat.example`, etc.).
+- **Ontology restructure** — move resonance to its own authority root (not `at.telluri.*`), adopt `pub.layers.ontology` pattern: small per-resonance ontologies (Dynamic, Static, Primordial) instead of one flat vocabulary. Authority is now fixed at `telluri.at`; resonance may get its own `resonance.telluri.at` authority when the restructure lands.
 - **CBOR output** — `--output screen|cbor|publish` global flag for canonical publishing workflow. Needs `@atproto/lex-cbor` (or equivalent dag-cbor encoder).
-- **Multi-domain parameterized authority** — env/flag for NSID prefix; placeholder authority tokens (`_tass`, `_resonance`) that resolve later when we have real domains.
+- **Lexicon publication** — publish the `at.telluri.*` lexicons as `com.atproto.lexicon.schema` records from a dedicated project account, and wire the `_lexicon` DNS TXT records via `at.marque.dns`. Tracked in [`doc/discovery/lexicon-publication.md`](doc/discovery/lexicon-publication.md); gated on Rust OAuth writes landing.
 - **True lexicon-driven sample generator** — read `crates/tass-lex-schema/lexicons/*.json`, synthesize records from the schema. Currently the generator is hand-coded against builders.
 - **Mage canonical resonance records** — Dynamic / Static / Primordial / Wyld / Weaver / Wyrm triad. Defined as ontology records once the restructure lands; published by your PDS so other Mage users reference your at-uris.
 - **Wire `#resonanceProfile` into Node/Tassilize** — entities don't yet embed the resonance profile defs; deferred pending the ontology restructure.
