@@ -7,7 +7,7 @@ members = [
     "crates/tass-quint",
     "crates/tass-repo",
     "crates/tass-repo-mage",
-    "crates/tass-stats",
+    "crates/tass-output",
     "crates/tass-codegen",
     "crates/tass-config",
     "crates/tass-lex",

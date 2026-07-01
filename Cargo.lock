@@ -4955,7 +4955,6 @@ dependencies = [
  "tass-quint",
  "tass-repo",
  "tass-repo-mage",
- "tass-stats",
  "tempfile",
  "tokio",
  "toml_edit 0.22.27",
@@ -5063,6 +5062,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tass-output"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_ipld_dagcbor",
+ "serde_json",
+]
+
+[[package]]
 name = "tass-phase"
 version = "0.1.0"
 dependencies = [
@@ -5087,6 +5095,7 @@ version = "0.1.0"
 dependencies = [
  "jacquard",
  "jacquard-common",
+ "serde",
  "serde_json",
 ]
 
@@ -5102,7 +5111,6 @@ dependencies = [
  "tass-lex-rpg",
  "tass-quint",
  "tass-repo",
- "tass-stats",
 ]
 
 [[package]]
@@ -5132,14 +5140,6 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "url",
-]
-
-[[package]]
-name = "tass-stats"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
