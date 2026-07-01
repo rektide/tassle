@@ -1,6 +1,5 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
-use jacquard::client::BasicClient;
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
@@ -36,14 +35,22 @@ struct SelfOutput {
     raw: Value,
 }
 
-pub async fn run(args: SelfArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+pub async fn run(
+    args: SelfArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     match args.kind {
-        SelfKind::Stats(args) | SelfKind::List(args) => stats(args, format).await,
+        SelfKind::Stats(args) | SelfKind::List(args) => stats(args, format, profile).await,
     }
 }
 
-async fn stats(args: StatsArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
-    let client = BasicClient::unauthenticated();
+async fn stats(
+    args: StatsArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
+    let client = crate::commands::acquire_read_client(profile).await?;
     let actor = match args.actor {
         Some(actor) => actor,
         None => profile_config::default_did()?,

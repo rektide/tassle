@@ -32,6 +32,34 @@ impl OutputFormat {
     }
 }
 
+/// Acquire the client read commands use.
+///
+/// With `auth-store`, this resolves the active profile's `auth` selector
+/// (`@active-if-available` by default) to a [`tass_config::ReadClient`] — reads
+/// run over the active session when one is present, else unauthenticated. The
+/// returned client implements `XrpcClient + IdentityResolver`, so `tass_repo`
+/// consumes it exactly like the plain `BasicClient` did.
+#[cfg(feature = "auth-store")]
+pub async fn acquire_read_client(
+    profile: Option<&str>,
+) -> miette::Result<tass_config::ReadClient> {
+    let figment = tass_config::config::active_figment(profile)?;
+    let selector = tass_config::config::auth_selector(&figment)?;
+    tass_config::read_client(&selector, profile)
+        .await
+        .map_err(|e| miette::miette!("{e}"))
+}
+
+/// Without `auth-store`, reads are always unauthenticated (the lean build pulls
+/// no session-store deps). Same signature as the authed variant so call sites
+/// stay cfg-agnostic.
+#[cfg(not(feature = "auth-store"))]
+pub async fn acquire_read_client(
+    _profile: Option<&str>,
+) -> miette::Result<jacquard::client::BasicClient> {
+    Ok(jacquard::client::BasicClient::unauthenticated())
+}
+
 /// Emit a serializable record in the requested format.
 /// `Table` has no tabular form for a single record, so it falls back to
 /// pretty-printed JSON (the same as `Json`).

@@ -78,10 +78,10 @@ async fn main() -> miette::Result<ExitCode> {
         Command::Generate(args) => match args.kind {
             commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a, format),
         },
-        Command::Mage(args) => commands::mage::run(args, format).await,
+        Command::Mage(args) => commands::mage::run(args, format, profile).await,
         #[cfg(feature = "auth-store")]
         Command::Quint(args) => commands::quint::run(args, format, profile).await,
-        Command::Repo(args) => commands::repo::run(args, format).await,
-        Command::SelfRecord(args) => commands::self_record::run(args, format).await,
+        Command::Repo(args) => commands::repo::run(args, format, profile).await,
+        Command::SelfRecord(args) => commands::self_record::run(args, format, profile).await,
     }
 }

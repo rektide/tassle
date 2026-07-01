@@ -26,13 +26,17 @@ use std::path::Path;
 
 use jacquard::client::credential_session::CredentialResumeResult;
 use jacquard::client::BasicClient;
+use jacquard::common::deps::fluent_uri::Uri;
+use jacquard::common::error::XrpcResult;
+use jacquard::common::http_client::HttpClient;
 use jacquard::common::session::SessionHint;
-use jacquard_common::http_client::HttpClient;
-use jacquard_common::types::string::BosStr;
-use jacquard_common::xrpc::{CallOptions, XrpcClient, XrpcRequest, XrpcResponse, XrpcResult};
-use jacquard_identity::resolver::{DidDocResponse, IdentityError, IdentityResolver, ResolverOptions};
-use jacquard_identity::{JacquardResolver, PublicResolver};
-use jacquard_oauth::client::OAuthClient;
+use jacquard::common::types::string::{Did, Handle};
+use jacquard::common::xrpc::{CallOptions, XrpcClient, XrpcRequest, XrpcResponse};
+use jacquard::common::BosStr;
+use jacquard::identity::resolver::{
+    DidDocResponse, IdentityError, IdentityResolver, ResolverOptions,
+};
+use jacquard::oauth::client::OAuthClient;
 
 use crate::auth::{open_session_at, AppPasswordSession, AuthError, Resolver};
 use crate::config::{self, CredentialSelector};
@@ -42,23 +46,24 @@ use crate::config::{self, CredentialSelector};
 type OAuthAuthStore = jac_store_fjall::OAuthStore<jac_store_fjall::TursoRepository>;
 
 /// A restored OAuth session over the turso OAuth store + public resolver.
-pub type OAuthReadSession = jacquard_oauth::client::OAuthSession<Resolver, OAuthAuthStore>;
+pub type OAuthReadSession = jacquard::oauth::client::OAuthSession<Resolver, OAuthAuthStore>;
 
 /// A read client resolved from a [`CredentialSelector`]: unauthenticated, an
 /// app-password session, or a restored OAuth session — one type consumers can
 /// hold and pass to `tass_repo` regardless of how auth was resolved.
 pub enum ReadClient {
     /// Public reads with no credential ([`BasicClient::unauthenticated`]).
-    Unauthenticated(BasicClient),
+    Unauthenticated(Box<BasicClient>),
     /// Reads over a resumed app-password [`CredentialSession`].
-    AppPassword(AppPasswordSession),
-    /// Reads over a restored [`OAuthSession`](jacquard_oauth::client::OAuthSession).
-    OAuth(OAuthReadSession),
+    AppPassword(Box<AppPasswordSession>),
+    /// Reads over a restored OAuth session ([`OAuthReadSession`]).
+    OAuth(Box<OAuthReadSession>),
 }
 
 // --- Trait delegation: mirror jacquard's own `impl … for Agent<A>`, matching on
 // the arm. All arms share `Error = <Resolver as HttpClient>::Error`. ---
 
+#[allow(clippy::manual_async_fn)]
 impl HttpClient for ReadClient {
     type Error = <Resolver as HttpClient>::Error;
 
@@ -76,8 +81,12 @@ impl HttpClient for ReadClient {
     }
 }
 
+// The `-> impl Future { async move { … } }` forms below mirror jacquard's own
+// `impl … for Agent<A>` signatures verbatim (including the `Self: Sync` bounds
+// and the `+ Send` on `send_http`), which `async fn` can't express identically.
+#[allow(clippy::manual_async_fn)]
 impl XrpcClient for ReadClient {
-    async fn base_uri(&self) -> jacquard_common::deps::fluent_uri::Uri<String> {
+    async fn base_uri(&self) -> Uri<String> {
         match self {
             ReadClient::Unauthenticated(c) => c.base_uri().await,
             ReadClient::AppPassword(c) => c.base_uri().await,
@@ -85,7 +94,7 @@ impl XrpcClient for ReadClient {
         }
     }
 
-    async fn set_base_uri(&self, uri: jacquard_common::deps::fluent_uri::Uri<String>) {
+    async fn set_base_uri(&self, uri: Uri<String>) {
         match self {
             ReadClient::Unauthenticated(c) => c.set_base_uri(uri).await,
             ReadClient::AppPassword(c) => c.set_base_uri(uri).await,
@@ -144,6 +153,7 @@ impl XrpcClient for ReadClient {
     }
 }
 
+#[allow(clippy::manual_async_fn)]
 impl IdentityResolver for ReadClient {
     fn options(&self) -> &ResolverOptions {
         match self {
@@ -155,8 +165,8 @@ impl IdentityResolver for ReadClient {
 
     fn resolve_handle<S: BosStr + Sync>(
         &self,
-        handle: &jacquard_common::types::string::Handle<S>,
-    ) -> impl Future<Output = Result<jacquard_common::types::string::Did, IdentityError>>
+        handle: &Handle<S>,
+    ) -> impl Future<Output = Result<Did, IdentityError>>
     where
         Self: Sync,
     {
@@ -171,7 +181,7 @@ impl IdentityResolver for ReadClient {
 
     fn resolve_did_doc<S: BosStr + Sync>(
         &self,
-        did: &jacquard_common::types::string::Did<S>,
+        did: &Did<S>,
     ) -> impl Future<Output = Result<DidDocResponse, IdentityError>>
     where
         Self: Sync,
@@ -212,7 +222,7 @@ pub async fn read_client(
 }
 
 fn unauthenticated() -> ReadClient {
-    ReadClient::Unauthenticated(BasicClient::unauthenticated())
+    ReadClient::Unauthenticated(Box::new(BasicClient::unauthenticated()))
 }
 
 /// Which identity's session to resume.
@@ -271,7 +281,7 @@ fn absent(required: bool, profile: &str) -> Result<ReadClient, AuthError> {
 /// set. Never creates the store (a missing DB = no active account).
 async fn active_account_at(
     store_path: &Path,
-) -> Result<Option<jacquard_common::types::string::Did>, AuthError> {
+) -> Result<Option<Did>, AuthError> {
     use jac_store_fjall::RepoCore;
     if !store_path.exists() {
         return Ok(None);
@@ -293,7 +303,7 @@ async fn resume_app_password(
     let session = open_session_at(store_path).await?;
     let hint = SessionHint::from_optional_input(ident);
     match session.resume(&hint).await {
-        Ok(CredentialResumeResult::Resumed(_)) => Ok(ReadClient::AppPassword(session)),
+        Ok(CredentialResumeResult::Resumed(_)) => Ok(ReadClient::AppPassword(Box::new(session))),
         Ok(CredentialResumeResult::LoginRequired(_)) => absent(required, profile),
         Err(e) => Err(AuthError::Resume(e.to_string())),
     }
@@ -327,8 +337,8 @@ async fn resume_oauth(
     // metadata (public client, no keyset) — the CLI OAuth shape.
     let client = OAuthClient::with_default_config(store);
     let session = client
-        .restore(key.did(), key.session_id())
+        .restore(&key.did(), key.session_id())
         .await
         .map_err(|e| AuthError::Resume(e.to_string()))?;
-    Ok(ReadClient::OAuth(session))
+    Ok(ReadClient::OAuth(Box::new(session)))
 }

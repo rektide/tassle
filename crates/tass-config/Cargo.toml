@@ -17,7 +17,7 @@ default = []
 # app-password store, resumed from the active profile and pointed at its PDS.
 # Off by default so the pure config/profile build stays light; the app enables
 # this for write paths.
-auth-store = ["dep:jac-store-fjall", "dep:jacquard", "dep:jacquard-common"]
+auth-store = ["dep:jac-store-fjall", "dep:jacquard", "dep:jacquard-common", "dep:http"]
 
 [dependencies]
 figment2.workspace = true
@@ -27,6 +27,8 @@ miette = { version = "7", features = ["fancy"] }
 jac-store-fjall = { workspace = true, optional = true }
 jacquard = { workspace = true, optional = true }
 jacquard-common = { workspace = true, optional = true }
+# `http::Request`/`http::Response` for the ReadClient `HttpClient` delegation.
+http = { version = "1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

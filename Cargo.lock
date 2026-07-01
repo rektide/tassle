@@ -4939,7 +4939,7 @@ dependencies = [
  "serde_ipld_dagcbor",
  "serde_json",
  "tass-config",
- "tass-lexicons",
+ "tass-lex",
  "tass-mage",
  "tass-quint",
  "tass-repo",
@@ -4964,6 +4964,7 @@ name = "tass-config"
 version = "0.1.0"
 dependencies = [
  "figment2",
+ "http",
  "jac-store-fjall",
  "jacquard",
  "jacquard-common",
@@ -4984,15 +4985,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tass-lex-sample"
-version = "0.1.0"
-
-[[package]]
-name = "tass-lex-schema"
-version = "0.1.0"
-
-[[package]]
-name = "tass-lexicons"
+name = "tass-lex"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -5002,6 +4995,34 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "tass-lex-rpg"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jacquard-common",
+ "jacquard-derive",
+ "jacquard-lexicon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "tass-lex-rpg-sample"
+version = "0.1.0"
+
+[[package]]
+name = "tass-lex-rpg-schema"
+version = "0.1.0"
+
+[[package]]
+name = "tass-lex-sample"
+version = "0.1.0"
+
+[[package]]
+name = "tass-lex-schema"
+version = "0.1.0"
 
 [[package]]
 name = "tass-mage"
@@ -5086,7 +5107,7 @@ dependencies = [
  "miette",
  "serde",
  "serde_json",
- "tass-lexicons",
+ "tass-lex",
 ]
 
 [[package]]
@@ -6394,7 +6415,7 @@ dependencies = [
  "jacquard-lexicon",
  "miette",
  "serde_json",
- "tass-lexicons",
+ "tass-lex",
 ]
 
 [[package]]

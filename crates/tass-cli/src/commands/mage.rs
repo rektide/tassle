@@ -1,7 +1,7 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
-use jacquard::client::BasicClient;
 use jacquard_common::types::ident::AtIdentifier;
+use jacquard_common::xrpc::XrpcClient;
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
@@ -72,14 +72,18 @@ struct StatsSource {
     shape: String,
 }
 
-pub async fn run(args: MageArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+pub async fn run(
+    args: MageArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     match args.kind {
-        MageKind::List(args) => list(args, format).await,
+        MageKind::List(args) => list(args, format, profile).await,
     }
 }
 
-async fn get_stats_record(
-    client: &BasicClient,
+async fn get_stats_record<C: XrpcClient + Sync + ?Sized>(
+    client: &C,
     repo: AtIdentifier,
     rkey: &str,
 ) -> miette::Result<Option<tass_repo::RecordEnvelope>> {
@@ -88,8 +92,8 @@ async fn get_stats_record(
         .map_err(|e| miette::miette!("{e}"))
 }
 
-async fn list_stats_records(
-    client: &BasicClient,
+async fn list_stats_records<C: XrpcClient + Sync + ?Sized>(
+    client: &C,
     repo: AtIdentifier,
     pds: String,
     args: &ListArgs,
@@ -123,8 +127,12 @@ async fn list_stats_records(
     })
 }
 
-async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
-    let client = BasicClient::unauthenticated();
+async fn list(
+    args: ListArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
+    let client = crate::commands::acquire_read_client(profile).await?;
     let actor = match args.actor.clone() {
         Some(actor) => actor,
         None => profile_config::default_did()?,

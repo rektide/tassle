@@ -1,6 +1,5 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
-use jacquard::client::BasicClient;
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use std::process::ExitCode;
@@ -58,18 +57,26 @@ struct RecordOutput {
     value: serde_json::Value,
 }
 
-pub async fn run(args: RepoArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+pub async fn run(
+    args: RepoArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     match args.kind {
-        RepoKind::List(args) => list(args, format).await,
+        RepoKind::List(args) => list(args, format, profile).await,
     }
 }
 
-async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+async fn list(
+    args: ListArgs,
+    format: crate::commands::OutputFormat,
+    profile: Option<&str>,
+) -> miette::Result<ExitCode> {
     if args.limit < 1 || args.limit > 100 {
         miette::bail!("--limit must be between 1 and 100");
     }
 
-    let client = BasicClient::unauthenticated();
+    let client = crate::commands::acquire_read_client(profile).await?;
     let repo_input = match args.repo {
         Some(repo) => repo,
         None => profile_config::default_did()?,
