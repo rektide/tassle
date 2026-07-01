@@ -65,12 +65,12 @@ pub fn run(args: NodeArgs, format: crate::commands::OutputFormat) -> miette::Res
 
     let node = builder.build();
 
-    if !args.no_validate {
-        if let Err(err) = node.validate() {
-            eprintln!("validation failed:");
-            eprintln!("  {err}");
-            return Ok(ExitCode::FAILURE);
-        }
+    if !args.no_validate
+        && let Err(err) = node.validate()
+    {
+        eprintln!("validation failed:");
+        eprintln!("  {err}");
+        return Ok(ExitCode::FAILURE);
     }
 
     crate::commands::emit(&node, format)

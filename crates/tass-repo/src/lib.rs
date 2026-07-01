@@ -132,7 +132,7 @@ where
 
 /// A record read back from a repo, normalized to plain JSON. Domain crates
 /// interpret [`value`](Self::value); this crate stays lexicon-agnostic.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordEnvelope {
     pub uri: String,
     pub cid: Option<String>,

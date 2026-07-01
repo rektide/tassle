@@ -14,9 +14,8 @@ path = "src/lib.rs"
 [dependencies]
 tass-quint = { path = "../tass-quint" }
 tass-lex-rpg = { path = "../tass-lex-rpg" }
-# Generic record access + actor.rpg.stats shape summaries for the stats reads.
+# Generic record access.
 tass-repo = { path = "../tass-repo" }
-tass-stats = { path = "../tass-stats" }
 jacquard-common.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

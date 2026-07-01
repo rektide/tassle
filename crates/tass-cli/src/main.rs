@@ -46,6 +46,7 @@ enum Command {
     /// figment-backed config: profiles, loaded sources, active values
     Config(commands::config::ConfigArgs),
     /// Generate records (node, tassilize, etc.) as JSON or CBOR
+    #[command(alias = "gen")]
     Generate(commands::generate::GenerateArgs),
     /// Mage character sheet commands
     Mage(commands::mage::MageArgs),
@@ -54,9 +55,6 @@ enum Command {
     Quint(commands::quint::QuintArgs),
     /// Read public repository records through Jacquard XRPC
     Repo(commands::repo::RepoArgs),
-    /// Inspect self-rkey aggregate records
-    #[command(name = "self")]
-    SelfRecord(commands::self_record::SelfArgs),
     /// Listen for tass commands posted at an account via Spacedust. (listen)
     #[cfg(feature = "listen")]
     Listen(tass_listen::ListenArgs),
@@ -80,12 +78,14 @@ async fn main() -> miette::Result<ExitCode> {
         Command::Config(args) => commands::config::run(args, format, profile),
         Command::Generate(args) => match args.kind {
             commands::generate::GenerateKind::Node(a) => commands::generate::node::run(a, format),
+            commands::generate::GenerateKind::NodeItem(a) => {
+                commands::generate::node_item::run(a, format)
+            }
         },
         Command::Mage(args) => commands::mage::run(args, format, profile).await,
         #[cfg(feature = "auth-store")]
         Command::Quint(args) => commands::quint::run(args, format, profile).await,
         Command::Repo(args) => commands::repo::run(args, format, profile).await,
-        Command::SelfRecord(args) => commands::self_record::run(args, format, profile).await,
         #[cfg(feature = "listen")]
         Command::Listen(args) => tass_listen::run(args, profile)
             .await

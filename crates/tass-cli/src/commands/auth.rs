@@ -166,12 +166,13 @@ async fn login(
     }
     #[cfg(not(feature = "auth-store"))]
     {
-        return login_profile_only(args, format).await;
+        let _ = profile;
+        login_profile_only(args, format).await
     }
 }
 
 async fn status(
-    args: StatusArgs,
+    _args: StatusArgs,
     format: crate::commands::OutputFormat,
     profile: Option<&str>,
 ) -> miette::Result<ExitCode> {
@@ -202,10 +203,17 @@ async fn status(
     if json {
         println!("{}", serde_json::to_string_pretty(&rows).into_diagnostic()?);
     } else if rows.is_empty() {
-        println!("(no profiles in {})", tass_config::config::dropins_dir()?.display());
+        println!(
+            "(no profiles in {})",
+            tass_config::config::dropins_dir()?.display()
+        );
     } else {
         for r in &rows {
-            let mark = if r["active"].as_bool() == Some(true) { "*" } else { " " };
+            let mark = if r["active"].as_bool() == Some(true) {
+                "*"
+            } else {
+                " "
+            };
             let prof = r["profile"].as_str().unwrap_or("?");
             let did = r["did"].as_str().unwrap_or("(no did)");
             let handle = r["handle"].as_str().unwrap_or("-");
@@ -226,7 +234,11 @@ fn switch(args: SwitchArgs, format: crate::commands::OutputFormat) -> miette::Re
         miette::bail!(
             "unknown profile '{}'; available: {}",
             args.profile,
-            if profiles.is_empty() { "(none)".to_string() } else { profiles.join(", ") }
+            if profiles.is_empty() {
+                "(none)".to_string()
+            } else {
+                profiles.join(", ")
+            }
         );
     }
     let dir = tass_config::config::tass_config_dir()?;
@@ -266,7 +278,9 @@ async fn session_status(
     session_id: Option<&str>,
 ) -> serde_json::Value {
     let absent = || serde_json::json!({ "state": "absent" });
-    let Some(did) = did else { return absent(); };
+    let Some(did) = did else {
+        return absent();
+    };
     // Store access lives in tass-config; the CLI only decodes expiry.
     let access_jwt = match tass_config::stored_access_jwt(store_path, did, session_id).await {
         Ok(Some(jwt)) => jwt,
@@ -326,7 +340,11 @@ async fn login_real(
     let password = args
         .password
         .clone()
-        .or_else(|| std::env::var("TASS_PASSWORD").ok().filter(|s| !s.is_empty()))
+        .or_else(|| {
+            std::env::var("TASS_PASSWORD")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
         .map(Ok)
         .unwrap_or_else(|| {
             rpassword::prompt_password("App password: ")
@@ -372,7 +390,10 @@ async fn login_real(
 /// Profile-only bootstrap stub (ADR 0001): resolve DID/handle → PDS and save the
 /// profile without authenticating. Used when the `auth-store` feature is off.
 #[cfg(not(feature = "auth-store"))]
-async fn login_profile_only(args: LoginArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
+async fn login_profile_only(
+    args: LoginArgs,
+    format: crate::commands::OutputFormat,
+) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
     let ident: AtIdentifier = AtIdentifier::new_owned(&args.actor).into_diagnostic()?;
     let (did, handle, pds) = match ident {
@@ -400,7 +421,9 @@ async fn login_profile_only(args: LoginArgs, format: crate::commands::OutputForm
             serde_json::to_string_pretty(&profile).into_diagnostic()?
         );
     } else {
-        println!("saved tassle profile (no auth — build with --features auth-store for real login)");
+        println!(
+            "saved tassle profile (no auth — build with --features auth-store for real login)"
+        );
         println!("  did:  {}", profile.did);
         if let Some(handle) = profile.handle {
             println!("  handle: {handle}");

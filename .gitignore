@@ -7,3 +7,6 @@
 # Rust build output
 /target/
 /crates/target/
+
+# me
+/doc/ref

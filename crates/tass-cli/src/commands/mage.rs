@@ -5,7 +5,7 @@ use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
 use std::process::ExitCode;
-use tass_lex_rpg::actor_rpg::stats::{MageStats, Stats};
+use tass_lex_rpg::actor_rpg::stats::MageStats;
 
 #[derive(Args, Debug)]
 pub struct MageArgs {
@@ -45,8 +45,10 @@ pub struct ListArgs {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StatsOutput {
-    source: StatsSource,
-    summary: tass_stats::StatsSummary,
+    uri: String,
+    cid: Option<String>,
+    rkey: String,
+    system: Option<String>,
     mage: Option<MageStats<DefaultStr>>,
     raw: Value,
 }
@@ -58,16 +60,7 @@ struct StatsListOutput {
     collection: String,
     pds: String,
     cursor: Option<String>,
-    records: Vec<tass_stats::StatsSummary>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StatsSource {
-    uri: String,
-    cid: Option<String>,
-    rkey: String,
-    shape: String,
+    records: Vec<tass_repo::RecordEnvelope>,
 }
 
 pub async fn run(
@@ -79,7 +72,6 @@ pub async fn run(
         MageKind::List(args) => list(args, format, profile).await,
     }
 }
-
 
 async fn list(
     args: ListArgs,
@@ -102,10 +94,15 @@ async fn list(
             miette::bail!("--limit must be between 1 and 100");
         }
         let repo_str = repo.as_str().to_owned();
-        let page =
-            tass_repo_mage::list_stats_records(&client, repo, Some(args.limit), args.cursor.clone(), false)
-                .await
-                .map_err(|e| miette::miette!("{e}"))?;
+        let page = tass_repo_mage::list_stats_records(
+            &client,
+            repo,
+            Some(args.limit),
+            args.cursor.clone(),
+            false,
+        )
+        .await
+        .map_err(|e| miette::miette!("{e}"))?;
         let output = StatsListOutput {
             repo: repo_str,
             collection: tass_repo_mage::STATS_COLLECTION.to_owned(),
@@ -143,27 +140,25 @@ async fn list(
         else {
             continue;
         };
-        let summary = tass_stats::summarize_record(&record.uri, record.cid.as_deref(), &record.value);
         let raw = record.value.clone();
-        // Typed mage extraction: deserialize into Stats, pull MageStats from data.
-        let mage = if summary.system.as_deref() == Some("mage") {
-            serde_json::from_value::<Stats<DefaultStr>>(record.value.clone())
-                .ok()
-                .filter(|s| s.system.as_deref() == Some("mage"))
-                .and_then(|s| s.data)
-                .and_then(|d| serde_json::to_value(&d).ok())
-                .and_then(|v| serde_json::from_value::<MageStats<DefaultStr>>(v).ok())
+        let system = record
+            .value
+            .get("system")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
+        // Typed mage extraction: current records must use the lowercase
+        // rpg.actor mageStats payload; legacy PascalCase sheets are rejected.
+        let mage = if system.as_deref() == Some("mage") {
+            tass_repo_mage::mage_stats_from_record_value(&record.value)
+                .map_err(|e| miette::miette!("{e}"))?
         } else {
             None
         };
         let output = StatsOutput {
-            source: StatsSource {
-                uri: summary.uri.clone(),
-                cid: summary.cid.clone(),
-                rkey: summary.rkey.clone(),
-                shape: summary.shape.clone(),
-            },
-            summary,
+            uri: record.uri.clone(),
+            cid: record.cid.clone(),
+            rkey: record.rkey.clone(),
+            system,
             mage,
             raw,
         };
@@ -182,22 +177,27 @@ async fn list(
     miette::bail!("no actor.rpg.stats record found for requested rkey")
 }
 
-fn print_summary(record: &tass_stats::StatsSummary) {
-    println!("  {} ({})", record.rkey, record.shape);
+fn print_summary(record: &tass_repo::RecordEnvelope) {
+    let system = record.value.get("system").and_then(Value::as_str);
+    println!("  {}", record.rkey);
     println!("    uri: {}", record.uri);
-    if let Some(system) = &record.system {
+    if let Some(system) = system {
         println!("    system: {system}");
     }
-    if !record.fields.is_empty() {
-        println!("    fields: {}", record.fields.join(", "));
+    if let Some(fields) = record.value.get("data").and_then(Value::as_object)
+        && !fields.is_empty()
+    {
+        println!(
+            "    fields: {}",
+            fields.keys().cloned().collect::<Vec<_>>().join(", ")
+        );
     }
 }
 
 fn print_record(output: &StatsOutput) {
-    println!("actor.rpg.stats/{}", output.source.rkey);
-    println!("  source: {}", output.source.uri);
-    println!("  shape:  {}", output.source.shape);
-    if let Some(system) = &output.summary.system {
+    println!("actor.rpg.stats/{}", output.rkey);
+    println!("  source: {}", output.uri);
+    if let Some(system) = &output.system {
         println!("  system: {system}");
     }
     if let Some(mage) = &output.mage {
@@ -229,8 +229,13 @@ fn print_record(output: &StatsOutput) {
                 println!("    {name}: {v}");
             }
         }
-    } else if !output.summary.fields.is_empty() {
-        println!("  fields: {}", output.summary.fields.join(", "));
+    } else if let Some(fields) = output.raw.get("data").and_then(Value::as_object)
+        && !fields.is_empty()
+    {
+        println!(
+            "  fields: {}",
+            fields.keys().cloned().collect::<Vec<_>>().join(", ")
+        );
     }
 }
 

@@ -316,6 +316,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-extra"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9963ff19f40c6102c76756ef0a46004c0d58957d87259fc9208ff8441c12ab96"
+dependencies = [
+ "axum",
+ "axum-core",
+ "bytes",
+ "cookie",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "rustversion",
+ "serde_core",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -822,6 +845,21 @@ name = "const-str"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f421161cb492475f1661ddc9815a745a1c894592070661180fdec3d4872e9c3"
+
+[[package]]
+name = "cookie"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ddef33a339a91ea89fb53151bd0a4689cfce27055c291dfa69945475d22c747"
+dependencies = [
+ "aes-gcm",
+ "base64",
+ "percent-encoding",
+ "rand 0.8.6",
+ "subtle",
+ "time",
+ "version_check",
+]
 
 [[package]]
 name = "cordyceps"
@@ -2378,6 +2416,33 @@ dependencies = [
  "miette",
  "serde",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "jacquard-axum"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4fa141b5bc2c34a4070cdab72b93b605f3a452e7e6663920e7c6a87925cd5ee"
+dependencies = [
+ "axum",
+ "axum-extra",
+ "base64",
+ "bytes",
+ "chrono",
+ "jacquard",
+ "jacquard-common",
+ "jacquard-derive",
+ "jacquard-identity",
+ "miette",
+ "mini-moka-wasm",
+ "multibase",
+ "serde",
+ "serde_html_form",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower-http",
+ "tracing",
 ]
 
 [[package]]
@@ -5034,6 +5099,7 @@ dependencies = [
  "tass-lex",
  "tass-lex-rpg",
  "tass-listen",
+ "tass-output",
  "tass-quint",
  "tass-repo",
  "tass-repo-mage",
@@ -5246,6 +5312,7 @@ dependencies = [
  "axum",
  "clap",
  "figment2",
+ "jacquard-axum",
  "miette",
  "serde",
  "serde_json",
@@ -5570,6 +5637,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
  "url",
 ]
 

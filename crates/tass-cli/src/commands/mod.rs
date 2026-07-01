@@ -7,7 +7,6 @@ pub mod mage;
 #[cfg(feature = "auth-store")]
 pub mod quint;
 pub mod repo;
-pub mod self_record;
 
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
@@ -32,6 +31,18 @@ impl OutputFormat {
     }
 }
 
+/// Map the clap-facing flag onto the clap-free [`tass_output::Format`] the
+/// output layer consumes.
+impl From<OutputFormat> for tass_output::Format {
+    fn from(f: OutputFormat) -> Self {
+        match f {
+            OutputFormat::Table => tass_output::Format::Table,
+            OutputFormat::Json => tass_output::Format::Json,
+            OutputFormat::Cbor => tass_output::Format::Cbor,
+        }
+    }
+}
+
 /// Acquire the client read commands use.
 ///
 /// With `auth-store`, this resolves the active profile's `auth` selector
@@ -40,9 +51,7 @@ impl OutputFormat {
 /// returned client implements `XrpcClient + IdentityResolver`, so `tass_repo`
 /// consumes it exactly like the plain `BasicClient` did.
 #[cfg(feature = "auth-store")]
-pub async fn acquire_read_client(
-    profile: Option<&str>,
-) -> miette::Result<tass_config::ReadClient> {
+pub async fn acquire_read_client(profile: Option<&str>) -> miette::Result<tass_config::ReadClient> {
     let figment = tass_config::config::active_figment(profile)?;
     let selector = tass_config::config::auth_selector(&figment)?;
     tass_config::read_client(&selector, profile)
@@ -96,26 +105,15 @@ pub async fn resolve_read(
     Ok((client, resolved))
 }
 
-/// Emit a serializable record in the requested format.
-/// `Table` has no tabular form for a single record, so it falls back to
-/// pretty-printed JSON (the same as `Json`).
+/// Emit a serializable record in the requested format, through the shared
+/// [`tass_output`] layer. `Table` has no tabular form for a single record, so it
+/// falls back to pretty-printed JSON (the same as `Json`).
 pub fn emit<S>(record: &S, format: OutputFormat) -> miette::Result<ExitCode>
 where
     S: serde::Serialize,
 {
-    match format {
-        OutputFormat::Json | OutputFormat::Table => {
-            let json = serde_json::to_string_pretty(record).into_diagnostic()?;
-            println!("{json}");
-            Ok(ExitCode::SUCCESS)
-        }
-        OutputFormat::Cbor => {
-            use std::io::Write;
-            let bytes = serde_ipld_dagcbor::to_vec(record).into_diagnostic()?;
-            let stdout = std::io::stdout();
-            let mut lock = stdout.lock();
-            lock.write_all(&bytes).into_diagnostic()?;
-            Ok(ExitCode::SUCCESS)
-        }
-    }
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
+    tass_output::render_value(record, format.into(), &mut lock).into_diagnostic()?;
+    Ok(ExitCode::SUCCESS)
 }

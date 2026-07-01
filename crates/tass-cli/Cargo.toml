@@ -30,7 +30,8 @@ tass-lex = { path = "../tass-lex" }
 tass-quint = { path = "../tass-quint" }
 tass-lex-rpg = { path = "../tass-lex-rpg" }
 tass-repo = { path = "../tass-repo" }
-tass-stats = { path = "../tass-stats" }
+# Output layer: Format + Render trait + record Envelope (json / dag-cbor / table).
+tass-output = { path = "../tass-output" }
 # Mage-record DAO: the actor.rpg.stats read helpers (always) + QuintClient write
 # path (used by the auth-store quint command). Non-optional — its deps (tass-repo,
 # jacquard) are already in the base build, so it costs the lean CLI nothing.

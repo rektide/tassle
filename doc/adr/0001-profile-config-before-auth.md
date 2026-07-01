@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Tassle needs a default actor before it needs full authentication. Public reads such as `repo list`, `mage list`, and `self stats` only need to know which DID/handle to inspect and which PDS hosts that actor's repo. OAuth will add tokens and write permissions later, but forcing OAuth into the first Rust CLI slice would slow down the public-read loop.
+Tassle needs a default actor before it needs full authentication. Public reads such as `repo list` and `mage list` only need to know which DID/handle to inspect and which PDS hosts that actor's repo. OAuth will add tokens and write permissions later, but forcing OAuth into the first Rust CLI slice would slow down the public-read loop.
 
 The CLI also needs multi-profile support from the start. A future user may have a player DID, a Storyteller DID, and one or more service/reality DIDs. Logging one profile in must not destroy another profile's settings.
 

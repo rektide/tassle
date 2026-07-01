@@ -29,19 +29,17 @@
 //! explicit command — the ledger never silently mutates `actor.rpg.stats`.
 
 use chrono::Utc;
+use jacquard_common::DefaultStr;
+use jacquard_common::types::datetime::Datetime;
 use jacquard_common::types::ident::AtIdentifier;
 use jacquard_common::types::string::{Nsid, RecordKey};
 use jacquard_common::types::value::Data;
-use jacquard_common::types::datetime::Datetime;
-use jacquard_common::DefaultStr;
-use jacquard_common::xrpc::atproto::{
-    GetRecord, GetRecordError, GetRecordOutput, PutRecord,
-};
+use jacquard_common::xrpc::atproto::{GetRecord, GetRecordError, GetRecordOutput, PutRecord};
 use jacquard_common::xrpc::{XrpcClient, XrpcError};
 use tass_lex_rpg::actor_rpg::stats::{MageStats, Stats};
 use tass_quint::{
-    coherent_quint, sheet_patch, Coherence, MilliIsTruthCoherence, Quint, ReadReport,
-    SheetFields, SheetPatch,
+    Coherence, MilliIsTruthCoherence, Quint, ReadReport, SheetFields, SheetPatch, coherent_quint,
+    sheet_patch,
 };
 
 /// Default collection (the rpg.actor host record).
@@ -49,17 +47,8 @@ pub const STATS_COLLECTION: &str = "actor.rpg.stats";
 /// Default rkey for the canonical modern mage record.
 pub const DEFAULT_RKEY: &str = "mage";
 
-/// One page of `actor.rpg.stats` records, each summarized by shape (see
-/// [`tass_stats::summarize_record`]).
-pub struct StatsPage {
-    pub cursor: Option<String>,
-    pub records: Vec<tass_stats::StatsSummary>,
-}
-
 /// Read one `actor.rpg.stats` record by `rkey`, or `Ok(None)` if absent.
-///
-/// The repo-touching read half of the mage DAO: it owns the collection NSID so
-/// callers don't. The client must already be pointed at the actor's PDS.
+/// Wraps [`tass_repo::get_record`] with the stats collection defaulted.
 pub async fn get_stats_record<C: XrpcClient + Sync + ?Sized>(
     client: &C,
     repo: AtIdentifier,
@@ -68,26 +57,35 @@ pub async fn get_stats_record<C: XrpcClient + Sync + ?Sized>(
     tass_repo::get_record(client, repo, STATS_COLLECTION, rkey).await
 }
 
-/// List an actor's `actor.rpg.stats` records, each summarized by shape. The
-/// client must already be pointed at the actor's PDS.
+/// List an actor's `actor.rpg.stats` records. The client must already be
+/// pointed at the actor's PDS. Just wraps [`tass_repo::list_records`] with the
+/// stats collection defaulted.
 pub async fn list_stats_records<C: XrpcClient + Sync + ?Sized>(
     client: &C,
     repo: AtIdentifier,
     limit: Option<i64>,
     cursor: Option<String>,
     reverse: bool,
-) -> tass_repo::Result<StatsPage> {
-    let page =
-        tass_repo::list_records(client, repo, STATS_COLLECTION, limit, cursor, reverse).await?;
-    let records = page
-        .records
-        .into_iter()
-        .map(|env| tass_stats::summarize_record(&env.uri, env.cid.as_deref(), &env.value))
-        .collect();
-    Ok(StatsPage {
-        cursor: page.cursor,
-        records,
-    })
+) -> tass_repo::Result<tass_repo::ListPage> {
+    tass_repo::list_records(client, repo, STATS_COLLECTION, limit, cursor, reverse).await
+}
+
+/// Extract the current lowercase `mageStats` payload from an `actor.rpg.stats`
+/// record value. Returns `Ok(None)` for non-mage records and rejects legacy
+/// PascalCase Mage sheet keys rather than treating them as unknown extras.
+pub fn mage_stats_from_record_value(
+    value: &serde_json::Value,
+) -> Result<Option<MageStats<DefaultStr>>> {
+    let stats: Stats<DefaultStr> = serde_json::from_value(value.clone())?;
+    if stats.system.as_deref() != Some("mage") {
+        return Ok(None);
+    }
+    let Some(data) = stats.data else {
+        return Ok(None);
+    };
+    let data_value = serde_json::to_value(&data)?;
+    reject_pascalcase_mage_fields(&data_value)?;
+    Ok(Some(serde_json::from_value(data_value)?))
 }
 
 pub type Result<T> = std::result::Result<T, QuintError>;
@@ -103,6 +101,8 @@ pub enum QuintError {
     Xrpc(String),
     /// The record has no mage block to patch (write only).
     NoMageBlock,
+    /// A current `actor.rpg.stats/mage` payload carried legacy PascalCase sheet fields.
+    LegacyMageField(String),
     /// (De)serializing the record body failed.
     Serde(serde_json::Error),
 }
@@ -113,6 +113,9 @@ impl std::fmt::Display for QuintError {
             QuintError::Ident(e) => write!(f, "invalid identifier: {e}"),
             QuintError::Xrpc(e) => write!(f, "xrpc error: {e}"),
             QuintError::NoMageBlock => write!(f, "record has no mage block to patch"),
+            QuintError::LegacyMageField(field) => {
+                write!(f, "legacy PascalCase mage field is unsupported: {field}")
+            }
             QuintError::Serde(e) => write!(f, "record (de)serialize error: {e}"),
         }
     }
@@ -284,24 +287,7 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
         let Some(record) = self.get_record(repo, rkey).await? else {
             return Ok(None);
         };
-        let value = serde_json::to_value(&record.value)?;
-        let stats: Stats<DefaultStr> = serde_json::from_value(value)?;
-        let updated_at = stats.updated_at.as_ref().map(|d| d.as_str().to_string());
-        if stats.system.as_deref() != Some("mage") {
-            return Ok(None);
-        }
-        let Some(data) = stats.data else {
-            return Ok(None);
-        };
-        let data_value = serde_json::to_value(&data)?;
-        let mage: MageStats<DefaultStr> = serde_json::from_value(data_value)?;
-        let fields = extract_fields(&mage, updated_at.as_deref());
-        let decision = self.coherence.classify(&fields);
-        let quint = match coherent_quint(&fields, decision) {
-            Some(q) => q,
-            None => return Ok(None),
-        };
-        Ok(Some(ReadReport { quint, decision }))
+        read_report_from_value(&record.value, &self.coherence)
     }
 
     /// Read-modify-write the mage block, **stamping `milliQuintessenceUpdatedAt`
@@ -333,7 +319,8 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
         let Some(record) = self.get_record(repo, rkey).await? else {
             return Err(QuintError::NoMageBlock);
         };
-        let mut stats: Stats<DefaultStr> = serde_json::from_value(serde_json::to_value(&record.value)?)?;
+        let mut stats: Stats<DefaultStr> =
+            serde_json::from_value(serde_json::to_value(&record.value)?)?;
         if stats.system.as_deref() != Some("mage") {
             return Err(QuintError::NoMageBlock);
         }
@@ -342,8 +329,9 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
         let patch = build_patch(q, &opts, &now_str);
         // Deserialize the freeform data block into typed MageStats, mutate, put back.
         let data = stats.data.take().ok_or(QuintError::NoMageBlock)?;
-        let mut mage: MageStats<DefaultStr> =
-            serde_json::from_value(serde_json::to_value(&data)?)?;
+        let data_value = serde_json::to_value(&data)?;
+        reject_pascalcase_mage_fields(&data_value)?;
+        let mut mage: MageStats<DefaultStr> = serde_json::from_value(data_value)?;
         apply_quint(&mut mage, &patch);
         let mage_value = serde_json::to_value(&mage)?;
         stats.data = Some(serde_json::from_value(mage_value)?);
@@ -365,7 +353,8 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
     /// CLI; not safe under concurrent writers without optimistic concurrency
     /// (swap records / `swapCommit`), which this does not do yet.
     pub async fn adjust(&self, repo: &str, rkey: &str, delta: Quint) -> Result<Quint> {
-        self.adjust_with(repo, rkey, delta, WriteOpts::default()).await
+        self.adjust_with(repo, rkey, delta, WriteOpts::default())
+            .await
     }
 
     /// Read-modify-write with full control over the timestamp stamp.
@@ -428,6 +417,46 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
 // coherence seam (SheetFields / SheetPatch). No serde_json::Value.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Pure post-fetch half of [`QuintClient::read_report`]: take a record's
+/// `value` (the `actor.rpg.stats` body as fetched from the PDS) and run it
+/// through the deserialize → typed-extract → classify → coherent-quint path.
+/// `Ok(None)` means the record is not a `system: "mage"` envelope or carries
+/// no resolvable quintessence. Exposed so tests exercise the real read path
+/// without a mock XRPC client.
+pub(crate) fn read_report_from_value<Co: Coherence>(
+    value: &Data<DefaultStr>,
+    coherence: &Co,
+) -> Result<Option<ReadReport>> {
+    let value = serde_json::to_value(value)?;
+    let stats: Stats<DefaultStr> = serde_json::from_value(value)?;
+    let updated_at = stats.updated_at.as_ref().map(|d| d.as_str().to_string());
+    if stats.system.as_deref() != Some("mage") {
+        return Ok(None);
+    }
+    let Some(mage) = mage_stats_from_record_value(&serde_json::to_value(&stats)?)? else {
+        return Ok(None);
+    };
+    let fields = extract_fields(&mage, updated_at.as_deref());
+    let decision = coherence.classify(&fields);
+    let Some(quint) = coherent_quint(&fields, decision) else {
+        return Ok(None);
+    };
+    Ok(Some(ReadReport { quint, decision }))
+}
+
+fn reject_pascalcase_mage_fields(value: &serde_json::Value) -> Result<()> {
+    let Some(object) = value.as_object() else {
+        return Ok(());
+    };
+    if let Some(field) = object
+        .keys()
+        .find(|key| key.as_bytes().first().is_some_and(u8::is_ascii_uppercase))
+    {
+        return Err(QuintError::LegacyMageField(field.clone()));
+    }
+    Ok(())
+}
+
 /// Read `milliQuintessence`/`quintessence` out of a typed MageStats and resolve
 /// to a [`Quint`], bypassing the coherence seam.
 #[allow(dead_code)]
@@ -446,7 +475,10 @@ pub(crate) fn extract_fields<'a>(
     SheetFields {
         milli_quintessence: mage.milli_quintessence,
         quintessence: mage.quintessence,
-        milli_quintessence_updated_at: mage.milli_quintessence_updated_at.as_ref().map(|d| d.as_str()),
+        milli_quintessence_updated_at: mage
+            .milli_quintessence_updated_at
+            .as_ref()
+            .map(|d| d.as_str()),
         updated_at: record_updated_at,
     }
 }
@@ -460,7 +492,7 @@ pub(crate) fn apply_quint(mage: &mut MageStats<DefaultStr>, patch: &SheetPatch) 
     if let Some(ts) = &patch.milli_quintessence_updated_at {
         mage.milli_quintessence_updated_at = Some(
             chrono::DateTime::parse_from_rfc3339(ts)
-                .map(|dt| Datetime::from(dt))
+                .map(Datetime::from)
                 .unwrap_or_else(|_| Datetime::from(Utc::now().fixed_offset())),
         );
     }
@@ -533,17 +565,27 @@ mod tests {
 
     #[test]
     fn build_patch_default_stamps_now() {
-        let patch = build_patch(Quint::from_points(2), &WriteOpts::default(), "2026-06-30T00:00:00Z");
+        let patch = build_patch(
+            Quint::from_points(2),
+            &WriteOpts::default(),
+            "2026-06-30T00:00:00Z",
+        );
         assert_eq!(patch.milli_quintessence, 2_000);
         assert_eq!(patch.quintessence, 2);
-        assert_eq!(patch.milli_quintessence_updated_at.as_deref(), Some("2026-06-30T00:00:00Z"));
+        assert_eq!(
+            patch.milli_quintessence_updated_at.as_deref(),
+            Some("2026-06-30T00:00:00Z")
+        );
     }
 
     #[test]
     fn build_patch_at_uses_caller_time() {
         let opts = WriteOpts::default().at("1999-01-01T00:00:00Z");
         let patch = build_patch(Quint::from_points(1), &opts, "2026-06-30T00:00:00Z");
-        assert_eq!(patch.milli_quintessence_updated_at.as_deref(), Some("1999-01-01T00:00:00Z"));
+        assert_eq!(
+            patch.milli_quintessence_updated_at.as_deref(),
+            Some("1999-01-01T00:00:00Z")
+        );
     }
 
     #[test]
@@ -560,12 +602,15 @@ mod tests {
             "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z"
         }));
         let f = extract_fields(&m, Some("2026-06-29T10:00:00Z"));
-        assert_eq!(f, SheetFields {
-            milli_quintessence: Some(1500),
-            quintessence: Some(1),
-            milli_quintessence_updated_at: Some("2026-06-29T10:00:00Z"),
-            updated_at: Some("2026-06-29T10:00:00Z"),
-        });
+        assert_eq!(
+            f,
+            SheetFields {
+                milli_quintessence: Some(1500),
+                quintessence: Some(1),
+                milli_quintessence_updated_at: Some("2026-06-29T10:00:00Z"),
+                updated_at: Some("2026-06-29T10:00:00Z"),
+            }
+        );
     }
 
     #[test]
@@ -592,7 +637,10 @@ mod tests {
     fn classify_refresh_floor_on_drifted_sheet() {
         let m = mage(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
         let f = extract_fields(&m, None);
-        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::RefreshFloor);
+        assert_eq!(
+            MilliIsTruthCoherence.classify(&f),
+            SyncDecision::RefreshFloor
+        );
     }
 
     #[test]
@@ -602,7 +650,10 @@ mod tests {
             "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z"
         }));
         let f = extract_fields(&m, Some("2026-06-30T10:00:00Z"));
-        assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::RefreshFloor);
+        assert_eq!(
+            MilliIsTruthCoherence.classify(&f),
+            SyncDecision::RefreshFloor
+        );
     }
 
     #[test]
@@ -640,10 +691,136 @@ mod tests {
 
         let default_decision = MilliIsTruthCoherence.classify(&f);
         assert_eq!(default_decision, SyncDecision::RefreshFloor);
-        assert_eq!(coherent_quint(&f, default_decision), Some(Quint::from_millis(1500)));
+        assert_eq!(
+            coherent_quint(&f, default_decision),
+            Some(Quint::from_millis(1500))
+        );
 
         let custom_decision = AlwaysHydrateFromLegacy.classify(&f);
         assert_eq!(custom_decision, SyncDecision::HydrateMilli);
-        assert_eq!(coherent_quint(&f, custom_decision), Some(Quint::from_points(9)));
+        assert_eq!(
+            coherent_quint(&f, custom_decision),
+            Some(Quint::from_points(9))
+        );
+    }
+
+    // ── read_report_from_value: the real post-fetch path, no mock client ──
+
+    /// Deserialize a record body (a serde_json::Value shaped like an
+    /// `actor.rpg.stats` record) into `Data<DefaultStr>`, the same shape
+    /// `getRecord` yields. Used to drive `read_report_from_value` with
+    /// fixture-shaped input.
+    fn record_value(body: serde_json::Value) -> Data<DefaultStr> {
+        serde_json::from_value(body).unwrap()
+    }
+
+    #[test]
+    fn read_report_extracts_quintessence_from_camelcase_mage_record() {
+        // A modern camelCase mage envelope: system="mage", data carries
+        // milliQuintessence + the replicated quintessence floor.
+        let value = record_value(json!({
+            "system": "mage",
+            "data": {
+                "arete": 6,
+                "willpower": { "permanent": 7, "temporary": 5 },
+                "quintessence": 1,
+                "milliQuintessence": 1500,
+                "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z",
+                "paradox": 0,
+                "correspondence": 4,
+                "entropy": 3,
+                "forces": 2,
+                "life": 0,
+                "matter": 3,
+                "mind": 2,
+                "prime": 3,
+                "spirit": 1,
+                "time": 3
+            },
+            "createdAt": "2026-04-08T22:50:44.423Z",
+            "updatedAt": "2026-06-29T10:00:00Z"
+        }));
+        let report = read_report_from_value(&value, &MilliIsTruthCoherence)
+            .unwrap()
+            .expect("camelCase mage record should yield a ReadReport");
+        assert_eq!(report.quint, Quint::from_millis(1500));
+        assert_eq!(report.decision, SyncDecision::InSync);
+    }
+
+    #[test]
+    fn read_report_returns_none_for_non_mage_system() {
+        let value = record_value(json!({
+            "system": "clunscannon",
+            "data": { "best": 42 },
+            "createdAt": "2026-04-08T22:50:44.423Z",
+            "updatedAt": "2026-06-29T10:00:00Z"
+        }));
+        assert_eq!(
+            read_report_from_value(&value, &MilliIsTruthCoherence).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn read_report_returns_none_when_system_absent() {
+        // A record with no system/data envelope (e.g. a bare aggregate) yields
+        // no mage read.
+        let value = record_value(json!({
+            "createdAt": "2026-04-08T22:50:44.423Z",
+            "updatedAt": "2026-06-29T10:00:00Z"
+        }));
+        assert_eq!(
+            read_report_from_value(&value, &MilliIsTruthCoherence).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn read_report_returns_none_when_data_absent() {
+        // system="mage" but no data block → no resolvable quintessence.
+        let value = record_value(json!({
+            "system": "mage",
+            "createdAt": "2026-04-08T22:50:44.423Z",
+            "updatedAt": "2026-06-29T10:00:00Z"
+        }));
+        assert_eq!(
+            read_report_from_value(&value, &MilliIsTruthCoherence).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn read_report_ignores_legacy_self_mage_block() {
+        let value = record_value(json!({
+            "mage": { "Quintessence": 7, "Willpower": 7, "Prime": 3, "Force": 2 },
+            "createdAt": "2026-04-08T22:50:44.423Z",
+            "updatedAt": "2026-06-29T10:00:00Z"
+        }));
+        assert_eq!(
+            read_report_from_value(&value, &MilliIsTruthCoherence).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn read_report_rejects_pascalcase_mage_fields() {
+        let value = record_value(json!({
+            "system": "mage",
+            "data": { "Quintessence": 7, "Willpower": 7, "Prime": 3, "Force": 2 },
+            "createdAt": "2026-04-08T22:50:44.423Z",
+            "updatedAt": "2026-06-29T10:00:00Z"
+        }));
+        assert!(read_report_from_value(&value, &MilliIsTruthCoherence).is_err());
+    }
+
+    #[test]
+    fn read_report_rejects_scalar_lowercase_willpower() {
+        let value = record_value(json!({
+            "system": "mage",
+            "data": { "quintessence": 7, "willpower": 7 },
+            "createdAt": "2026-04-08T22:50:44.423Z",
+            "updatedAt": "2026-06-29T10:00:00Z"
+        }));
+        assert!(read_report_from_value(&value, &MilliIsTruthCoherence).is_err());
     }
 }

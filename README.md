@@ -81,9 +81,8 @@ cargo xtask samples
 |---|---|
 | `auth login <did-or-handle>` | Save a local profile/default actor; OAuth tokens come later |
 | `auth set <key>` / `auth set <key=value>` | Read or write a dotted key in the active profile TOML fragment |
-| `mage stats` | Read normalized Mage stats from `actor.rpg.stats/mage`, fallback to `self.mage`; currently aliases through `mage list` while command shape settles |
+| `mage stats` | Read typed Mage stats from the canonical `actor.rpg.stats/mage` per-system record; currently aliases through `mage list` while command shape settles |
 | `mage list [rkey]` | Transitional helper for `actor.rpg.stats/<rkey>` reads; broad record access should move to `repo` |
-| `self stats` / `self list` | Inspect `actor.rpg.stats/self` aggregate contents |
 | `repo list <collection> --repo <did-or-handle>` | Public-list records from an actor's PDS using Jacquard XRPC |
 | `generate node <name> -r <rating>` | Generate and validate a Node record as JSON or DAG-CBOR |
 | `cargo xtask samples` | Regenerate example records into `crates/tass-lex-sample/samples/` from the generated builders |
@@ -156,7 +155,7 @@ tass mage stats
 tass mage stats --where 'normalized.spheres.prime >= 3'
 ```
 
-Use `repo list actor.rpg.stats` for broad rpg.actor record browsing. Use `mage stats` when the user wants Mage: The Ascension field names, fallback handling, case normalization, or game-specific validation.
+Use `repo list actor.rpg.stats` for broad rpg.actor record browsing. Use `mage stats` when the user wants Mage: The Ascension field names from the current lowercase `actor.rpg.stats/mage` payload or game-specific validation.
 
 # Architecture
 
