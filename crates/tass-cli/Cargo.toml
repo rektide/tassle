@@ -25,7 +25,7 @@ auth-store = [
 [dependencies]
 tass-lex = { path = "../tass-lex" }
 tass-quint = { path = "../tass-quint" }
-tass-mage = { path = "../tass-mage" }
+tass-lex-rpg = { path = "../tass-lex-rpg" }
 tass-repo = { path = "../tass-repo" }
 tass-stats = { path = "../tass-stats" }
 # Mage-record DAO: the actor.rpg.stats read helpers (always) + QuintClient write

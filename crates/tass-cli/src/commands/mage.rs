@@ -1,9 +1,11 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
+use jacquard_common::DefaultStr;
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
 use std::process::ExitCode;
+use tass_lex_rpg::actor_rpg::stats::{MageStats, Stats};
 
 #[derive(Args, Debug)]
 pub struct MageArgs {
@@ -45,7 +47,7 @@ pub struct ListArgs {
 struct StatsOutput {
     source: StatsSource,
     summary: tass_stats::StatsSummary,
-    mage: Option<tass_mage::NormalizedMageStats>,
+    mage: Option<MageStats<DefaultStr>>,
     raw: Value,
 }
 
@@ -132,11 +134,7 @@ async fn list(
     }
 
     let rkey = args.rkey.clone().unwrap_or_else(|| "mage".to_owned());
-    let rkeys = if rkey == "mage" {
-        vec!["mage".to_owned(), "self".to_owned()]
-    } else {
-        vec![rkey]
-    };
+    let rkeys = vec![rkey];
 
     for rkey in rkeys {
         let Some(record) = tass_repo_mage::get_stats_record(&client, repo.clone(), &rkey)
@@ -146,18 +144,15 @@ async fn list(
             continue;
         };
         let summary = tass_stats::summarize_record(&record.uri, record.cid.as_deref(), &record.value);
-        let value = record.value;
-        let raw = if rkey == "mage" || rkey == "self" {
-            tass_mage::mage_block(&value)
-                .map(|block| Value::Object(block.clone()))
-                .unwrap_or_else(|| value.clone())
-        } else {
-            tass_stats::stats_payload(&value, &rkey)
-                .data
-                .unwrap_or_else(|| value.clone())
-        };
-        let mage = if summary.system.as_deref() == Some("mage") || rkey == "self" {
-            tass_mage::normalize(&value)
+        let raw = record.value.clone();
+        // Typed mage extraction: deserialize into Stats, pull MageStats from data.
+        let mage = if summary.system.as_deref() == Some("mage") {
+            serde_json::from_value::<Stats<DefaultStr>>(record.value.clone())
+                .ok()
+                .filter(|s| s.system.as_deref() == Some("mage"))
+                .and_then(|s| s.data)
+                .and_then(|d| serde_json::to_value(&d).ok())
+                .and_then(|v| serde_json::from_value::<MageStats<DefaultStr>>(v).ok())
         } else {
             None
         };
@@ -207,9 +202,11 @@ fn print_record(output: &StatsOutput) {
     }
     if let Some(mage) = &output.mage {
         println!("  arete:        {}", display_opt(mage.arete));
-        println!("  willpower:    {}", display_opt(mage.willpower));
-        if let Some(temporary) = mage.willpower_temporary {
-            println!("  temp willpower: {temporary}");
+        if let Some(wp) = &mage.willpower {
+            println!("  willpower:    {}", display_opt(wp.permanent));
+            if let Some(temporary) = wp.temporary {
+                println!("  temp willpower: {temporary}");
+            }
         }
         println!("  quintessence: {}", display_opt(mage.quintessence));
         if let Some(millis) = mage.milli_quintessence {
@@ -217,11 +214,20 @@ fn print_record(output: &StatsOutput) {
         }
         println!("  paradox:      {}", display_opt(mage.paradox));
         println!("  spheres:");
-        for (sphere, value) in &mage.spheres {
-            println!("    {sphere}: {value}");
-        }
-        if !mage.missing.is_empty() {
-            println!("  missing: {}", mage.missing.join(", "));
+        for (name, value) in [
+            ("correspondence", mage.correspondence),
+            ("entropy", mage.entropy),
+            ("forces", mage.forces),
+            ("life", mage.life),
+            ("matter", mage.matter),
+            ("mind", mage.mind),
+            ("prime", mage.prime),
+            ("spirit", mage.spirit),
+            ("time", mage.time),
+        ] {
+            if let Some(v) = value {
+                println!("    {name}: {v}");
+            }
         }
     } else if !output.summary.fields.is_empty() {
         println!("  fields: {}", output.summary.fields.join(", "));
