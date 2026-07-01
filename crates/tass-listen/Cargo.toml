@@ -19,6 +19,7 @@ path = "src/main.rs"
 tass-engine = { path = "../tass-engine" }
 tass-spacedust = { path = "../tass-spacedust" }
 tass-slingshot = { path = "../tass-slingshot" }
+tass-act-enervate = { path = "../tass-act-enervate" }
 tass-config = { path = "../tass-config" }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

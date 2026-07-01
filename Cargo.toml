@@ -21,6 +21,7 @@ members = [
     "crates/tass-engine",
     "crates/tass-slingshot",
     "crates/tass-listen",
+    "crates/tass-act-enervate",
     "xtask",
 ]
 

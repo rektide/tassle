@@ -4931,6 +4931,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
+name = "tass-act-enervate"
+version = "0.1.0"
+dependencies = [
+ "jacquard",
+ "jacquard-common",
+ "rust-fsm",
+ "serde",
+ "serde_json",
+ "tass-engine",
+ "tass-phase",
+ "tass-repo",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "tass-cli"
 version = "0.1.0"
 dependencies = [
@@ -5052,6 +5069,7 @@ dependencies = [
  "figment2",
  "miette",
  "serde",
+ "tass-act-enervate",
  "tass-config",
  "tass-engine",
  "tass-slingshot",

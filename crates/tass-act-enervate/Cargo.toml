@@ -1,0 +1,27 @@
+[package]
+name = "tass-act-enervate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The enervate verb: its own tass-phase FSM + Driver, plugged into tass-engine as a Command. Triggered by 'burn my tass'. Reads the actor's tass; dry-run writes for now (writes=off)."
+
+[lib]
+name = "tass_act_enervate"
+path = "src/lib.rs"
+
+[dependencies]
+tass-engine = { path = "../tass-engine" }
+tass-phase = { path = "../tass-phase" }
+tass-repo = { path = "../tass-repo" }
+jacquard = { workspace = true }
+jacquard-common = { workspace = true }
+rust-fsm = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }

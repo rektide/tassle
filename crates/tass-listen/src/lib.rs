@@ -99,8 +99,9 @@ pub async fn run(args: ListenArgs, profile: Option<&str>) -> miette::Result<()> 
         .await
         .map_err(|e| miette::miette!("failed to connect to spacedust: {e}"))?;
 
-    // Verbs (tass-act-*) register here. Empty for now → a read-only tail.
-    let dispatcher = Dispatcher::new();
+    // Verbs (tass-act-*) register here.
+    let mut dispatcher = Dispatcher::new();
+    dispatcher.register(std::sync::Arc::new(tass_act_enervate::EnervateCommand));
 
     tass_engine::run(source, dispatcher).await;
     tracing::info!("listener stream ended");
