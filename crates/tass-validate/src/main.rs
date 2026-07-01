@@ -21,7 +21,7 @@ use jacquard_lexicon::lexicon::LexiconDoc;
 use jacquard_lexicon::schema::{LexiconSchema, LexiconSchemaRef};
 use jacquard_lexicon::validation::SchemaValidator;
 use std::io::Read;
-use tass_lexicons::at_telluri::{
+use tass_lex::at_telluri::{
     act::{enervate::Enervate, meditate::Meditate, tassilize::Tassilize},
     node::Node, resonance::Resonance,
 };

@@ -11,7 +11,7 @@ members = [
     "crates/tass-stats",
     "crates/tass-codegen",
     "crates/tass-config",
-    "crates/tass-lexicons",
+    "crates/tass-lex",
     "crates/tass-validate",
     "crates/tass-cli",
     "crates/tass-ledger",

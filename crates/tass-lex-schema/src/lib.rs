@@ -1,7 +1,7 @@
 //! Canonical Tass ATProto lexicon JSON documents.
 //!
 //! This crate intentionally exposes lexicons as JSON text, not Rust bindings.
-//! Generated bindings (`tass-lexicons`), validators, docs, and the xtask
+//! Generated bindings (`tass-lex`), validators, docs, and the xtask
 //! sample generator treat this crate as their source input.
 
 /// One lexicon document.
@@ -62,7 +62,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn schema_contains_tass_lexicons() {
+    fn schema_contains_tass_lex() {
         assert_eq!(LEXICONS.len(), 5);
         assert_eq!(LEXICON_DIR, "crates/tass-lex-schema/lexicons");
         assert!(get("at.telluri.node").is_some());

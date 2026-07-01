@@ -1,6 +1,6 @@
 // xtask: tassle workspace task runner.
 //
-//   cargo xtask codegen   — regenerate crates/tass-lexicons/src from tass-lex-schema
+//   cargo xtask codegen   — regenerate crates/tass-lex/src from tass-lex-schema
 //   cargo xtask samples   — regenerate crates/tass-lex-sample/samples from the builders
 
 use clap::{Parser, Subcommand};
@@ -12,7 +12,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use tass_lexicons::at_telluri::{
+use tass_lex::at_telluri::{
     act::{enervate::Enervate, meditate::Meditate, tassilize::Tassilize}, node::Node,
 };
 
@@ -25,11 +25,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Regenerate Rust lexicon types into crates/tass-lexicons/src
+    /// Regenerate Rust lexicon types into crates/tass-lex/src
     Codegen {
         #[arg(short, long, default_value = "crates/tass-lex-schema/lexicons")]
         input: PathBuf,
-        #[arg(short, long, default_value = "crates/tass-lexicons/src")]
+        #[arg(short, long, default_value = "crates/tass-lex/src")]
         output: PathBuf,
     },
     /// Regenerate example records into crates/tass-lex-sample/samples

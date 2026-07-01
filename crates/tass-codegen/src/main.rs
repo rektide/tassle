@@ -3,7 +3,7 @@
 // Mirrors jacquard-lexgen's `jacquard-codegen` binary but reads from this
 // corpus crate's lexicons/ dir. Run from the repository root:
 //
-//     cargo run -p tass-codegen -- --input crates/tass-lex-schema/lexicons --output crates/tass-lexicons/src
+//     cargo run -p tass-codegen -- --input crates/tass-lex-schema/lexicons --output crates/tass-lex/src
 //
 // CI uses this to regenerate types and verify they match what's committed.
 
@@ -24,7 +24,7 @@ struct Args {
     input: PathBuf,
 
     /// Output directory for generated Rust code
-    #[arg(short = 'o', long, default_value = "crates/tass-lexicons/src")]
+    #[arg(short = 'o', long, default_value = "crates/tass-lex/src")]
     output: PathBuf,
 
     /// Emit fully-qualified paths (for proc-macro consumers). Default is pretty mode.

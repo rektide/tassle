@@ -1,7 +1,7 @@
 // `tassle generate` — generate records.
 //
 // Each subcommand targets one record type. All use the fluent builders
-// from tass-lexicons, validate in-process, and emit JSON or CBOR.
+// from tass-lex, validate in-process, and emit JSON or CBOR.
 
 pub mod node;
 

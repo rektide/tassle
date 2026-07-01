@@ -12,7 +12,7 @@ name = "xtask"
 path = "src/main.rs"
 
 [dependencies]
-tass-lexicons = { path = "../crates/tass-lexicons" }
+tass-lex = { path = "../crates/tass-lex" }
 jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
 clap = { version = "~4.4", features = ["derive"] }

@@ -24,7 +24,7 @@ auth-store = [
 ]
 
 [dependencies]
-tass-lexicons = { path = "../tass-lexicons" }
+tass-lex = { path = "../tass-lex" }
 tass-quint = { path = "../tass-quint" }
 tass-mage = { path = "../tass-mage" }
 tass-repo = { path = "../tass-repo" }

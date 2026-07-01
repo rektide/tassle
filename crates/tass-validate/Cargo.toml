@@ -12,7 +12,7 @@ name = "tass-validate"
 path = "src/main.rs"
 
 [dependencies]
-tass-lexicons = { path = "../tass-lexicons" }
+tass-lex = { path = "../tass-lex" }
 jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
 serde = { version = "1", features = ["derive"] }
