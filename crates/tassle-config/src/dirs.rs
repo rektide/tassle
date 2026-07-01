@@ -18,13 +18,47 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// Built-in application directory name; overridden by `TASSLE_APPNAME`.
 const DEFAULT_APPNAME: &str = "tassle";
 
-/// The leaf directory used under each XDG base. `TASSLE_APPNAME` overrides the
-/// built-in `"tassle"` (empty/whitespace is treated as unset).
+/// Process-wide directory overrides (typically from CLI flags), taking
+/// precedence over env/XDG. Install once at startup with [`set_overrides`].
+#[derive(Debug, Default, Clone)]
+pub struct Overrides {
+    /// Override the appname leaf directory (retargets every root).
+    pub appname: Option<String>,
+    /// Override the config root wholesale (verbatim, no appname appended).
+    pub config_dir: Option<PathBuf>,
+    /// Override the state root wholesale (verbatim, no appname appended).
+    pub state_dir: Option<PathBuf>,
+}
+
+static OVERRIDES: OnceLock<Overrides> = OnceLock::new();
+
+/// Install process-wide directory overrides. Intended to be called once at
+/// startup, before any directory resolution; later calls are ignored.
+pub fn set_overrides(overrides: Overrides) {
+    let _ = OVERRIDES.set(overrides);
+}
+
+fn overrides() -> &'static Overrides {
+    OVERRIDES.get_or_init(Overrides::default)
+}
+
+/// The leaf directory used under each XDG base. Precedence: the process
+/// [`Overrides::appname`] > `TASSLE_APPNAME` > the built-in `"tassle"`
+/// (empty/whitespace is treated as unset).
 pub fn appname() -> String {
+    if let Some(a) = overrides()
+        .appname
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return a.to_string();
+    }
     std::env::var("TASSLE_APPNAME")
         .ok()
         .map(|s| s.trim().to_string())
@@ -32,10 +66,17 @@ pub fn appname() -> String {
         .unwrap_or_else(|| DEFAULT_APPNAME.to_string())
 }
 
-/// The user's XDG config root (`~/.config/<appname>` by default).
+/// A process override path, else a non-empty environment value.
+fn flag_or_env(flag: Option<&Path>, env_key: &str) -> Option<OsString> {
+    flag.map(|p| p.as_os_str().to_owned())
+        .or_else(|| env_path(env_key))
+}
+
+/// The user's XDG config root (`~/.config/<appname>` by default). Precedence:
+/// [`Overrides::config_dir`] > `TASSLE_CONFIG_DIR` > `XDG_CONFIG_HOME` > `$HOME`.
 pub fn config_dir() -> miette::Result<PathBuf> {
     resolve_from(
-        env_path("TASSLE_CONFIG_DIR"),
+        flag_or_env(overrides().config_dir.as_deref(), "TASSLE_CONFIG_DIR"),
         env_path("XDG_CONFIG_HOME"),
         home().as_deref(),
         &[".config"],
@@ -55,10 +96,11 @@ pub fn data_dir() -> miette::Result<PathBuf> {
 }
 
 /// The user's XDG state root (`~/.local/state/<appname>` by default). Home of
-/// the turso auth/session DB.
+/// the turso auth/session DB. Precedence: [`Overrides::state_dir`] >
+/// `TASSLE_STATE_DIR` > `XDG_STATE_HOME` > `$HOME`.
 pub fn state_dir() -> miette::Result<PathBuf> {
     resolve_from(
-        env_path("TASSLE_STATE_DIR"),
+        flag_or_env(overrides().state_dir.as_deref(), "TASSLE_STATE_DIR"),
         env_path("XDG_STATE_HOME"),
         home().as_deref(),
         &[".local", "state"],

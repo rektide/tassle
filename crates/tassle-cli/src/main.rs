@@ -24,6 +24,17 @@ struct Cli {
     #[arg(global = true, long)]
     profile: Option<String>,
 
+    /// Config root for this invocation (precedence: this flag > TASSLE_CONFIG_DIR
+    /// > XDG_CONFIG_HOME > ~/.config/<appname>). Global.
+    #[arg(global = true, long, value_name = "DIR")]
+    config_dir: Option<std::path::PathBuf>,
+
+    /// App name for this invocation — retargets all config/state/cache dirs
+    /// (precedence: this flag > TASSLE_APPNAME > "tassle"). Handy for dev/test
+    /// isolation. Global.
+    #[arg(global = true, long, value_name = "NAME")]
+    appname: Option<String>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -51,6 +62,14 @@ enum Command {
 #[tokio::main]
 async fn main() -> miette::Result<ExitCode> {
     let cli = Cli::parse();
+
+    // Install directory overrides before any config resolution touches dirs.
+    tassle_config::dirs::set_overrides(tassle_config::dirs::Overrides {
+        appname: cli.appname.clone(),
+        config_dir: cli.config_dir.clone(),
+        state_dir: None,
+    });
+
     let format = cli.format;
     let profile = cli.profile.as_deref();
     match cli.command {
