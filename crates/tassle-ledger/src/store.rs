@@ -86,7 +86,7 @@ pub struct StoredEvent {
     pub uri: String,
     /// Record CID, when known.
     pub cid: Option<String>,
-    /// Collection NSID, e.g. `com.superbfowle.tass.meditate`.
+    /// Collection NSID, e.g. `at.telluri.act.meditate`.
     pub collection: String,
     /// Record key.
     pub rkey: String,

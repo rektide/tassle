@@ -225,18 +225,18 @@ mod tests {
         let did = "did:plc:alice";
         // insert out of order; the BE-cursor key must sort them back.
         store
-            .append_events(did, &[ev(2, "com.superbfowle.tass.meditate")])
+            .append_events(did, &[ev(2, "at.telluri.act.meditate")])
             .unwrap();
         store
-            .append_events(did, &[ev(1, "com.superbfowle.tass.node")])
+            .append_events(did, &[ev(1, "at.telluri.node")])
             .unwrap();
         let got = store.read_events(did).unwrap();
         assert_eq!(got.iter().map(|e| e.cursor).collect::<Vec<_>>(), vec![1, 2]);
         assert_eq!(
             got,
             vec![
-                ev(1, "com.superbfowle.tass.node"),
-                ev(2, "com.superbfowle.tass.meditate")
+                ev(1, "at.telluri.node"),
+                ev(2, "at.telluri.act.meditate")
             ]
         );
     }
@@ -249,8 +249,8 @@ mod tests {
         assert_eq!(store.snapshot(did).unwrap(), None);
 
         let events = [
-            ev(10, "com.superbfowle.tass.node"),
-            ev(11, "com.superbfowle.tass.tassilize"),
+            ev(10, "at.telluri.node"),
+            ev(11, "at.telluri.act.tassilize"),
         ];
         store
             .commit_fold(did, &events, Some(b"snapshot-v1"), 11)
@@ -271,7 +271,7 @@ mod tests {
         {
             let store = FjallLedgerStore::new(dir.path(), OpenPoolConfig::default()).unwrap();
             store
-                .commit_fold(did, &[ev(1, "com.superbfowle.tass.node")], Some(b"snap"), 1)
+                .commit_fold(did, &[ev(1, "at.telluri.node")], Some(b"snap"), 1)
                 .unwrap();
         }
         // reopen: state must survive a fresh process/store.
@@ -285,7 +285,7 @@ mod tests {
         let (_d, store) = store();
         let did = "did:plc:dave";
         store
-            .commit_fold(did, &[ev(1, "com.superbfowle.tass.node")], Some(b"s"), 1)
+            .commit_fold(did, &[ev(1, "at.telluri.node")], Some(b"s"), 1)
             .unwrap();
         store.forget(did).unwrap();
         assert_eq!(store.cursor(did).unwrap(), None);

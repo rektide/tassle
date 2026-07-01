@@ -4,7 +4,7 @@
 use chrono::DateTime;
 use jacquard_common::DefaultStr;
 use jacquard_lexicon::schema::LexiconSchema;
-use tassle_lexicons::com_superbfowle::tass::node::Node;
+use tassle_lexicons::at_telluri::node::Node;
 
 fn ts() -> jacquard_common::types::datetime::Datetime {
 	DateTime::parse_from_rfc3339("2026-06-21T12:00:00.000Z").unwrap().into()

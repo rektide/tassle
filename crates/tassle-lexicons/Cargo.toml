@@ -5,15 +5,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Generated Rust types for tassle lexicons (com.superbfowle.tass.*). Do not edit — regenerate via `cargo run -p tassle-codegen`."
+description = "Generated Rust types for tassle lexicons (at.telluri.*). Do not edit — regenerate via `cargo run -p tassle-codegen`."
 
 [lib]
 name = "tassle_lexicons"
 path = "src/lib.rs"
 
 [features]
-default = ["com_superbfowle"]
-com_superbfowle = []
+default = ["at_telluri"]
+at_telluri = []
 
 [dependencies]
 jacquard-common.workspace = true

@@ -5,7 +5,7 @@ use jacquard_common::DefaultStr;
 use jacquard_common::types::datetime::Datetime;
 use jacquard_lexicon::schema::LexiconSchema;
 use std::process::ExitCode;
-use tassle_lexicons::com_superbfowle::tass::node::Node;
+use tassle_lexicons::at_telluri::node::Node;
 
 #[derive(Args, Debug)]
 pub struct NodeArgs {

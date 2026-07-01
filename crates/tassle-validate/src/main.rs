@@ -2,8 +2,8 @@
 //
 // Reads JSON from stdin, validates against the named NSID, exits 0/1.
 //
-//   echo '{"$type":"com.superbfowle.tass.node","name":"X","rating":3,...}' \
-//     | tassle-validate com.superbfowle.tass.node
+//   echo '{"$type":"at.telluri.node","name":"X","rating":3,...}' \
+//     | tassle-validate at.telluri.node
 //
 // On success: silent (exit 0), or `--verbose` prints `{"valid":true,...}`.
 // On failure: structured errors as JSON to stderr (exit 1).
@@ -21,9 +21,9 @@ use jacquard_lexicon::lexicon::LexiconDoc;
 use jacquard_lexicon::schema::{LexiconSchema, LexiconSchemaRef};
 use jacquard_lexicon::validation::SchemaValidator;
 use std::io::Read;
-use tassle_lexicons::com_superbfowle::tass::{
-	enervate::Enervate, form::Form, meditate::Meditate, node::Node,
-	resonance::Resonance, tassilize::Tassilize,
+use tassle_lexicons::at_telluri::{
+    act::{enervate::Enervate, meditate::Meditate, tassilize::Tassilize},
+    node::Node, resonance::Resonance,
 };
 
 // Manually submit each generated type to inventory. The codegen emits a
@@ -40,14 +40,12 @@ fn tassilize_doc() -> LexiconDoc<'static> { Tassilize::<DefaultStr>::lexicon_doc
 fn meditate_doc() -> LexiconDoc<'static> { Meditate::<DefaultStr>::lexicon_doc() }
 fn enervate_doc() -> LexiconDoc<'static> { Enervate::<DefaultStr>::lexicon_doc() }
 fn resonance_doc() -> LexiconDoc<'static> { Resonance::<DefaultStr>::lexicon_doc() }
-fn form_doc() -> LexiconDoc<'static> { Form::<DefaultStr>::lexicon_doc() }
 
-inventory::submit! { LexiconSchemaRef { nsid: "com.superbfowle.tass.node", def_name: "main", provider: node_doc } }
-inventory::submit! { LexiconSchemaRef { nsid: "com.superbfowle.tass.tassilize", def_name: "main", provider: tassilize_doc } }
-inventory::submit! { LexiconSchemaRef { nsid: "com.superbfowle.tass.meditate", def_name: "main", provider: meditate_doc } }
-inventory::submit! { LexiconSchemaRef { nsid: "com.superbfowle.tass.enervate", def_name: "main", provider: enervate_doc } }
-inventory::submit! { LexiconSchemaRef { nsid: "com.superbfowle.tass.resonance", def_name: "main", provider: resonance_doc } }
-inventory::submit! { LexiconSchemaRef { nsid: "com.superbfowle.tass.form", def_name: "main", provider: form_doc } }
+inventory::submit! { LexiconSchemaRef { nsid: "at.telluri.node", def_name: "main", provider: node_doc } }
+inventory::submit! { LexiconSchemaRef { nsid: "at.telluri.act.tassilize", def_name: "main", provider: tassilize_doc } }
+inventory::submit! { LexiconSchemaRef { nsid: "at.telluri.act.meditate", def_name: "main", provider: meditate_doc } }
+inventory::submit! { LexiconSchemaRef { nsid: "at.telluri.act.enervate", def_name: "main", provider: enervate_doc } }
+inventory::submit! { LexiconSchemaRef { nsid: "at.telluri.resonance", def_name: "main", provider: resonance_doc } }
 
 #[derive(Parser, Debug)]
 #[command(
@@ -56,7 +54,7 @@ inventory::submit! { LexiconSchemaRef { nsid: "com.superbfowle.tass.form", def_n
     about = "Validate a JSON record against a tassle lexicon (stdin → exit code)"
 )]
 struct Args {
-    /// NSID of the lexicon's main record def (e.g. com.superbfowle.tass.node)
+    /// NSID of the lexicon's main record def (e.g. at.telluri.node)
     nsid: String,
 
     /// Pretty-print the result JSON even on success

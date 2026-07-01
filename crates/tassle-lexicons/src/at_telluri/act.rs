@@ -3,10 +3,7 @@
 // This file was automatically generated from Lexicon schemas.
 // Any manual changes will be overwritten on the next regeneration.
 
-//! Generated bindings for the `com.superbfowle.tass` Lexicon namespace/module.
+//! Generated bindings for the `at.telluri.act` Lexicon namespace/module.
 pub mod enervate;
-pub mod form;
 pub mod meditate;
-pub mod node;
-pub mod resonance;
 pub mod tassilize;

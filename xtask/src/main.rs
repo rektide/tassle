@@ -12,8 +12,8 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use tassle_lexicons::com_superbfowle::tass::{
-    enervate::Enervate, meditate::Meditate, node::Node, tassilize::Tassilize,
+use tassle_lexicons::at_telluri::{
+    act::{enervate::Enervate, meditate::Meditate, tassilize::Tassilize}, node::Node,
 };
 
 #[derive(Parser)]
@@ -85,10 +85,10 @@ struct SampleDef {
 fn build_samples() -> miette::Result<Vec<SampleDef>> {
     let node_rkey = "3ksamplesample1";
     let tass_rkey = "3ksamplesample2";
-    let node_uri: AtUri = sample_uri("com.superbfowle.tass.node", node_rkey)
+    let node_uri: AtUri = sample_uri("at.telluri.node", node_rkey)
         .parse()
         .into_diagnostic()?;
-    let tass_uri: AtUri = sample_uri("com.superbfowle.tass.tassilize", tass_rkey)
+    let tass_uri: AtUri = sample_uri("at.telluri.act.tassilize", tass_rkey)
         .parse()
         .into_diagnostic()?;
 
