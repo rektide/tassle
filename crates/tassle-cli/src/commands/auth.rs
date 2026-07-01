@@ -185,10 +185,8 @@ async fn status(
     for name in &profiles {
         let figment = tassle_config::config::build_figment(Some(name))?;
         let p = tassle_config::config::active_login(&figment)?;
-        let store_path = match p.store_path.clone() {
-            Some(path) => path,
-            None => tassle_config::dirs::default_store_path(name).unwrap_or_default(),
-        };
+        let store_path =
+            tassle_config::config::resolve_store_path(&figment, name).unwrap_or_default();
         let session = session_status(&store_path, p.did.as_deref(), p.session_id.as_deref()).await;
         rows.push(serde_json::json!({
             "profile": name,
@@ -336,7 +334,6 @@ async fn login_real(
     // Active profile name (resolves the store path + the fragment to write).
     let figment = tassle_config::config::active_figment(profile)?;
     let profile_name = tassle_config::config::active_name(&figment);
-    let active = tassle_config::config::active_login(&figment)?;
 
     // App password: --password > TASSLE_PASSWORD > interactive prompt.
     let password = args
@@ -349,11 +346,9 @@ async fn login_real(
                 .map_err(|e| miette::miette!("failed to read password: {e}"))
         })?;
 
-    // Open the profile's turso store (explicit store_path, else the default under state).
-    let store_path = match active.store_path.clone() {
-        Some(path) => path,
-        None => tassle_config::dirs::default_store_path(&profile_name)?,
-    };
+    // Open the profile's turso store ([store] config: explicit path, else the
+    // shared/per-profile DB under state).
+    let store_path = tassle_config::config::resolve_store_path(&figment, &profile_name)?;
     if let Some(parent) = store_path.parent() {
         std::fs::create_dir_all(parent).into_diagnostic()?;
     }

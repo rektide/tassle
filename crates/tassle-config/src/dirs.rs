@@ -77,12 +77,11 @@ pub fn cache_dir() -> miette::Result<PathBuf> {
     )
 }
 
-/// Default filesystem path for a profile's turso auth-store DB:
-/// `state_dir()/store/<name>.db`. The single source of truth for where the DB
-/// lands; db naming/selection policy (shared vs per-profile) evolves in
-/// `tass-config-db-selection`.
-pub fn default_store_path(name: &str) -> miette::Result<PathBuf> {
-    Ok(state_dir()?.join("store").join(format!("{name}.db")))
+/// Path to a named turso store DB: `state_dir()/store/<stem>.db`. The single
+/// place the DB filesystem layout is defined; naming/selection policy (shared
+/// vs per-profile) is resolved in [`crate::config::resolve_store_path`].
+pub fn store_path(stem: &str) -> miette::Result<PathBuf> {
+    Ok(state_dir()?.join("store").join(format!("{stem}.db")))
 }
 
 /// `$HOME` as a path, if set.

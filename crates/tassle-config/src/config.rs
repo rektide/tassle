@@ -58,8 +58,6 @@ pub struct Login {
     pub auth_mode: Option<String>,
     /// Which session within the account (jacquard `SessionKey.session_id`).
     pub session_id: Option<String>,
-    /// Optional per-profile store path override.
-    pub store_path: Option<PathBuf>,
 }
 
 impl Login {
@@ -73,6 +71,59 @@ impl Login {
     /// (The shape jacquard's `SessionHint::from_optional_input` wants.)
     pub fn account(&self) -> Option<&str> {
         self.did.as_deref().or(self.handle.as_deref())
+    }
+}
+
+/// The `[store]` config bucket: where the turso auth/session DB lives. A bucket
+/// *beside* [`Login`], not a field on it — storage is not identity.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct StoreConfig {
+    /// Which DB to use, resolved to `state_dir()/store/<db>.db`. Absent = a
+    /// single **shared** DB named from the appname (`<appname>.db`) — the
+    /// default. The sentinel [`STORE_DB_PER_PROFILE`] selects a **per-profile**
+    /// DB (`<profile>.db`) instead.
+    pub db: Option<String>,
+    /// Explicit full path to the DB file. When set it overrides [`db`](Self::db)
+    /// resolution entirely (the escape hatch).
+    pub path: Option<PathBuf>,
+}
+
+/// The [`StoreConfig::db`] sentinel selecting a per-profile DB (`<profile>.db`).
+/// (Chosen over the more obscure "EPONYMOUS".)
+pub const STORE_DB_PER_PROFILE: &str = "@profile";
+
+/// Extract the `[store]` bucket from a figment, defaulting when it is absent.
+pub fn store_config(figment: &Figment) -> miette::Result<StoreConfig> {
+    if !figment.contains("store") {
+        return Ok(StoreConfig::default());
+    }
+    figment
+        .extract_inner::<StoreConfig>("store")
+        .map_err(|e| miette::miette!("failed to extract [store] config: {e}"))
+}
+
+/// Resolve the turso auth-store DB path for the active profile.
+///
+/// Precedence: explicit `store.path` (verbatim) > the `store.db` selector under
+/// `state_dir()/store/`. Absent `store.db` = the shared `<appname>.db`; the
+/// sentinel [`STORE_DB_PER_PROFILE`] = the profile's own `<profile>.db`.
+pub fn resolve_store_path(figment: &Figment, profile_name: &str) -> miette::Result<PathBuf> {
+    let store = store_config(figment)?;
+    if let Some(path) = store.path {
+        return Ok(path);
+    }
+    crate::dirs::store_path(&store_stem(&store, profile_name))
+}
+
+/// The DB filename stem from a [`StoreConfig`]: the shared appname by default,
+/// the profile name for the [`STORE_DB_PER_PROFILE`] sentinel, else the literal
+/// `store.db` value.
+fn store_stem(store: &StoreConfig, profile_name: &str) -> String {
+    match store.db.as_deref() {
+        None => crate::dirs::appname(),
+        Some(STORE_DB_PER_PROFILE) => profile_name.to_string(),
+        Some(name) => name.to_string(),
     }
 }
 
@@ -148,4 +199,36 @@ pub fn available_profiles() -> miette::Result<Vec<String>> {
         .collect();
     stems.sort();
     Ok(stems)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn store_config_defaults_when_bucket_absent() {
+        let sc = store_config(&Figment::new()).unwrap();
+        assert!(sc.db.is_none() && sc.path.is_none());
+    }
+
+    #[test]
+    fn store_config_reads_bucket() {
+        let fig = Figment::from(Serialized::default(
+            "store",
+            StoreConfig { db: Some("shared".into()), path: None },
+        ));
+        assert_eq!(store_config(&fig).unwrap().db.as_deref(), Some("shared"));
+    }
+
+    #[test]
+    fn store_stem_shared_profile_or_named() {
+        // Absent => the shared appname DB (not per-profile).
+        assert_eq!(store_stem(&StoreConfig::default(), "alice"), crate::dirs::appname());
+        // Sentinel => the profile's own DB.
+        let per = StoreConfig { db: Some(STORE_DB_PER_PROFILE.into()), path: None };
+        assert_eq!(store_stem(&per, "alice"), "alice");
+        // Literal name => used verbatim.
+        let named = StoreConfig { db: Some("custom".into()), path: None };
+        assert_eq!(store_stem(&named, "alice"), "custom");
+    }
 }
