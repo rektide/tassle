@@ -164,7 +164,7 @@ After acting, the Mage posts an **attestation record** in our own NSID referenci
 ```
 tass-phase              phased-work FSM + async Driver + Executor      (done, abstract)
 tass-sync-source        EventSource trait + normalized envelope
-tass-source-spacedust   WS subscribe + reconnect + hydration          → impls the trait
+tass-spacedust           WS subscribe + reconnect + hydration          → impls the trait
 tass-source-jetstream   tass-at-large via jacquard_common::jetstream  → impls the trait
 tass-store-provider     one shared local turso db (jac-store builders)
 tass-engine             MECHANISM ONLY — source stream → dispatcher → Executor; effect
@@ -192,7 +192,7 @@ Engine is mechanism; the verbs are `tass-act-*` crates that depend on it and on 
 Epic **`tass-listener-svc`** — *Configurable listener daemon (Spacedust commands + tass-at-large fold)*:
 
 - `tass-sync-source` — EventSource trait + normalized envelope
-- `tass-source-spacedust` — Spacedust WS source + hydration
+- `tass-spacedust` — Spacedust WS client (connect/subscribe/events)
 - `tass-source-jetstream` — jetstream source via `jacquard_common::jetstream`
 - `tass-job` — action-chain + Executor via `tass-phase` (in-memory)
 - `tass-job-persistence` — persist parked phases to turso (low-low-low)

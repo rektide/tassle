@@ -1,0 +1,25 @@
+[package]
+name = "tass-spacedust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Spacedust notifications-firehose client: connect, subscribe by wantedSubjectDids, and yield normalized link events. Connection-oriented only — no dispatch/engine concerns."
+
+[lib]
+name = "tass_spacedust"
+path = "src/lib.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "net", "time"] }
+tokio-tungstenite = { version = "0.24", features = ["connect", "native-tls"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
