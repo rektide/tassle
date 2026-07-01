@@ -1,5 +1,7 @@
 # Spacedust + jetstream: the tassle listener daemon
 
+> **⚠️ SUPERSEDED (design exploration).** This was the discovery/design doc for the listener. The system is now built; the authoritative docs are **[../spacedust.md](../spacedust.md)** (ingest: Spacedust → hydrate → dispatch) and **[../act.md](../act.md)** (the verb-FSM action system). This file is kept for the design rationale — the Spacedust filter/mechanics reference (§2), the source/listener reasoning (§3), and the option trade-offs — but for *what exists*, read those two. Details below (crate names, config shape, "planned" vs done) may lag the code.
+
 > tassle's primary interface is **atproto posts addressed at us**: a person posts something like *"burn my tass"* at our Mage account, and a standalone listener daemon reacts — reads their records, performs the action, and posts an attestation. That command stream comes from [Spacedust](https://spacedust.microcosm.blue/), microcosm's "configurable ATProto notifications firehose." A *second* source — a **jetstream** firehose of `com.superbfowle.tass.*` records **at large** — feeds the ledger fold so we always know each tass's real remaining quintessence. The daemon leans on our own crates: **`tass-phase`** models the work, **`tass-config`** provides jacquard auth, and a shared local **turso** database backs the auth store and (later) job persistence. Epic: [`tass-listener-svc`](#tickets). Sibling: [attestation.md](attestation.md) (cosign *trust*, distinct from §8's action receipts).
 
 ---
