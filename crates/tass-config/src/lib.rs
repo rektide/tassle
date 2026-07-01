@@ -50,7 +50,10 @@ pub fn active_login() -> miette::Result<Login> {
 }
 
 #[cfg(feature = "auth-store")]
-pub use auth::{stored_access_jwt, AppPasswordSession, AuthError, AuthedClient, LoginOutcome};
+pub use auth::{
+    oauth_login, stored_access_jwt, AppPasswordSession, AuthError, AuthedClient, LoginOutcome,
+    OAuthLoginOutcome,
+};
 
 #[cfg(feature = "auth-store")]
 pub use read::{read_client, OAuthReadSession, ReadClient};

@@ -17,8 +17,10 @@ pub struct AuthArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthKind {
-    /// App-password login: createSession, persist the session into the profile's
-    /// jac-store-fjall store, and write the non-secret profile fragment.
+    /// Log in and persist the session into the profile's jac-stores (turso)
+    /// store, then write the non-secret profile fragment. Defaults to
+    /// app-password (createSession); `--oauth` (or a profile `auth_mode =
+    /// "oauth"`) instead runs the localhost OAuth loopback flow.
     /// (Without the `auth-store` feature, falls back to a profile-only stub.)
     Login(LoginArgs),
     /// Show every profile and its session state; mark the active profile.
@@ -34,13 +36,21 @@ pub enum AuthKind {
 
 #[derive(Args, Debug)]
 pub struct LoginArgs {
-    /// DID or handle to log in as.
+    /// DID, handle, or PDS host to log in as.
     pub actor: String,
 
     /// App password. If omitted, falls back to TASS_PASSWORD, then an
-    /// interactive prompt. (Requires the `auth-store` feature.)
+    /// interactive prompt. (Requires the `auth-store` feature.) Ignored with
+    /// `--oauth`.
     #[arg(long)]
     pub password: Option<String>,
+
+    /// Log in with OAuth over a localhost loopback flow instead of an app
+    /// password: opens your browser to your PDS and catches the redirect on an
+    /// ephemeral 127.0.0.1 server. Also selected when the profile sets
+    /// `auth_mode = "oauth"`. (Requires the `auth-store` feature.)
+    #[arg(long)]
+    pub oauth: bool,
 }
 
 #[derive(Args, Debug)]
@@ -162,11 +172,25 @@ async fn login(
 ) -> miette::Result<ExitCode> {
     #[cfg(feature = "auth-store")]
     {
-        return login_real(args, format, profile).await;
+        let figment = tass_config::config::active_figment(profile)?;
+        // OAuth if `--oauth` was passed or the selected profile declares
+        // `auth_mode = "oauth"`; otherwise app-password.
+        let profile_oauth = tass_config::config::active_login(&figment)
+            .ok()
+            .and_then(|l| l.auth_mode)
+            .as_deref()
+            == Some("oauth");
+        if args.oauth || profile_oauth {
+            return login_oauth(&figment, &args.actor, format).await;
+        }
+        return login_real(&figment, args, format).await;
     }
     #[cfg(not(feature = "auth-store"))]
     {
         let _ = profile;
+        if args.oauth {
+            miette::bail!("--oauth requires building with `--features auth-store`");
+        }
         login_profile_only(args, format).await
     }
 }
@@ -327,13 +351,11 @@ fn jwt_exp(token: &str) -> Option<i64> {
 /// fragment. Requires the `auth-store` feature.
 #[cfg(feature = "auth-store")]
 async fn login_real(
+    figment: &figment2::Figment,
     args: LoginArgs,
     format: crate::commands::OutputFormat,
-    profile: Option<&str>,
 ) -> miette::Result<ExitCode> {
     use tass_config::AuthedClient;
-
-    let figment = tass_config::config::active_figment(profile)?;
 
     // App password: --password > TASS_PASSWORD > interactive prompt. Reading
     // the password stays a CLI concern; the auth dance itself does not.
@@ -353,7 +375,7 @@ async fn login_real(
 
     // The one authed-client construction path (tass-config): resolve store,
     // resume-or-createSession, persist the JWTs. Returns the identity to record.
-    let outcome = AuthedClient::login(&figment, &args.actor, password)
+    let outcome = AuthedClient::login(figment, &args.actor, password)
         .await
         .map_err(|e| miette::miette!("login: {e}"))?;
 
@@ -381,6 +403,59 @@ async fn login_real(
     } else {
         println!("logged in as {} ({})", outcome.handle, outcome.did);
         println!("  profile: {}", outcome.profile_name);
+        println!("  store:   {}", outcome.store_path.display());
+        println!("  fragment: {}", frag.display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// OAuth loopback (localhost) login: delegate the whole browser + one-shot
+/// callback-server dance to `tass_config::oauth_login`, then persist the
+/// non-secret profile fragment (marking `auth_mode = "oauth"` so subsequent
+/// reads restore over the OAuth store). Requires the `auth-store` feature.
+///
+/// `oauth_login` prints the authorize URL to stdout and opens the browser; this
+/// only wraps its result and records config.
+#[cfg(feature = "auth-store")]
+async fn login_oauth(
+    figment: &figment2::Figment,
+    actor: &str,
+    format: crate::commands::OutputFormat,
+) -> miette::Result<ExitCode> {
+    let outcome = tass_config::oauth_login(figment, actor)
+        .await
+        .map_err(|e| miette::miette!("oauth login: {e}"))?;
+
+    // Persist the NON-secret profile fragment: did/pds/session_id + auth_mode so
+    // reads know to restore over the OAuth (not app-password) store.
+    let dir = tass_config::config::dropins_dir()?;
+    std::fs::create_dir_all(&dir).into_diagnostic()?;
+    let frag = dir.join(format!("{}.toml", outcome.profile_name));
+    profile_config::write_value_at(&frag, "did", &outcome.did)?;
+    profile_config::write_value_at(&frag, "auth_mode", "oauth")?;
+    profile_config::write_value_at(&frag, "session_id", &outcome.session_id)?;
+    if let Some(pds) = &outcome.pds {
+        profile_config::write_value_at(&frag, "pds", pds)?;
+    }
+
+    if format.is_json() {
+        println!(
+            "{}",
+            serde_json::json!({
+                "profile": outcome.profile_name,
+                "did": outcome.did,
+                "pds": outcome.pds,
+                "session_id": outcome.session_id,
+                "auth_mode": "oauth",
+                "store": outcome.store_path.to_string_lossy(),
+            })
+        );
+    } else {
+        println!("logged in via OAuth as {}", outcome.did);
+        println!("  profile: {}", outcome.profile_name);
+        if let Some(pds) = &outcome.pds {
+            println!("  pds:     {pds}");
+        }
         println!("  store:   {}", outcome.store_path.display());
         println!("  fragment: {}", frag.display());
     }

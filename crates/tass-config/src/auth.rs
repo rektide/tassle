@@ -223,6 +223,96 @@ pub struct LoginOutcome {
     pub pds: Option<String>,
 }
 
+/// The turso-backed OAuth session store (mirrors [`Store`] for the OAuth side).
+pub(crate) type OAuthStore = jac_stores::OAuthStore<jac_stores::TursoRepository>;
+
+/// The non-secret identity produced by a successful [`oauth_login`], for the
+/// caller to persist into the profile fragment. Like [`LoginOutcome`], the
+/// tokens + DPoP key are already durably in the OAuth store — this is only what
+/// belongs in config. OAuth carries no handle (the flow resolves a DID + PDS),
+/// so `handle` is absent unless the caller had it from the input.
+#[derive(Debug, Clone)]
+pub struct OAuthLoginOutcome {
+    /// The profile name the login was performed under.
+    pub profile_name: String,
+    /// The store DB the session was persisted into.
+    pub store_path: PathBuf,
+    pub did: String,
+    pub pds: Option<String>,
+    /// The `session_id` the loopback flow assigned; the profile fragment keys the
+    /// stored session by it (`did || session_id`).
+    pub session_id: String,
+}
+
+/// OAuth loopback (localhost) login for the profile selected by `figment`.
+///
+/// Drives jacquard's [`OAuthClient::login_with_local_server`]: it stands up an
+/// ephemeral `127.0.0.1` callback server, prints (and opens) the authorize URL
+/// pointed at the user's PDS/entryway, waits for the redirect, exchanges the
+/// code, and **persists the session** (tokens + per-session DPoP key) into the
+/// profile's turso OAuth store. `actor` is the handle / DID / PDS host to start
+/// from. Returns the non-secret identity for the caller to persist into the
+/// profile fragment.
+///
+/// This is a **public (native) client**: `client_id = http://localhost`, no
+/// keyset, `token_endpoint_auth_method = none` — the CLI OAuth shape, distinct
+/// from the confidential web client. The loopback listener port is ephemeral per
+/// login and the authorization server ignores it, so nothing about the port is
+/// persisted (see `doc/oauth.md`). The scopes default to
+/// `atproto transition:generic` (jacquard's `default_localhost`).
+pub async fn oauth_login(
+    figment: &Figment,
+    actor: &str,
+) -> Result<OAuthLoginOutcome, AuthError> {
+    use jacquard::oauth::client::OAuthClient;
+    use jacquard::oauth::loopback::{LoopbackConfig, LoopbackPort};
+    use jacquard::oauth::types::AuthorizeOptions;
+
+    let name = config::active_name(figment);
+    let store_path = config::resolve_store_path(figment, &name)
+        .map_err(|e| AuthError::Store(e.to_string()))?;
+    let lifecycle =
+        config::store_lifecycle(figment).map_err(|e| AuthError::Store(e.to_string()))?;
+    config::precheck_store(&store_path, &lifecycle)
+        .map_err(|e| AuthError::Store(e.to_string()))?;
+
+    if let Some(parent) = store_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;
+    }
+    let repo = jac_stores::TursoRepository::open_local(&store_path)
+        .await
+        .map_err(|e| AuthError::Store(e.to_string()))?;
+    let store = OAuthStore::new(repo);
+
+    // Public localhost client (no keyset). `login_with_local_server` overrides the
+    // redirect with the ephemeral loopback address it binds, so the fixed-port
+    // default is irrelevant — ask for an OS-assigned port to avoid clashes.
+    let client = OAuthClient::with_default_config(store);
+    let cfg = LoopbackConfig {
+        port: LoopbackPort::Ephemeral,
+        ..LoopbackConfig::default()
+    };
+    let session = client
+        .login_with_local_server(actor, AuthorizeOptions::default(), cfg)
+        .await
+        .map_err(|e| AuthError::Resume(e.to_string()))?;
+
+    // Pull the authoritative identity out of the persisted session data.
+    let data = session.data.read().await;
+    let did = data.account_did.to_string();
+    let session_id = data.session_id.to_string();
+    let pds = Some(data.host_url.as_str().to_string());
+    drop(data);
+
+    Ok(OAuthLoginOutcome {
+        profile_name: name,
+        store_path,
+        did,
+        pds,
+        session_id,
+    })
+}
+
 /// Open the profile's turso app-password store at `store_path` and build a
 /// fresh (unresumed) [`CredentialSession`] over it. The single store-open path,
 /// shared by [`AuthedClient::for_profile`] and [`AuthedClient::login`] so the
