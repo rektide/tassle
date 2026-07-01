@@ -32,13 +32,13 @@ use chrono::Utc;
 use jacquard_common::types::ident::AtIdentifier;
 use jacquard_common::types::string::{Nsid, RecordKey};
 use jacquard_common::types::value::Data;
+use jacquard_common::types::datetime::Datetime;
 use jacquard_common::DefaultStr;
 use jacquard_common::xrpc::atproto::{
     GetRecord, GetRecordError, GetRecordOutput, PutRecord,
 };
 use jacquard_common::xrpc::{XrpcClient, XrpcError};
-use serde_json::{Map, Value};
-use tass_mage::{mage_block, mage_block_mut};
+use tass_lex_rpg::actor_rpg::stats::{MageStats, Stats};
 use tass_quint::{
     coherent_quint, sheet_patch, Coherence, MilliIsTruthCoherence, Quint, ReadReport,
     SheetFields, SheetPatch,
@@ -285,9 +285,17 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
             return Ok(None);
         };
         let value = serde_json::to_value(&record.value)?;
-        let Some(fields) = extract_fields(&value) else {
+        let stats: Stats<DefaultStr> = serde_json::from_value(value)?;
+        let updated_at = stats.updated_at.as_ref().map(|d| d.as_str().to_string());
+        if stats.system.as_deref() != Some("mage") {
+            return Ok(None);
+        }
+        let Some(data) = stats.data else {
             return Ok(None);
         };
+        let data_value = serde_json::to_value(&data)?;
+        let mage: MageStats<DefaultStr> = serde_json::from_value(data_value)?;
+        let fields = extract_fields(&mage, updated_at.as_deref());
         let decision = self.coherence.classify(&fields);
         let quint = match coherent_quint(&fields, decision) {
             Some(q) => q,
@@ -325,17 +333,24 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
         let Some(record) = self.get_record(repo, rkey).await? else {
             return Err(QuintError::NoMageBlock);
         };
-        let mut value = serde_json::to_value(&record.value)?;
-        let now = Utc::now().to_rfc3339();
-        let patch = build_patch(q, &opts, &now);
-        {
-            let mage = mage_block_mut(&mut value).ok_or(QuintError::NoMageBlock)?;
-            apply_quint(mage, &patch);
+        let mut stats: Stats<DefaultStr> = serde_json::from_value(serde_json::to_value(&record.value)?)?;
+        if stats.system.as_deref() != Some("mage") {
+            return Err(QuintError::NoMageBlock);
         }
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+        let patch = build_patch(q, &opts, &now_str);
+        // Deserialize the freeform data block into typed MageStats, mutate, put back.
+        let data = stats.data.take().ok_or(QuintError::NoMageBlock)?;
+        let mut mage: MageStats<DefaultStr> =
+            serde_json::from_value(serde_json::to_value(&data)?)?;
+        apply_quint(&mut mage, &patch);
+        let mage_value = serde_json::to_value(&mage)?;
+        stats.data = Some(serde_json::from_value(mage_value)?);
         // Record-level updatedAt always bumps to "now" (the write happened now).
-        if let Some(root) = value.as_object_mut() {
-            root.insert("updatedAt".to_string(), Value::from(now.as_str()));
-        }
+        stats.updated_at = Some(Datetime::from(now.fixed_offset()));
+        // Stats → Data for putRecord.
+        let value = serde_json::to_value(&stats)?;
         let data: Data<DefaultStr> = serde_json::from_value(value)?;
         self.put_record(repo, rkey, data).await?;
         Ok(q)
@@ -409,59 +424,44 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure helpers — testable without a client.
 //
-// Mage-block location lives in `tass_mage` (shared with the CLI); the helpers
-// below are the quint/coherence bridge over that block.
+// These bridge between the generated MageStats type and the tass-quint
+// coherence seam (SheetFields / SheetPatch). No serde_json::Value.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Read `milliQuintessence`/`quintessence` out of a record value and resolve
-/// to a [`Quint`], bypassing the coherence seam. Kept for tests and as an
-/// escape hatch for future callers that want the raw resolved value without
-/// the inline drift check; the production read path is
-/// [`QuintClient::read`](QuintClient::read) / [`QuintClient::read_report`](QuintClient::read_report).
+/// Read `milliQuintessence`/`quintessence` out of a typed MageStats and resolve
+/// to a [`Quint`], bypassing the coherence seam.
 #[allow(dead_code)]
-pub(crate) fn extract_quint(value: &Value) -> Option<Quint> {
-    let mage = mage_block(value)?;
-    let milli_quintessence = mage.get("milliQuintessence").and_then(Value::as_i64);
-    let quintessence = mage.get("quintessence").and_then(Value::as_i64);
-    tass_quint::resolve(milli_quintessence, quintessence)
+pub(crate) fn extract_quint(mage: &MageStats<DefaultStr>) -> Option<Quint> {
+    tass_quint::resolve(mage.milli_quintessence, mage.quintessence)
 }
 
-/// Pull the four raw fields the [`Coherence`] seam looks at out of a record
-/// value: `milliQuintessence`, `quintessence`, `milliQuintessenceUpdatedAt`
-/// (narrow stamp, from the mage block), and record-level `updatedAt` (broad
-/// stamp, from the record root). Returns `None` when no mage block is present.
-///
-/// Field-level `None`s are preserved and surface as `None` on the
-/// [`SheetFields`] (e.g. a legacy sheet with no milli field — the coherence
-/// default treats that as `InSync` and defers to [`tass_quint::resolve`]).
-pub(crate) fn extract_fields(value: &Value) -> Option<SheetFields<'_>> {
-    let mage = mage_block(value)?;
-    Some(SheetFields {
-        milli_quintessence: mage.get("milliQuintessence").and_then(Value::as_i64),
-        quintessence: mage.get("quintessence").and_then(Value::as_i64),
-        milli_quintessence_updated_at: mage
-            .get("milliQuintessenceUpdatedAt")
-            .and_then(Value::as_str),
-        updated_at: value.get("updatedAt").and_then(Value::as_str),
-    })
+/// Pull the four fields the [`Coherence`] seam looks at out of a typed
+/// MageStats: `milliQuintessence`, `quintessence`, `milliQuintessenceUpdatedAt`
+/// (narrow stamp), and the record-level `updatedAt` (broad stamp, passed in
+/// since it lives on the Stats root, not the mage block).
+pub(crate) fn extract_fields<'a>(
+    mage: &'a MageStats<DefaultStr>,
+    record_updated_at: Option<&'a str>,
+) -> SheetFields<'a> {
+    SheetFields {
+        milli_quintessence: mage.milli_quintessence,
+        quintessence: mage.quintessence,
+        milli_quintessence_updated_at: mage.milli_quintessence_updated_at.as_ref().map(|d| d.as_str()),
+        updated_at: record_updated_at,
+    }
 }
 
-/// Write a [`SheetPatch`] into a mage field map: `milliQuintessence`, the
+/// Apply a [`SheetPatch`] to a typed MageStats: set `milliQuintessence`, the
 /// replicated `quintessence` floor, and `milliQuintessenceUpdatedAt` when the
 /// patch carries one.
-pub(crate) fn apply_quint(mage: &mut Map<String, Value>, patch: &SheetPatch) {
-    mage.insert(
-        "milliQuintessence".to_string(),
-        Value::from(patch.milli_quintessence),
-    );
-    mage.insert(
-        "quintessence".to_string(),
-        Value::from(patch.quintessence),
-    );
+pub(crate) fn apply_quint(mage: &mut MageStats<DefaultStr>, patch: &SheetPatch) {
+    mage.milli_quintessence = Some(patch.milli_quintessence);
+    mage.quintessence = Some(patch.quintessence);
     if let Some(ts) = &patch.milli_quintessence_updated_at {
-        mage.insert(
-            "milliQuintessenceUpdatedAt".to_string(),
-            Value::from(ts.as_str()),
+        mage.milli_quintessence_updated_at = Some(
+            chrono::DateTime::parse_from_rfc3339(ts)
+                .map(|dt| Datetime::from(dt))
+                .unwrap_or_else(|_| Datetime::from(Utc::now().fixed_offset())),
         );
     }
 }
@@ -483,114 +483,52 @@ mod tests {
     use serde_json::json;
     use tass_quint::SyncDecision;
 
-    fn envelope(mage_fields: Value) -> Value {
-        json!({ "system": "mage", "data": mage_fields, "$type": "actor.rpg.stats" })
-    }
-
-    fn inline(mage_fields: Value) -> Value {
-        json!({ "mage": mage_fields, "$type": "actor.rpg.stats" })
+    /// Build a MageStats from a JSON value (test convenience).
+    fn mage(fields: serde_json::Value) -> MageStats<DefaultStr> {
+        serde_json::from_value(fields).unwrap()
     }
 
     #[test]
     fn extract_prefers_milli_field() {
-        let v = envelope(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
-        assert_eq!(extract_quint(&v), Some(Quint::from_millis(1500)));
-        assert_eq!(extract_quint(&v).unwrap().points(), 1);
+        let m = mage(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
+        assert_eq!(extract_quint(&m), Some(Quint::from_millis(1500)));
+        assert_eq!(extract_quint(&m).unwrap().points(), 1);
     }
 
     #[test]
-    fn extract_hydrates_from_legacy_quintessence() {
-        let v = envelope(json!({ "quintessence": 9 }));
-        assert_eq!(extract_quint(&v), Some(Quint::from_points(9)));
-    }
-
-    #[test]
-    fn extract_works_for_inline_legacy_shape() {
-        let v = inline(json!({ "Quintessence": 7 }));
-        // Capitalized alias is NOT handled here (mage.rs normalizes case);
-        // the crate speaks the lexicon-canonical lowercase wire field.
-        assert_eq!(extract_quint(&v), None);
-        let v2 = inline(json!({ "quintessence": 7 }));
-        assert_eq!(extract_quint(&v2), Some(Quint::from_points(7)));
-    }
-
-    #[test]
-    fn extract_none_when_no_mage_block() {
-        let v = json!({ "system": "vampire", "data": {} });
-        assert_eq!(extract_quint(&v), None);
+    fn extract_hydrates_from_quintessence_only() {
+        let m = mage(json!({ "quintessence": 9 }));
+        assert_eq!(extract_quint(&m), Some(Quint::from_points(9)));
     }
 
     #[test]
     fn extract_none_when_both_fields_absent() {
-        let v = envelope(json!({ "arete": 3 }));
-        assert_eq!(extract_quint(&v), None);
+        let m = mage(json!({ "arete": 3 }));
+        assert_eq!(extract_quint(&m), None);
     }
 
     #[test]
-    fn apply_replicates_into_legacy_field() {
-        let mut v = envelope(json!({ "arete": 3, "quintessence": 5 }));
-        let mage = mage_block_mut(&mut v).unwrap();
-        apply_quint(mage, &sheet_patch(Quint::from_millis(1_500)));
-        let mage = mage_block(&v).unwrap();
-        assert_eq!(mage.get("milliQuintessence").and_then(Value::as_i64), Some(1500));
-        assert_eq!(mage.get("quintessence").and_then(Value::as_i64), Some(1));
-        // sibling field preserved
-        assert_eq!(mage.get("arete").and_then(Value::as_i64), Some(3));
-    }
-
-    #[test]
-    fn apply_preserves_envelope_and_type() {
-        let mut v = envelope(json!({ "quintessence": 0 }));
-        {
-            let mage = mage_block_mut(&mut v).unwrap();
-            apply_quint(mage, &sheet_patch(Quint::from_points(2)));
-        }
-        // envelope structure untouched
-        assert_eq!(v.get("system").and_then(Value::as_str), Some("mage"));
-        assert_eq!(v.get("$type").and_then(Value::as_str), Some("actor.rpg.stats"));
-        assert_eq!(
-            v.get("data").unwrap().get("milliQuintessence").and_then(Value::as_i64),
-            Some(2000)
-        );
-    }
-
-    #[test]
-    fn apply_to_inline_shape_patches_mage_key() {
-        let mut v = inline(json!({ "quintessence": 0 }));
-        {
-            let mage = mage_block_mut(&mut v).unwrap();
-            apply_quint(mage, &sheet_patch(Quint::from_points(4)));
-        }
-        assert_eq!(
-            v.get("mage").unwrap().get("milliQuintessence").and_then(Value::as_i64),
-            Some(4000)
-        );
-        assert_eq!(
-            v.get("mage").unwrap().get("quintessence").and_then(Value::as_i64),
-            Some(4)
-        );
+    fn apply_sets_milli_and_replicates_floor() {
+        let mut m = mage(json!({ "arete": 3, "quintessence": 5 }));
+        apply_quint(&mut m, &sheet_patch(Quint::from_millis(1_500)));
+        assert_eq!(m.milli_quintessence, Some(1500));
+        assert_eq!(m.quintessence, Some(1));
+        assert_eq!(m.arete, Some(3));
     }
 
     #[test]
     fn apply_writes_updated_at_when_stamped() {
-        let mut v = envelope(json!({ "quintessence": 0 }));
-        let mage = mage_block_mut(&mut v).unwrap();
+        let mut m = mage(json!({ "quintessence": 0 }));
         let patch = sheet_patch(Quint::from_points(1)).with_updated_at("2026-06-29T21:00:00Z");
-        apply_quint(mage, &patch);
-        let mage = mage_block(&v).unwrap();
-        assert_eq!(
-            mage.get("milliQuintessenceUpdatedAt").and_then(Value::as_str),
-            Some("2026-06-29T21:00:00Z")
-        );
+        apply_quint(&mut m, &patch);
+        assert!(m.milli_quintessence_updated_at.is_some());
     }
 
     #[test]
     fn apply_omits_updated_at_when_unstamped() {
-        let mut v = envelope(json!({ "quintessence": 0 }));
-        let mage = mage_block_mut(&mut v).unwrap();
-        apply_quint(mage, &sheet_patch(Quint::from_points(1)));
-        let mage = mage_block(&v).unwrap();
-        assert!(mage.get("milliQuintessenceUpdatedAt").is_none());
+        let mut m = mage(json!({ "quintessence": 0 }));
+        apply_quint(&mut m, &sheet_patch(Quint::from_points(1)));
+        assert!(m.milli_quintessence_updated_at.is_none());
     }
 
     #[test]
@@ -598,21 +536,14 @@ mod tests {
         let patch = build_patch(Quint::from_points(2), &WriteOpts::default(), "2026-06-30T00:00:00Z");
         assert_eq!(patch.milli_quintessence, 2_000);
         assert_eq!(patch.quintessence, 2);
-        assert_eq!(
-            patch.milli_quintessence_updated_at.as_deref(),
-            Some("2026-06-30T00:00:00Z")
-        );
+        assert_eq!(patch.milli_quintessence_updated_at.as_deref(), Some("2026-06-30T00:00:00Z"));
     }
 
     #[test]
     fn build_patch_at_uses_caller_time() {
         let opts = WriteOpts::default().at("1999-01-01T00:00:00Z");
         let patch = build_patch(Quint::from_points(1), &opts, "2026-06-30T00:00:00Z");
-        // caller time wins over "now"
-        assert_eq!(
-            patch.milli_quintessence_updated_at.as_deref(),
-            Some("1999-01-01T00:00:00Z")
-        );
+        assert_eq!(patch.milli_quintessence_updated_at.as_deref(), Some("1999-01-01T00:00:00Z"));
     }
 
     #[test]
@@ -622,17 +553,13 @@ mod tests {
         assert!(patch.milli_quintessence_updated_at.is_none());
     }
 
-    // — extract_fields + coherence on the read path ———————————
-
     #[test]
-    fn extract_fields_pulls_all_four_fields_from_envelope() {
-        let v = json!({
-            "system": "mage",
-            "data": { "milliQuintessence": 1500, "quintessence": 1, "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z" },
-            "$type": "actor.rpg.stats",
-            "updatedAt": "2026-06-29T10:00:00Z"
-        });
-        let f = extract_fields(&v).unwrap();
+    fn extract_fields_pulls_all_four() {
+        let m = mage(json!({
+            "milliQuintessence": 1500, "quintessence": 1,
+            "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z"
+        }));
+        let f = extract_fields(&m, Some("2026-06-29T10:00:00Z"));
         assert_eq!(f, SheetFields {
             milli_quintessence: Some(1500),
             quintessence: Some(1),
@@ -642,15 +569,9 @@ mod tests {
     }
 
     #[test]
-    fn extract_fields_returns_none_without_mage_block() {
-        let v = json!({ "system": "vampire", "data": {} });
-        assert!(extract_fields(&v).is_none());
-    }
-
-    #[test]
-    fn extract_fields_preserves_absent_fields_as_none() {
-        let v = envelope(json!({ "quintessence": 7 }));
-        let f = extract_fields(&v).unwrap();
+    fn extract_fields_preserves_absent_as_none() {
+        let m = mage(json!({ "quintessence": 7 }));
+        let f = extract_fields(&m, None);
         assert_eq!(f.milli_quintessence, None);
         assert_eq!(f.quintessence, Some(7));
         assert_eq!(f.milli_quintessence_updated_at, None);
@@ -658,58 +579,47 @@ mod tests {
     }
 
     #[test]
-    fn classify_in_sync_on_clean_envelope() {
-        let v = json!({
-            "system": "mage",
-            "data": { "milliQuintessence": 1500, "quintessence": 1, "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z" },
-            "$type": "actor.rpg.stats",
-            "updatedAt": "2026-06-29T10:00:00Z"
-        });
-        let f = extract_fields(&v).unwrap();
+    fn classify_in_sync_on_clean_sheet() {
+        let m = mage(json!({
+            "milliQuintessence": 1500, "quintessence": 1,
+            "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z"
+        }));
+        let f = extract_fields(&m, Some("2026-06-29T10:00:00Z"));
         assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::InSync);
     }
 
     #[test]
-    fn classify_refresh_floor_on_drifted_envelope() {
-        // milli=1500 (floor 1) but quintessence=9 — drifted
-        let v = envelope(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
-        let f = extract_fields(&v).unwrap();
+    fn classify_refresh_floor_on_drifted_sheet() {
+        let m = mage(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
+        let f = extract_fields(&m, None);
         assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::RefreshFloor);
     }
 
     #[test]
     fn classify_refresh_floor_on_timestamp_drift() {
-        // floor agrees, but record updatedAt advanced past the milli stamp
-        let v = json!({
-            "system": "mage",
-            "data": { "milliQuintessence": 1500, "quintessence": 1, "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z" },
-            "$type": "actor.rpg.stats",
-            "updatedAt": "2026-06-30T10:00:00Z"
-        });
-        let f = extract_fields(&v).unwrap();
+        let m = mage(json!({
+            "milliQuintessence": 1500, "quintessence": 1,
+            "milliQuintessenceUpdatedAt": "2026-06-29T10:00:00Z"
+        }));
+        let f = extract_fields(&m, Some("2026-06-30T10:00:00Z"));
         assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::RefreshFloor);
     }
 
     #[test]
     fn classify_in_sync_on_legacy_only_sheet() {
-        let v = envelope(json!({ "quintessence": 7 }));
-        let f = extract_fields(&v).unwrap();
+        let m = mage(json!({ "quintessence": 7 }));
+        let f = extract_fields(&m, None);
         assert_eq!(MilliIsTruthCoherence.classify(&f), SyncDecision::InSync);
     }
 
-#[test]
-    fn coherent_quint_on_envelope_returns_milli_value_for_refresh_floor() {
-        let v = envelope(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
-        let f = extract_fields(&v).unwrap();
+    #[test]
+    fn coherent_quint_returns_milli_value_for_refresh_floor() {
+        let m = mage(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
+        let f = extract_fields(&m, None);
         let d = MilliIsTruthCoherence.classify(&f);
         assert_eq!(coherent_quint(&f, d), Some(Quint::from_millis(1500)));
     }
 
-    // — with_coherence seam: a custom policy routes through read_report —
-
-    /// A custom coherence that always says "drift, hydrate from legacy" —
-    /// stands in for a future QuintessenceIsTruth impl. Proves the seam is
-    /// exercisable end-to-end (construct -> classify -> coherent_quint).
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
     struct AlwaysHydrateFromLegacy;
 
@@ -725,12 +635,8 @@ mod tests {
 
     #[test]
     fn with_coherence_swaps_the_active_policy() {
-        // a sheet where milli=1500 and quintessence=9 — under the default
-        // (MilliIsTruth) this is RefreshFloor and coherent_quint returns 1500;
-        // under AlwaysHydrateFromLegacy it's HydrateMilli and coherent_quint
-        // returns 9000 (hydrated from the legacy integer).
-        let v = envelope(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
-        let f = extract_fields(&v).unwrap();
+        let m = mage(json!({ "milliQuintessence": 1500, "quintessence": 9 }));
+        let f = extract_fields(&m, None);
 
         let default_decision = MilliIsTruthCoherence.classify(&f);
         assert_eq!(default_decision, SyncDecision::RefreshFloor);

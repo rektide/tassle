@@ -41,7 +41,7 @@ jacquard-oauth = "0.12"
 # native-SQL turso backend (engine-v2 AuthRepository), so default features
 # (backend-fjall + parking_lot) are off: turso self-serializes via SQL and needs
 # no RMW lock.
-jac-store-fjall = { path = "../jac-store-fjall", default-features = false, features = ["backend-turso"] }
+jac-store-fjall = { package = "jac-stores", path = "../jac-store-fjall", default-features = false, features = ["backend-turso"] }
 # Local fork of figment2 with the ops/DropIns/select_profile_from_config
 # machinery we build the profile model on (see ~/src/figments-rs).
 figment2 = { path = "../figments-rs", features = ["toml"] }

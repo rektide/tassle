@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 tass-quint = { path = "../tass-quint" }
-tass-mage = { path = "../tass-mage" }
+tass-lex-rpg = { path = "../tass-lex-rpg" }
 # Generic record access + actor.rpg.stats shape summaries for the stats reads.
 tass-repo = { path = "../tass-repo" }
 tass-stats = { path = "../tass-stats" }
