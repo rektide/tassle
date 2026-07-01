@@ -349,6 +349,8 @@ async fn login_real(
     // Open the profile's turso store ([store] config: explicit path, else the
     // shared/per-profile DB under state).
     let store_path = tassle_config::config::resolve_store_path(&figment, &profile_name)?;
+    let lifecycle = tassle_config::config::store_lifecycle(&figment)?;
+    tassle_config::config::precheck_store(&store_path, &lifecycle)?;
     if let Some(parent) = store_path.parent() {
         std::fs::create_dir_all(parent).into_diagnostic()?;
     }

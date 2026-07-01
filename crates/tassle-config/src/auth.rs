@@ -96,6 +96,10 @@ impl AuthedClient {
 
         let store_path = config::resolve_store_path(&figment, &name)
             .map_err(|e| AuthError::Store(e.to_string()))?;
+        let lifecycle =
+            config::store_lifecycle(&figment).map_err(|e| AuthError::Store(e.to_string()))?;
+        config::precheck_store(&store_path, &lifecycle)
+            .map_err(|e| AuthError::Store(e.to_string()))?;
 
         if let Some(parent) = store_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;

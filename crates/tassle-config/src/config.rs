@@ -17,7 +17,7 @@
 //! `profile_config.rs`) is being retired in favour of it; this crate exposes
 //! only the figment model.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use figment2::ops::operators::{select_profile_from_config, DropIns};
 use figment2::providers::{Format, Serialized, Toml};
@@ -87,6 +87,31 @@ pub struct StoreConfig {
     /// Explicit full path to the DB file. When set it overrides [`db`](Self::db)
     /// resolution entirely (the escape hatch).
     pub path: Option<PathBuf>,
+    /// Create the DB if it does not exist (default `true`). When `false`,
+    /// opening a missing DB fails instead of creating it.
+    pub create: Option<bool>,
+    /// Migrate an out-of-date schema (default `true`). When `false`, opening a
+    /// DB whose schema is older than the code should fail instead of migrating.
+    pub update: Option<bool>,
+}
+
+impl StoreConfig {
+    /// The open-time [`StoreLifecycle`] policy, applying the `true` defaults.
+    pub fn lifecycle(&self) -> StoreLifecycle {
+        StoreLifecycle {
+            create: self.create.unwrap_or(true),
+            update: self.update.unwrap_or(true),
+        }
+    }
+}
+
+/// Resolved DB open-time lifecycle policy from `[store]` (defaults applied).
+#[derive(Debug, Clone, Copy)]
+pub struct StoreLifecycle {
+    /// Create the DB if it does not exist.
+    pub create: bool,
+    /// Migrate an out-of-date schema (vs. failing on a stale one).
+    pub update: bool,
 }
 
 /// The [`StoreConfig::db`] sentinel selecting a per-profile DB (`<profile>.db`).
@@ -114,6 +139,30 @@ pub fn resolve_store_path(figment: &Figment, profile_name: &str) -> miette::Resu
         return Ok(path);
     }
     crate::dirs::store_path(&store_stem(&store, profile_name))
+}
+
+/// The active profile's [`StoreLifecycle`] policy (`store.create` / `store.update`).
+pub fn store_lifecycle(figment: &Figment) -> miette::Result<StoreLifecycle> {
+    Ok(store_config(figment)?.lifecycle())
+}
+
+/// Enforce the store lifecycle policy before opening the DB at `path`.
+///
+/// - `create = false` + the DB is absent → error (do not create it).
+/// - `update = false` (bail on stale schema) is **not yet enforceable**:
+///   jac-store-fjall's `open_local` always migrates and does not yet expose a
+///   schema-version / open-without-migrate API. The flag is honoured to the
+///   extent possible (`update = true`, the default, is a no-op today); full
+///   enforcement is tracked by tass-config-db-lifecycle's upstream coordination.
+pub fn precheck_store(path: &Path, lifecycle: &StoreLifecycle) -> miette::Result<()> {
+    if !lifecycle.create && !path.exists() {
+        miette::bail!(
+            "store DB does not exist and store.create = false: {}",
+            path.display()
+        );
+    }
+    let _ = lifecycle.update; // enforcement pending upstream schema introspection
+    Ok(())
 }
 
 /// The DB filename stem from a [`StoreConfig`]: the shared appname by default,
@@ -215,9 +264,28 @@ mod tests {
     fn store_config_reads_bucket() {
         let fig = Figment::from(Serialized::default(
             "store",
-            StoreConfig { db: Some("shared".into()), path: None },
+            StoreConfig { db: Some("shared".into()), ..Default::default() },
         ));
         assert_eq!(store_config(&fig).unwrap().db.as_deref(), Some("shared"));
+    }
+
+    #[test]
+    fn lifecycle_defaults_true() {
+        let lc = StoreConfig::default().lifecycle();
+        assert!(lc.create && lc.update);
+        let off = StoreConfig { create: Some(false), update: Some(false), ..Default::default() }
+            .lifecycle();
+        assert!(!off.create && !off.update);
+    }
+
+    #[test]
+    fn precheck_bails_when_create_false_and_absent() {
+        let missing = std::path::Path::new("/definitely/not/here.db");
+        let no_create = StoreLifecycle { create: false, update: true };
+        assert!(precheck_store(missing, &no_create).is_err());
+        // create=true (default) tolerates an absent DB.
+        let create = StoreLifecycle { create: true, update: true };
+        assert!(precheck_store(missing, &create).is_ok());
     }
 
     #[test]
@@ -225,10 +293,10 @@ mod tests {
         // Absent => the shared appname DB (not per-profile).
         assert_eq!(store_stem(&StoreConfig::default(), "alice"), crate::dirs::appname());
         // Sentinel => the profile's own DB.
-        let per = StoreConfig { db: Some(STORE_DB_PER_PROFILE.into()), path: None };
+        let per = StoreConfig { db: Some(STORE_DB_PER_PROFILE.into()), ..Default::default() };
         assert_eq!(store_stem(&per, "alice"), "alice");
         // Literal name => used verbatim.
-        let named = StoreConfig { db: Some("custom".into()), path: None };
+        let named = StoreConfig { db: Some("custom".into()), ..Default::default() };
         assert_eq!(store_stem(&named, "alice"), "custom");
     }
 }
