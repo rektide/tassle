@@ -38,6 +38,7 @@ use jacquard_common::xrpc::atproto::{
 };
 use jacquard_common::xrpc::{XrpcClient, XrpcError};
 use serde_json::{Map, Value};
+use tass_mage::{mage_block, mage_block_mut};
 use tass_quint::{
     coherent_quint, sheet_patch, Coherence, MilliIsTruthCoherence, Quint, ReadReport,
     SheetFields, SheetPatch,
@@ -366,31 +367,10 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure helpers — testable without a client.
+//
+// Mage-block location lives in `tass_mage` (shared with the CLI); the helpers
+// below are the quint/coherence bridge over that block.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Locate the mage field map inside a record value.
-///
-/// Handles the two real production shapes (mirroring `tassle-cli`'s
-/// `extract_mage`): the per-system envelope `{ system: "mage", data: {…} }`
-/// and the legacy inline `{ mage: {…} }`.
-pub(crate) fn mage_block(value: &Value) -> Option<&Map<String, Value>> {
-    if value.get("system").and_then(Value::as_str) == Some("mage")
-        && let Some(data) = value.get("data")
-        && let Some(obj) = data.as_object()
-    {
-        return Some(obj);
-    }
-    value.get("mage").and_then(Value::as_object)
-}
-
-/// Mutable counterpart of [`mage_block`].
-pub(crate) fn mage_block_mut(value: &mut Value) -> Option<&mut Map<String, Value>> {
-    let is_envelope = value.get("system").and_then(Value::as_str) == Some("mage");
-    if is_envelope {
-        return value.get_mut("data").and_then(Value::as_object_mut);
-    }
-    value.get_mut("mage").and_then(Value::as_object_mut)
-}
 
 /// Read `milliQuintessence`/`quintessence` out of a record value and resolve
 /// to a [`Quint`], bypassing the coherence seam. Kept for tests and as an

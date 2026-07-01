@@ -13,6 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 tass-quint = { path = "../tass-quint" }
+tass-mage = { path = "../tass-mage" }
 jacquard-common.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

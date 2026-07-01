@@ -4847,6 +4847,7 @@ dependencies = [
  "jacquard-common",
  "serde",
  "serde_json",
+ "tass-mage",
  "tass-quint",
 ]
 
