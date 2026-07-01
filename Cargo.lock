@@ -4880,6 +4880,7 @@ dependencies = [
  "serde_json",
  "tass-mage",
  "tass-quint",
+ "tass-repo",
  "tass-repo-mage",
  "tassle-config",
  "tassle-lexicons",

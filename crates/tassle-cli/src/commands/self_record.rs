@@ -1,11 +1,6 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
 use jacquard::client::BasicClient;
-use jacquard::identity::resolver::IdentityResolver;
-use jacquard_common::types::ident::AtIdentifier;
-use jacquard_common::types::string::{Nsid, RecordKey};
-use jacquard_common::xrpc::XrpcClient;
-use jacquard_common::xrpc::atproto::GetRecord;
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
@@ -55,33 +50,6 @@ pub async fn run(args: SelfArgs, format: crate::commands::OutputFormat) -> miett
     }
 }
 
-async fn resolve_actor(
-    client: &BasicClient,
-    actor: Option<String>,
-) -> miette::Result<(AtIdentifier, String)> {
-    let actor = match actor {
-        Some(actor) => actor,
-        None => profile_config::default_did()?,
-    };
-    let ident: AtIdentifier = AtIdentifier::new_owned(&actor).into_diagnostic()?;
-    match ident {
-        AtIdentifier::Did(did) => {
-            let pds = client
-                .pds_for_did(&did)
-                .await
-                .map_err(|err| miette::miette!("failed to resolve PDS for {actor}: {err}"))?;
-            Ok((AtIdentifier::Did(did), pds.to_string()))
-        }
-        AtIdentifier::Handle(handle) => {
-            let (did, pds) = client
-                .pds_for_handle(&handle)
-                .await
-                .map_err(|err| miette::miette!("failed to resolve PDS for {actor}: {err}"))?;
-            Ok((AtIdentifier::Did(did), pds.to_string()))
-        }
-    }
-}
-
 fn summarize_systems(raw: &Value) -> Vec<SystemSummary> {
     let Some(obj) = raw.as_object() else {
         return Vec::new();
@@ -115,29 +83,24 @@ fn summarize_systems(raw: &Value) -> Vec<SystemSummary> {
 
 async fn stats(args: StatsArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
-    let (repo, pds) = resolve_actor(&client, args.actor).await?;
-    let pds_uri = jacquard_common::deps::fluent_uri::Uri::parse(pds.clone())
-        .map_err(|_| miette::miette!("resolved PDS endpoint is not a valid URI: {pds}"))?
-        .to_owned();
-    client.set_base_uri(pds_uri).await;
-
-    let request = GetRecord {
-        repo,
-        collection: Nsid::new_static("actor.rpg.stats").into_diagnostic()?,
-        rkey: RecordKey::any_owned("self").into_diagnostic()?,
-        cid: None,
+    let actor = match args.actor {
+        Some(actor) => actor,
+        None => profile_config::default_did()?,
     };
-    let response = client
-        .send(request)
+    // Generic record access (tass-repo): resolve + point + getRecord.
+    let resolved = tass_repo::resolve_and_point(&client, &actor)
         .await
-        .map_err(|err| miette::miette!("getRecord actor.rpg.stats/self failed: {err}"))?;
-    let record = response
-        .into_output()
-        .map_err(|err| miette::miette!("failed to decode actor.rpg.stats/self: {err}"))?;
-    let raw = serde_json::to_value(&record.value).into_diagnostic()?;
+        .map_err(|e| miette::miette!("{e}"))?;
+    let Some(env) = tass_repo::get_record(&client, resolved.did.clone(), "actor.rpg.stats", "self")
+        .await
+        .map_err(|e| miette::miette!("{e}"))?
+    else {
+        miette::bail!("no actor.rpg.stats/self record for {}", resolved.did.as_str());
+    };
+    let raw = env.value;
     let output = SelfOutput {
-        uri: record.uri.as_str().to_owned(),
-        cid: record.cid.map(|cid| cid.as_str().to_owned()),
+        uri: env.uri,
+        cid: env.cid,
         systems: summarize_systems(&raw),
         raw,
     };

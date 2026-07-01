@@ -1,11 +1,6 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
 use jacquard::client::BasicClient;
-use jacquard::identity::resolver::IdentityResolver;
-use jacquard_common::types::ident::AtIdentifier;
-use jacquard_common::types::string::Nsid;
-use jacquard_common::xrpc::XrpcClient;
-use jacquard_common::xrpc::atproto::ListRecords;
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use std::process::ExitCode;
@@ -63,30 +58,6 @@ struct RecordOutput {
     value: serde_json::Value,
 }
 
-fn rkey_from_uri(uri: &str) -> &str {
-    uri.rsplit('/').next().unwrap_or(uri)
-}
-
-async fn resolve_repo(client: &BasicClient, repo: &str) -> miette::Result<(AtIdentifier, String)> {
-    let ident: AtIdentifier = AtIdentifier::new_owned(repo).into_diagnostic()?;
-    match ident {
-        AtIdentifier::Did(did) => {
-            let pds = client
-                .pds_for_did(&did)
-                .await
-                .map_err(|err| miette::miette!("failed to resolve PDS for {repo}: {err}"))?;
-            Ok((AtIdentifier::Did(did), pds.to_string()))
-        }
-        AtIdentifier::Handle(handle) => {
-            let (did, pds) = client
-                .pds_for_handle(&handle)
-                .await
-                .map_err(|err| miette::miette!("failed to resolve PDS for {repo}: {err}"))?;
-            Ok((AtIdentifier::Did(did), pds.to_string()))
-        }
-    }
-}
-
 pub async fn run(args: RepoArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     match args.kind {
         RepoKind::List(args) => list(args, format).await,
@@ -103,48 +74,38 @@ async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::
         Some(repo) => repo,
         None => profile_config::default_did()?,
     };
-    let (repo, pds) = resolve_repo(&client, &repo_input).await?;
-    let pds_uri = jacquard_common::deps::fluent_uri::Uri::parse(pds.clone())
-        .map_err(|_| miette::miette!("resolved PDS endpoint is not a valid URI: {pds}"))?
-        .to_owned();
-    client.set_base_uri(pds_uri).await;
-
-    let collection = Nsid::new_owned(&args.collection).into_diagnostic()?;
-    let request = ListRecords {
-        repo: repo.clone(),
-        collection,
-        cursor: args.cursor.clone().map(Into::into),
-        limit: Some(args.limit),
-        reverse: if args.reverse { Some(true) } else { None },
-    };
-
-    let response = client
-        .send(request)
+    // Generic record access (tass-repo): resolve + point + list; the command
+    // only maps the normalized envelope onto its output shape.
+    let resolved = tass_repo::resolve_and_point(&client, &repo_input)
         .await
-        .map_err(|err| miette::miette!("listRecords failed: {err}"))?;
-    let output = response
-        .into_output()
-        .map_err(|err| miette::miette!("failed to decode listRecords output: {err}"))?;
+        .map_err(|e| miette::miette!("{e}"))?;
+    let page = tass_repo::list_records(
+        &client,
+        resolved.did.clone(),
+        &args.collection,
+        Some(args.limit),
+        args.cursor.clone(),
+        args.reverse,
+    )
+    .await
+    .map_err(|e| miette::miette!("{e}"))?;
 
-    let records = output
+    let records = page
         .records
         .into_iter()
-        .map(|record| {
-            let uri = record.uri.as_str().to_owned();
-            Ok(RecordOutput {
-                rkey: rkey_from_uri(&uri).to_owned(),
-                cid: record.cid.map(|cid| cid.as_str().to_owned()),
-                value: serde_json::to_value(&record.value).into_diagnostic()?,
-                uri,
-            })
+        .map(|r| RecordOutput {
+            uri: r.uri,
+            cid: r.cid,
+            rkey: r.rkey,
+            value: r.value,
         })
-        .collect::<miette::Result<Vec<_>>>()?;
+        .collect();
 
     let listed = ListOutput {
-        repo: repo.as_str().to_owned(),
+        repo: resolved.did.as_str().to_owned(),
         collection: args.collection,
-        pds,
-        cursor: output.cursor.map(|cursor| cursor.to_string()),
+        pds: resolved.pds,
+        cursor: page.cursor,
         records,
     };
 

@@ -1,11 +1,7 @@
 use crate::profile_config;
 use clap::{Args, Subcommand};
 use jacquard::client::BasicClient;
-use jacquard::identity::resolver::IdentityResolver;
 use jacquard_common::types::ident::AtIdentifier;
-use jacquard_common::types::string::{Nsid, RecordKey};
-use jacquard_common::xrpc::atproto::{GetRecord, GetRecordError, GetRecordOutput, ListRecords};
-use jacquard_common::xrpc::{XrpcClient, XrpcError};
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
@@ -93,97 +89,47 @@ pub async fn run(args: MageArgs, format: crate::commands::OutputFormat) -> miett
     }
 }
 
-async fn resolve_actor(
-    client: &BasicClient,
-    actor: Option<String>,
-) -> miette::Result<(AtIdentifier, String)> {
-    let actor = match actor {
-        Some(actor) => actor,
-        None => profile_config::default_did()?,
-    };
-    let ident: AtIdentifier = AtIdentifier::new_owned(&actor).into_diagnostic()?;
-    match ident {
-        AtIdentifier::Did(did) => {
-            let pds = client
-                .pds_for_did(&did)
-                .await
-                .map_err(|err| miette::miette!("failed to resolve PDS for {actor}: {err}"))?;
-            Ok((AtIdentifier::Did(did), pds.to_string()))
-        }
-        AtIdentifier::Handle(handle) => {
-            let (did, pds) = client
-                .pds_for_handle(&handle)
-                .await
-                .map_err(|err| miette::miette!("failed to resolve PDS for {actor}: {err}"))?;
-            Ok((AtIdentifier::Did(did), pds.to_string()))
-        }
-    }
-}
-
 async fn get_stats_record(
     client: &BasicClient,
     repo: AtIdentifier,
     rkey: &str,
-) -> miette::Result<Option<GetRecordOutput>> {
-    let request = GetRecord {
-        repo,
-        collection: Nsid::new_static(STATS_COLLECTION).into_diagnostic()?,
-        rkey: RecordKey::any_owned(rkey).into_diagnostic()?,
-        cid: None,
-    };
-    let response = client
-        .send(request)
+) -> miette::Result<Option<tass_repo::RecordEnvelope>> {
+    tass_repo::get_record(client, repo, STATS_COLLECTION, rkey)
         .await
-        .map_err(|err| miette::miette!("getRecord {STATS_COLLECTION}/{rkey} failed: {err}"))?;
-    match response.into_output() {
-        Ok(output) => Ok(Some(output)),
-        Err(XrpcError::Xrpc(GetRecordError::RecordNotFound(_))) => Ok(None),
-        Err(err) => Err(miette::miette!(
-            "failed to decode {STATS_COLLECTION}/{rkey}: {err}"
-        )),
-    }
+        .map_err(|e| miette::miette!("{e}"))
 }
 
 async fn list_stats_records(
     client: &BasicClient,
     repo: AtIdentifier,
+    pds: String,
     args: &ListArgs,
 ) -> miette::Result<StatsListOutput> {
     if args.limit < 1 || args.limit > 100 {
         miette::bail!("--limit must be between 1 and 100");
     }
-    let request = ListRecords {
-        repo: repo.clone(),
-        collection: Nsid::new_static(STATS_COLLECTION).into_diagnostic()?,
-        cursor: args.cursor.clone().map(Into::into),
-        limit: Some(args.limit),
-        reverse: None,
-    };
-    let response = client
-        .send(request)
-        .await
-        .map_err(|err| miette::miette!("listRecords {STATS_COLLECTION} failed: {err}"))?;
-    let output = response
-        .into_output()
-        .map_err(|err| miette::miette!("failed to decode listRecords output: {err}"))?;
-    let records = output
+    let repo_str = repo.as_str().to_owned();
+    let page = tass_repo::list_records(
+        client,
+        repo,
+        STATS_COLLECTION,
+        Some(args.limit),
+        args.cursor.clone(),
+        false,
+    )
+    .await
+    .map_err(|e| miette::miette!("{e}"))?;
+    let records = page
         .records
         .into_iter()
-        .map(|record| {
-            let value = serde_json::to_value(&record.value).into_diagnostic()?;
-            Ok(summarize_record(
-                record.uri.as_str(),
-                record.cid.as_ref().map(|cid| cid.as_str()),
-                &value,
-            ))
-        })
-        .collect::<miette::Result<Vec<_>>>()?;
+        .map(|env| summarize_record(&env.uri, env.cid.as_deref(), &env.value))
+        .collect();
 
     Ok(StatsListOutput {
-        repo: repo.as_str().to_owned(),
+        repo: repo_str,
         collection: STATS_COLLECTION.to_owned(),
-        pds: client.base_uri().await.to_string(),
-        cursor: output.cursor.map(|cursor| cursor.to_string()),
+        pds,
+        cursor: page.cursor,
         records,
     })
 }
@@ -248,14 +194,19 @@ fn summarize_record(uri: &str, cid: Option<&str>, value: &Value) -> StatsSummary
 
 async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
-    let (repo, pds) = resolve_actor(&client, args.actor.clone()).await?;
-    let pds_uri = jacquard_common::deps::fluent_uri::Uri::parse(pds.clone())
-        .map_err(|_| miette::miette!("resolved PDS endpoint is not a valid URI: {pds}"))?
-        .to_owned();
-    client.set_base_uri(pds_uri).await;
+    let actor = match args.actor.clone() {
+        Some(actor) => actor,
+        None => profile_config::default_did()?,
+    };
+    // Generic record access (tass-repo): resolve + point the client at the PDS.
+    let resolved = tass_repo::resolve_and_point(&client, &actor)
+        .await
+        .map_err(|e| miette::miette!("{e}"))?;
+    let repo = resolved.did;
+    let pds = resolved.pds;
 
     if args.all {
-        let output = list_stats_records(&client, repo, &args).await?;
+        let output = list_stats_records(&client, repo, pds, &args).await?;
         if format.is_json() {
             println!(
                 "{}",
@@ -287,12 +238,8 @@ async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::
         let Some(record) = get_stats_record(&client, repo.clone(), &rkey).await? else {
             continue;
         };
-        let value = serde_json::to_value(&record.value).into_diagnostic()?;
-        let summary = summarize_record(
-            record.uri.as_str(),
-            record.cid.as_ref().map(|cid| cid.as_str()),
-            &value,
-        );
+        let summary = summarize_record(&record.uri, record.cid.as_deref(), &record.value);
+        let value = record.value;
         let raw = if rkey == "mage" || rkey == "self" {
             tass_mage::mage_block(&value)
                 .map(|block| Value::Object(block.clone()))
