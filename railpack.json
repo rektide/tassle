@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "rust",
+  "packages": {
+    "rust": "1.89"
+  },
+  "buildAptPackages": [
+    "pkg-config",
+    "libssl-dev"
+  ],
+  "steps": {
+    "build": {
+      "commands": [
+        "cargo build --release --workspace",
+        "mkdir -p bin",
+        "cp target/release/tass bin/tass",
+        "cp target/release/tass-codegen bin/tass-codegen",
+        "cp target/release/tass-listen bin/tass-listen",
+        "cp target/release/tass-validate bin/tass-validate",
+        "cp target/release/tass-web bin/tass-web"
+      ]
+    }
+  },
+  "deploy": {
+    "inputs": [
+      {
+        "step": "build",
+        "include": ["bin/tass-web"]
+      }
+    ],
+    "aptPackages": [
+      "ca-certificates"
+    ],
+    "startCommand": "./bin/tass-web"
+  }
+}

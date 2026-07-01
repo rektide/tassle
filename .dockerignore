@@ -1,0 +1,8 @@
+/target/
+/.git/
+/.jj/
+/.beads/
+/node_modules/
+*.md
+!README.md
+.test-agent/
