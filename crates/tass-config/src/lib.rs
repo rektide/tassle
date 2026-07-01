@@ -24,12 +24,14 @@
 //! The figment profile model is now the single copy: `tass-cli` depends on
 //! this crate and its duplicate `config.rs` was removed (tass-cli-config-dedup).
 //! "profile" is generic (a figment config bucket); the account identity it may
-//! carry is a [`Login`] (tass-config-profile-generic). Next: a service config
-//! layer for the axum OAuth web flow (tass-config-service-shape) and a
-//! login-kind model — app-password | oauth (tass-config-login-kinds).
+//! carry is a [`Login`] (tass-config-profile-generic). The [`service`] module
+//! adds the non-login `[service]` / `[service.oauth]` config for the axum OAuth
+//! web flow (tass-config-service-shape); next is a login-kind model —
+//! app-password | oauth (tass-config-login-kinds).
 
 pub mod config;
 pub mod dirs;
+pub mod service;
 
 #[cfg(feature = "auth-store")]
 pub mod auth;
@@ -38,6 +40,7 @@ pub mod auth;
 pub mod read;
 
 pub use config::{auth_selector, CredentialSelector, Login};
+pub use service::{OAuthConfig, ServiceConfig};
 
 /// Resolve the active profile's [`Login`] from figment (CLI/env override > file),
 /// in one call. Convenience over [`config::active_figment`] + [`config::active_login`].
