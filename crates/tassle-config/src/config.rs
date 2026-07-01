@@ -1,5 +1,10 @@
-//! figment2-backed configuration: config dir, active-profile selection, and the
-//! [`Profile`] shape.
+//! figment2-backed configuration: config dir, generic profile selection, and the
+//! [`Login`] shape.
+//!
+//! A **profile** here is the figment sense — a named config bucket selected by
+//! the `profile = "..."` key / a `config.toml.d/<name>.toml` drop-in. It is
+//! generic: a profile may carry a [`Login`] (an account identity), service
+//! config, or anything else. "profile" is never a synonym for "login".
 //!
 //! Model (ported from tassle-cli's `config.rs`): a base `config.toml` carries
 //! the active profile selector (`profile = "..."`) plus shared defaults;
@@ -40,11 +45,16 @@ pub fn dropins_dir() -> miette::Result<PathBuf> {
     Ok(tassle_config_dir()?.join("config.toml.d"))
 }
 
-/// A login profile. All fields optional — defaults flow from the base
-/// `config.toml`; the selected profile's drop-in overrides per-profile.
+/// A **login**: the account identity configured in a profile. All fields
+/// optional — defaults flow from the base `config.toml`; the selected profile's
+/// drop-in overrides them.
+///
+/// "Login" is the broad heading over both auth kinds (app-password and, later,
+/// oauth); [`auth_mode`](Self::auth_mode) names which. This is *not* the profile
+/// — a profile is a generic config bucket that happens to carry a login.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
-pub struct Profile {
+pub struct Login {
     pub did: Option<String>,
     pub handle: Option<String>,
     pub pds: Option<String>,
@@ -56,11 +66,17 @@ pub struct Profile {
     pub store_path: Option<PathBuf>,
 }
 
-impl Profile {
-    /// True when this profile has enough to attempt an authenticated session
+impl Login {
+    /// True when this login has enough to attempt an authenticated session
     /// (a target account + a PDS to talk to).
     pub fn is_resolvable(&self) -> bool {
         (self.did.is_some() || self.handle.is_some()) && self.pds.is_some()
+    }
+
+    /// The account identifier to log in as: the DID if present, else the handle.
+    /// (The shape jacquard's `SessionHint::from_optional_input` wants.)
+    pub fn account(&self) -> Option<&str> {
+        self.did.as_deref().or(self.handle.as_deref())
     }
 }
 
@@ -97,11 +113,11 @@ pub fn active_figment(cli_profile: Option<&str>) -> miette::Result<Figment> {
     build_figment(override_name.as_deref())
 }
 
-/// Extract the active [`Profile`] from a figment.
-pub fn active_profile(figment: &Figment) -> miette::Result<Profile> {
+/// Extract the active profile's [`Login`] from a figment.
+pub fn active_login(figment: &Figment) -> miette::Result<Login> {
     figment
-        .extract::<Profile>()
-        .map_err(|e| miette::miette!("failed to extract tassle profile: {e}"))
+        .extract::<Login>()
+        .map_err(|e| miette::miette!("failed to extract tassle login: {e}"))
 }
 
 /// The selected profile name, or `"default"` if none.

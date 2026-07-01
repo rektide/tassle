@@ -124,8 +124,8 @@ fn get(
     let figment = config::active_figment(profile)?;
     match key {
         None => {
-            let p = config::active_profile(&figment)?;
-            // A LoginProfile is already a JSON-shaped value; emit it the same in
+            let p = config::active_login(&figment)?;
+            // A Login is already a JSON-shaped value; emit it the same in
             // both modes (pretty JSON), since it has no tabular form.
             println!("{}", serde_json::to_string_pretty(&p).into_diagnostic()?);
         }

@@ -184,7 +184,7 @@ async fn status(
     let mut rows: Vec<serde_json::Value> = Vec::new();
     for name in &profiles {
         let figment = tassle_config::config::build_figment(Some(name))?;
-        let p = tassle_config::config::active_profile(&figment)?;
+        let p = tassle_config::config::active_login(&figment)?;
         let store_path = p.store_path.clone().unwrap_or_else(|| {
             tassle_config::config::tassle_config_dir()
                 .unwrap_or_default()
@@ -338,7 +338,7 @@ async fn login_real(
     // Active profile name (resolves the store path + the fragment to write).
     let figment = tassle_config::config::active_figment(profile)?;
     let profile_name = tassle_config::config::active_name(&figment);
-    let active = tassle_config::config::active_profile(&figment)?;
+    let active = tassle_config::config::active_login(&figment)?;
 
     // App password: --password > TASSLE_PASSWORD > interactive prompt.
     let password = args

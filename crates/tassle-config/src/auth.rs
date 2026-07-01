@@ -21,7 +21,7 @@ use jacquard::identity::JacquardResolver;
 use jacquard_common::deps::fluent_uri::Uri;
 
 use crate::config;
-use crate::Profile;
+use crate::Login;
 
 /// The concrete app-password store + resolver backing an [`AuthedClient`].
 ///
@@ -80,7 +80,7 @@ impl std::error::Error for AuthError {}
 /// avoiding.)
 pub struct AuthedClient {
     session: AppPasswordSession,
-    profile: Profile,
+    login: Login,
     name: String,
 }
 
@@ -91,12 +91,12 @@ impl AuthedClient {
         let figment = config::active_figment(cli_profile)
             .map_err(|e| AuthError::Config(e.to_string()))?;
         let name = config::active_name(&figment);
-        let profile =
-            config::active_profile(&figment).map_err(|e| AuthError::Config(e.to_string()))?;
+        let login =
+            config::active_login(&figment).map_err(|e| AuthError::Config(e.to_string()))?;
 
         let cfg_dir =
             config::tassle_config_dir().map_err(|e| AuthError::Config(e.to_string()))?;
-        let store_path = profile
+        let store_path = login
             .store_path
             .clone()
             .unwrap_or_else(|| cfg_dir.join("store").join(format!("{name}.db")));
@@ -111,9 +111,7 @@ impl AuthedClient {
         let resolver = Arc::new(JacquardResolver::default());
         let session = CredentialSession::new(store, resolver);
 
-        let hint = SessionHint::from_optional_input(
-            profile.did.as_deref().or(profile.handle.as_deref()),
-        );
+        let hint = SessionHint::from_optional_input(login.account());
         match session.resume(&hint).await {
             Ok(CredentialResumeResult::Resumed(_)) => {}
             Ok(CredentialResumeResult::LoginRequired(_)) => {
@@ -122,13 +120,13 @@ impl AuthedClient {
             Err(e) => return Err(AuthError::Resume(e.to_string())),
         }
 
-        let pds = profile.pds.as_deref().ok_or(AuthError::NoPds)?;
+        let pds = login.pds.as_deref().ok_or(AuthError::NoPds)?;
         let endpoint = Uri::parse(pds)
             .map_err(|_| AuthError::Uri(pds.to_string()))?
             .to_owned();
         session.set_endpoint(endpoint).await;
 
-        Ok(AuthedClient { session, profile, name })
+        Ok(AuthedClient { session, login, name })
     }
 
     /// Convenience for [`AuthedClient::for_profile`] with no CLI override
@@ -150,14 +148,14 @@ impl AuthedClient {
     }
 
     pub fn did(&self) -> Option<&str> {
-        self.profile.did.as_deref()
+        self.login.did.as_deref()
     }
 
     pub fn handle(&self) -> Option<&str> {
-        self.profile.handle.as_deref()
+        self.login.handle.as_deref()
     }
 
     pub fn pds(&self) -> Option<&str> {
-        self.profile.pds.as_deref()
+        self.login.pds.as_deref()
     }
 }
