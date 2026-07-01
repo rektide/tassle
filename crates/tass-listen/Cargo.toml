@@ -1,0 +1,28 @@
+[package]
+name = "tass-listen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The listener daemon: wire a Spacedust source + Slingshot hydrator into tass-engine, driven by [service.listen] config. Exposes composable clap Args so tass-cli can host the same command."
+
+[lib]
+name = "tass_listen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tass-listen"
+path = "src/main.rs"
+
+[dependencies]
+tass-engine = { path = "../tass-engine" }
+tass-spacedust = { path = "../tass-spacedust" }
+tass-slingshot = { path = "../tass-slingshot" }
+tass-config = { path = "../tass-config" }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+miette = { version = "7", features = ["fancy"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

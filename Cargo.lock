@@ -4492,6 +4492,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook-registry"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+dependencies = [
+ "errno",
+ "libc",
+]
+
+[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5035,12 +5045,19 @@ name = "tass-lex-schema"
 version = "0.1.0"
 
 [[package]]
-name = "tass-mage"
+name = "tass-listen"
 version = "0.1.0"
 dependencies = [
+ "clap",
+ "miette",
  "serde",
- "serde_json",
- "tass-quint",
+ "tass-config",
+ "tass-engine",
+ "tass-slingshot",
+ "tass-spacedust",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -5294,6 +5311,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

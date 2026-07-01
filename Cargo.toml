@@ -20,6 +20,7 @@ members = [
     "crates/tass-spacedust",
     "crates/tass-engine",
     "crates/tass-slingshot",
+    "crates/tass-listen",
     "xtask",
 ]
 
