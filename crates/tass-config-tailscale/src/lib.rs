@@ -22,9 +22,22 @@
 //! socket_path = "/var/run/tailscale/tailscaled.sock"
 //! bin_dir = "./bin"
 //! ```
+//!
+//! Environment variables are also supported via [`env_provider`]:
+//!
+//! | Env var | Config key |
+//! |---|---|
+//! | `TS_AUTHKEY` | `service.tailscale.auth_key` |
+//! | `TS_HOSTNAME` | `service.tailscale.hostname` |
+//! | `TS_EXTRA_ARGS` | `service.tailscale.extra_args` |
+//! | `TS_ENABLED` | `service.tailscale.enabled` |
+//! | `TS_STATE_PATH` | `service.tailscale.state_path` |
+//! | `TS_SOCKET_PATH` | `service.tailscale.socket_path` |
+//! | `TS_BIN_DIR` | `service.tailscale.bin_dir` |
 
 use std::path::{Path, PathBuf};
 
+use figment2::providers::Env;
 use serde::{Deserialize, Serialize};
 
 /// Default Tailscale hostname when none is configured.
@@ -111,6 +124,33 @@ impl TailscaleConfig {
     pub fn state_file(&self) -> &Path {
         &self.state_path
     }
+}
+
+/// Returns a figment [`Env`] provider that maps Tailscale-style environment
+/// variables into `service.tailscale.*` config keys.
+///
+/// Merge this into a figment before extraction so that env vars override file
+/// config:
+///
+/// ```ignore
+/// let figment = tass_config::config::active_figment(None)?
+///     .merge(tass_config_tailscale::env_provider());
+/// ```
+pub fn env_provider() -> Env {
+    Env::raw().filter_map(|key| {
+        let k = key.as_str();
+        let mapped = match k {
+            "TS_AUTHKEY" => "service.tailscale.auth_key",
+            "TS_HOSTNAME" => "service.tailscale.hostname",
+            "TS_EXTRA_ARGS" => "service.tailscale.extra_args",
+            "TS_ENABLED" => "service.tailscale.enabled",
+            "TS_STATE_PATH" => "service.tailscale.state_path",
+            "TS_SOCKET_PATH" => "service.tailscale.socket_path",
+            "TS_BIN_DIR" => "service.tailscale.bin_dir",
+            _ => return None,
+        };
+        Some(mapped.into())
+    })
 }
 
 /// Serde adapter that (de)serializes `PathBuf` through its string form.
@@ -217,5 +257,42 @@ extra_args = "--advertise-exit-node"
         let cfg: TailscaleConfig = figment.extract_inner("tailscale").unwrap_or_default();
         assert_eq!(cfg.hostname, "tass-web");
         assert!(cfg.enabled);
+    }
+
+    #[test]
+    fn env_provider_maps_tailscale_vars() {
+        // SAFETY: this test mutates process-global env vars and must not run
+        // concurrently with other env-mutating tests. It is the only such test
+        // in this crate.
+        unsafe {
+            std::env::set_var("TS_AUTHKEY", "tskey-auth-env");
+            std::env::set_var("TS_HOSTNAME", "tass-web-env");
+            std::env::set_var("TS_EXTRA_ARGS", "--advertise-exit-node");
+            std::env::set_var("TS_ENABLED", "false");
+            std::env::set_var("TS_STATE_PATH", "/env/tailscale.state");
+            std::env::set_var("TS_SOCKET_PATH", "/env/tailscaled.sock");
+            std::env::set_var("TS_BIN_DIR", "/env/bin");
+        }
+
+        let figment = Figment::new().merge(env_provider());
+        let cfg: TailscaleConfig = figment.extract_inner("service.tailscale").unwrap();
+
+        assert_eq!(cfg.auth_key.as_deref(), Some("tskey-auth-env"));
+        assert_eq!(cfg.hostname, "tass-web-env");
+        assert_eq!(cfg.extra_args.as_deref(), Some("--advertise-exit-node"));
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.state_path, PathBuf::from("/env/tailscale.state"));
+        assert_eq!(cfg.socket_path, PathBuf::from("/env/tailscaled.sock"));
+        assert_eq!(cfg.bin_dir, PathBuf::from("/env/bin"));
+
+        unsafe {
+            std::env::remove_var("TS_AUTHKEY");
+            std::env::remove_var("TS_HOSTNAME");
+            std::env::remove_var("TS_EXTRA_ARGS");
+            std::env::remove_var("TS_ENABLED");
+            std::env::remove_var("TS_STATE_PATH");
+            std::env::remove_var("TS_SOCKET_PATH");
+            std::env::remove_var("TS_BIN_DIR");
+        }
     }
 }

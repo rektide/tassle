@@ -12,9 +12,9 @@ name = "tass_config_tailscale"
 path = "src/lib.rs"
 
 [dependencies]
+figment2 = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 shell-words = "1"
 
 [dev-dependencies]
-figment2 = { workspace = true }
 miette = { version = "7", features = ["fancy"] }
