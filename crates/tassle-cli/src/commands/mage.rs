@@ -9,7 +9,6 @@ use jacquard_common::xrpc::{XrpcClient, XrpcError};
 use miette::IntoDiagnostic;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::process::ExitCode;
 
 const STATS_COLLECTION: &str = "actor.rpg.stats";
@@ -54,7 +53,7 @@ pub struct ListArgs {
 struct StatsOutput {
     source: StatsSource,
     summary: StatsSummary,
-    mage: Option<NormalizedMageStats>,
+    mage: Option<tass_mage::NormalizedMageStats>,
     raw: Value,
 }
 
@@ -86,23 +85,6 @@ struct StatsSummary {
     shape: String,
     system: Option<String>,
     fields: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NormalizedMageStats {
-    arete: Option<i64>,
-    willpower: Option<i64>,
-    willpower_temporary: Option<i64>,
-    /// Player-facing whole points — always the floor of the `quint` millis
-    /// (resolved via `tass_quint`). Derived, not the raw sheet field.
-    quintessence: Option<i64>,
-    /// Raw Tassle extension field (`milliQuintessence`), in milli-quintessence.
-    /// `None` when the sheet only carries the legacy `quintessence` integer.
-    milli_quintessence: Option<i64>,
-    paradox: Option<i64>,
-    spheres: BTreeMap<String, i64>,
-    missing: Vec<String>,
 }
 
 pub async fn run(args: MageArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
@@ -264,97 +246,6 @@ fn summarize_record(uri: &str, cid: Option<&str>, value: &Value) -> StatsSummary
     }
 }
 
-fn extract_mage(value: &Value, rkey: &str) -> Option<Value> {
-    let (payload, _, system) = stats_payload(value, rkey);
-    match (payload, system.as_deref()) {
-        (Some(payload), Some("mage")) => Some(payload),
-        _ => object(value, "mage").map(|mage| Value::Object(mage.clone())),
-    }
-}
-
-fn number_field(obj: &serde_json::Map<String, Value>, names: &[&str]) -> Option<i64> {
-    names.iter().find_map(|name| obj.get(*name)?.as_i64())
-}
-
-fn willpower_field(obj: &serde_json::Map<String, Value>) -> Option<i64> {
-    number_field(obj, &["willpower", "Willpower"]).or_else(|| {
-        obj.get("willpower")?
-            .as_object()?
-            .get("permanent")?
-            .as_i64()
-    })
-}
-
-fn willpower_temporary_field(obj: &serde_json::Map<String, Value>) -> Option<i64> {
-    obj.get("willpower")?
-        .as_object()?
-        .get("temporary")?
-        .as_i64()
-}
-
-fn normalize_mage(raw: &Value) -> miette::Result<NormalizedMageStats> {
-    let obj = raw
-        .as_object()
-        .ok_or_else(|| miette::miette!("mage stats payload is not an object"))?;
-    let mut missing = Vec::new();
-    let arete = number_field(obj, &["arete", "Arete"]);
-    let willpower = willpower_field(obj);
-    let willpower_temporary = willpower_temporary_field(obj);
-    let quintessence_raw = number_field(obj, &["quintessence", "Quintessence"]);
-    let milli_raw = number_field(obj, &["milliQuintessence", "MilliQuintessence"]);
-    // milliQuintessence is the source of truth when the Tassle extension field
-    // is present; otherwise hydrate from the legacy integer. quintessence
-    // always shows the rounded-down points. See the tass-quint crate.
-    let resolved = tass_quint::resolve(milli_raw, quintessence_raw);
-    let quintessence = resolved.map(|q| q.points());
-    let paradox = number_field(obj, &["paradox", "Paradox"]);
-
-    for (name, value) in [
-        ("arete", arete),
-        ("willpower", willpower),
-        ("quintessence", quintessence),
-        ("paradox", paradox),
-    ] {
-        if value.is_none() {
-            missing.push(name.to_owned());
-        }
-    }
-
-    let mut spheres = BTreeMap::new();
-    for (canonical, aliases) in [
-        ("correspondence", ["correspondence", "Correspondence", ""]),
-        ("entropy", ["entropy", "Entropy", ""]),
-        ("forces", ["forces", "Forces", "Force"]),
-        ("life", ["life", "Life", ""]),
-        ("matter", ["matter", "Matter", ""]),
-        ("mind", ["mind", "Mind", ""]),
-        ("prime", ["prime", "Prime", ""]),
-        ("spirit", ["spirit", "Spirit", ""]),
-        ("time", ["time", "Time", ""]),
-    ] {
-        let aliases = aliases
-            .into_iter()
-            .filter(|alias| !alias.is_empty())
-            .collect::<Vec<_>>();
-        if let Some(value) = number_field(obj, &aliases) {
-            spheres.insert(canonical.to_owned(), value);
-        } else {
-            missing.push(canonical.to_owned());
-        }
-    }
-
-    Ok(NormalizedMageStats {
-        arete,
-        willpower,
-        willpower_temporary,
-        quintessence,
-        milli_quintessence: milli_raw,
-        paradox,
-        spheres,
-        missing,
-    })
-}
-
 async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::Result<ExitCode> {
     let client = BasicClient::unauthenticated();
     let (repo, pds) = resolve_actor(&client, args.actor.clone()).await?;
@@ -403,16 +294,16 @@ async fn list(args: ListArgs, format: crate::commands::OutputFormat) -> miette::
             &value,
         );
         let raw = if rkey == "mage" || rkey == "self" {
-            extract_mage(&value, &rkey).unwrap_or_else(|| value.clone())
+            tass_mage::mage_block(&value)
+                .map(|block| Value::Object(block.clone()))
+                .unwrap_or_else(|| value.clone())
         } else {
             stats_payload(&value, &rkey)
                 .0
                 .unwrap_or_else(|| value.clone())
         };
         let mage = if summary.system.as_deref() == Some("mage") || rkey == "self" {
-            extract_mage(&value, &rkey)
-                .map(|raw| normalize_mage(&raw))
-                .transpose()?
+            tass_mage::normalize(&value)
         } else {
             None
         };
