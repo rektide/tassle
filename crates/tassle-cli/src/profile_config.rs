@@ -18,12 +18,8 @@ pub struct Profile {
 }
 
 pub fn tassle_config_dir() -> miette::Result<PathBuf> {
-    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        return Ok(PathBuf::from(dir).join("tassle"));
-    }
-    let home = std::env::var_os("HOME")
-        .ok_or_else(|| miette::miette!("HOME is unset; cannot resolve XDG config directory"))?;
-    Ok(PathBuf::from(home).join(".config").join("tassle"))
+    // Single source of truth lives in tassle-config (appname-aware, XDG spec).
+    tassle_config::dirs::config_dir()
 }
 
 pub fn profile_dir() -> miette::Result<PathBuf> {

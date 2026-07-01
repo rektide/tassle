@@ -24,15 +24,11 @@ use figment2::providers::{Format, Serialized, Toml};
 use figment2::Figment;
 use serde::{Deserialize, Serialize};
 
-/// The conventional tassle XDG config dir (`$XDG_CONFIG_HOME/tassle` or
-/// `~/.config/tassle`).
+/// The tassle XDG config dir. Delegates to [`crate::dirs::config_dir`] — the
+/// single source of truth for on-disk locations (`$XDG_CONFIG_HOME/<appname>`
+/// or `~/.config/<appname>`, `TASSLE_APPNAME`-aware).
 pub fn tassle_config_dir() -> miette::Result<PathBuf> {
-    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        return Ok(PathBuf::from(dir).join("tassle"));
-    }
-    let home = std::env::var_os("HOME")
-        .ok_or_else(|| miette::miette!("HOME is unset; cannot resolve XDG config directory"))?;
-    Ok(PathBuf::from(home).join(".config").join("tassle"))
+    crate::dirs::config_dir()
 }
 
 /// `config.toml` — base config: the `profile = "..."` selector + flat defaults.

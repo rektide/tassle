@@ -185,12 +185,10 @@ async fn status(
     for name in &profiles {
         let figment = tassle_config::config::build_figment(Some(name))?;
         let p = tassle_config::config::active_login(&figment)?;
-        let store_path = p.store_path.clone().unwrap_or_else(|| {
-            tassle_config::config::tassle_config_dir()
-                .unwrap_or_default()
-                .join("store")
-                .join(format!("{name}.db"))
-        });
+        let store_path = match p.store_path.clone() {
+            Some(path) => path,
+            None => tassle_config::dirs::default_store_path(name).unwrap_or_default(),
+        };
         let session = session_status(&store_path, p.did.as_deref(), p.session_id.as_deref()).await;
         rows.push(serde_json::json!({
             "profile": name,
@@ -351,13 +349,11 @@ async fn login_real(
                 .map_err(|e| miette::miette!("failed to read password: {e}"))
         })?;
 
-    // Open the profile's turso store (explicit store_path, else a per-profile default).
-    let store_path = active.store_path.clone().unwrap_or_else(|| {
-        tassle_config::config::tassle_config_dir()
-            .expect("config dir")
-            .join("store")
-            .join(format!("{profile_name}.db"))
-    });
+    // Open the profile's turso store (explicit store_path, else the default under state).
+    let store_path = match active.store_path.clone() {
+        Some(path) => path,
+        None => tassle_config::dirs::default_store_path(&profile_name)?,
+    };
     if let Some(parent) = store_path.parent() {
         std::fs::create_dir_all(parent).into_diagnostic()?;
     }

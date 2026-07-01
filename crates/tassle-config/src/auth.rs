@@ -94,12 +94,11 @@ impl AuthedClient {
         let login =
             config::active_login(&figment).map_err(|e| AuthError::Config(e.to_string()))?;
 
-        let cfg_dir =
-            config::tassle_config_dir().map_err(|e| AuthError::Config(e.to_string()))?;
-        let store_path = login
-            .store_path
-            .clone()
-            .unwrap_or_else(|| cfg_dir.join("store").join(format!("{name}.db")));
+        let store_path = match login.store_path.clone() {
+            Some(p) => p,
+            None => crate::dirs::default_store_path(&name)
+                .map_err(|e| AuthError::Store(e.to_string()))?,
+        };
 
         if let Some(parent) = store_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;

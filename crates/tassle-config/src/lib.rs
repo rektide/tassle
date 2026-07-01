@@ -29,6 +29,7 @@
 //! login-kind model — app-password | oauth (tass-config-login-kinds).
 
 pub mod config;
+pub mod dirs;
 
 #[cfg(feature = "auth-store")]
 pub mod auth;
