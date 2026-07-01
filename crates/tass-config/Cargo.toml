@@ -1,0 +1,32 @@
+[package]
+name = "tass-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Tass config + profile + auth bundle — the foundation the app bootstraps from (spike)."
+
+[lib]
+name = "tass_config"
+path = "src/lib.rs"
+
+[features]
+default = []
+# Authed-client construction: a jacquard CredentialSession over the turso
+# app-password store, resumed from the active profile and pointed at its PDS.
+# Off by default so the pure config/profile build stays light; the app enables
+# this for write paths.
+auth-store = ["dep:jac-store-fjall", "dep:jacquard", "dep:jacquard-common"]
+
+[dependencies]
+figment2.workspace = true
+serde = { version = "1", features = ["derive"] }
+miette = { version = "7", features = ["fancy"] }
+# Optional, behind `auth-store`:
+jac-store-fjall = { workspace = true, optional = true }
+jacquard = { workspace = true, optional = true }
+jacquard-common = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"

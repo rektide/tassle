@@ -1423,6 +1423,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
+name = "foreign-types"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
+dependencies = [
+ "foreign-types-shared",
+]
+
+[[package]]
+name = "foreign-types-shared"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+
+[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3053,6 +3068,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "native-tls"
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "465500e14ea162429d264d44189adc38b199b62b1c21eea9f69e4b73cb03bbf2"
+dependencies = [
+ "libc",
+ "log",
+ "openssl",
+ "openssl-probe",
+ "openssl-sys",
+ "schannel",
+ "security-framework",
+ "security-framework-sys",
+ "tempfile",
+]
+
+[[package]]
 name = "ndk-context"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3202,6 +3234,49 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
+name = "openssl"
+version = "0.10.81"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77823a27f0babb03091cb9ed9ef80af3b39dbc82f97e8fa530374b7dafd87a45"
+dependencies = [
+ "bitflags 2.13.0",
+ "cfg-if",
+ "foreign-types",
+ "libc",
+ "openssl-macros",
+ "openssl-sys",
+]
+
+[[package]]
+name = "openssl-macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "openssl-probe"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
+
+[[package]]
+name = "openssl-sys"
+version = "0.9.117"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b47e7e6bb2c38cd930d25a23b40fa52e068c10e85f3e03a7f5ba5aaca5713695"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
 
 [[package]]
 name = "ordered-float"
@@ -4112,6 +4187,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "schannel"
+version = "0.1.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91c1b7e4904c873ef0710c1f407dde2e6287de2bebc1bbbf7d430bb7cbffd939"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4135,6 +4219,29 @@ dependencies = [
  "pkcs8",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "security-framework"
+version = "3.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
+dependencies = [
+ "bitflags 2.13.0",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys",
+]
+
+[[package]]
+name = "security-framework-sys"
+version = "2.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
 ]
 
 [[package]]
@@ -4313,6 +4420,17 @@ dependencies = [
  "byteorder-lite",
  "log",
  "xxhash-rust",
+]
+
+[[package]]
+name = "sha1"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest",
 ]
 
 [[package]]
@@ -4803,12 +4921,87 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
+name = "tass-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "chrono",
+ "clap",
+ "figment2",
+ "jac-store-fjall",
+ "jacquard",
+ "jacquard-common",
+ "jacquard-lexicon",
+ "miette",
+ "rpassword",
+ "serde",
+ "serde_ipld_dagcbor",
+ "serde_json",
+ "tass-config",
+ "tass-lexicons",
+ "tass-mage",
+ "tass-quint",
+ "tass-repo",
+ "tass-repo-mage",
+ "tass-stats",
+ "tempfile",
+ "tokio",
+ "toml_edit 0.22.27",
+]
+
+[[package]]
+name = "tass-codegen"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "jacquard-lexicon",
+ "miette",
+]
+
+[[package]]
+name = "tass-config"
+version = "0.1.0"
+dependencies = [
+ "figment2",
+ "jac-store-fjall",
+ "jacquard",
+ "jacquard-common",
+ "miette",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "tass-ledger"
+version = "0.1.0"
+dependencies = [
+ "fjall",
+ "moka",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "tass-lex-sample"
 version = "0.1.0"
 
 [[package]]
 name = "tass-lex-schema"
 version = "0.1.0"
+
+[[package]]
+name = "tass-lexicons"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jacquard-common",
+ "jacquard-derive",
+ "jacquard-lexicon",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "tass-mage"
@@ -4861,6 +5054,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tass-spacedust"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "tass-stats"
 version = "0.1.0"
 dependencies = [
@@ -4869,82 +5076,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tassle-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "chrono",
- "clap",
- "figment2",
- "jac-store-fjall",
- "jacquard",
- "jacquard-common",
- "jacquard-lexicon",
- "miette",
- "rpassword",
- "serde",
- "serde_ipld_dagcbor",
- "serde_json",
- "tass-mage",
- "tass-quint",
- "tass-repo",
- "tass-repo-mage",
- "tass-stats",
- "tassle-config",
- "tassle-lexicons",
- "tempfile",
- "tokio",
- "toml_edit 0.22.27",
-]
-
-[[package]]
-name = "tassle-codegen"
-version = "0.1.0"
-dependencies = [
- "clap",
- "jacquard-lexicon",
- "miette",
-]
-
-[[package]]
-name = "tassle-config"
-version = "0.1.0"
-dependencies = [
- "figment2",
- "jac-store-fjall",
- "jacquard",
- "jacquard-common",
- "miette",
- "serde",
- "tempfile",
-]
-
-[[package]]
-name = "tassle-ledger"
-version = "0.1.0"
-dependencies = [
- "fjall",
- "moka",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "tassle-lexicons"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "jacquard-common",
- "jacquard-derive",
- "jacquard-lexicon",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "tassle-validate"
+name = "tass-validate"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -4954,7 +5086,7 @@ dependencies = [
  "miette",
  "serde",
  "serde_json",
- "tassle-lexicons",
+ "tass-lexicons",
 ]
 
 [[package]]
@@ -5132,6 +5264,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-native-tls"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
+dependencies = [
+ "native-tls",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-rustls"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5139,6 +5281,20 @@ checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
 dependencies = [
  "rustls",
  "tokio",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
+dependencies = [
+ "futures-util",
+ "log",
+ "native-tls",
+ "tokio",
+ "tokio-native-tls",
+ "tungstenite",
 ]
 
 [[package]]
@@ -5357,6 +5513,25 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "native-tls",
+ "rand 0.8.6",
+ "sha1",
+ "thiserror 1.0.69",
+ "utf-8",
+]
 
 [[package]]
 name = "turso"
@@ -5716,6 +5891,12 @@ name = "varint-rs"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa6c38708f6257f1ec2ca7e5a11f9bbf58a27d7060078b6b333624968183d96"
+
+[[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "version_check"
@@ -6213,7 +6394,7 @@ dependencies = [
  "jacquard-lexicon",
  "miette",
  "serde_json",
- "tassle-lexicons",
+ "tass-lexicons",
 ]
 
 [[package]]

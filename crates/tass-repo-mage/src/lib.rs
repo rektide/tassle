@@ -11,7 +11,7 @@
 //! requires whatever authenticated client the caller supplies (jacquard carries
 //! auth in `CallOptions.auth`, so the same trait serves both). The crate does
 //! not resolve DIDs/handles to a PDS itself: point the client's `base_uri` at
-//! the actor's PDS first, the way `tassle-cli`'s `mage list` does.
+//! the actor's PDS first, the way `tass-cli`'s `mage list` does.
 //!
 //! ```no_run
 //! # use jacquard::client::BasicClient;
@@ -52,7 +52,7 @@ pub const DEFAULT_RKEY: &str = "mage";
 pub type Result<T> = std::result::Result<T, QuintError>;
 
 /// Errors from [`QuintClient`]. Hand-rolled (no thiserror) to keep the
-/// dependency surface minimal, matching `tassle-ledger`.
+/// dependency surface minimal, matching `tass-ledger`.
 #[derive(Debug)]
 pub enum QuintError {
     /// A DID/rkey/collection string failed AT-Proto syntax validation.

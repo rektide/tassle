@@ -1,7 +1,7 @@
 //! Canonical Tass ATProto lexicon JSON documents.
 //!
 //! This crate intentionally exposes lexicons as JSON text, not Rust bindings.
-//! Generated bindings (`tassle-lexicons`), validators, docs, and the xtask
+//! Generated bindings (`tass-lexicons`), validators, docs, and the xtask
 //! sample generator treat this crate as their source input.
 
 /// One lexicon document.

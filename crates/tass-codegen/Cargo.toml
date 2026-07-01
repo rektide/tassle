@@ -1,21 +1,17 @@
 [package]
-name = "xtask"
+name = "tass-codegen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Workspace task runner: lexicon codegen + sample regeneration."
+description = "Generate Rust types from tass lexicons using jacquard-lexicon's codegen"
 
 [[bin]]
-name = "xtask"
+name = "tass-codegen"
 path = "src/main.rs"
 
 [dependencies]
-tass-lexicons = { path = "../crates/tass-lexicons" }
-jacquard-common.workspace = true
 jacquard-lexicon.workspace = true
 clap = { version = "~4.4", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
-chrono = "0.4"
 miette = { version = "7", features = ["fancy"] }

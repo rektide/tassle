@@ -24,7 +24,7 @@ use serde_json::Value;
 pub type Result<T> = std::result::Result<T, RepoError>;
 
 /// Errors from record access. Hand-rolled (no thiserror) to keep the dependency
-/// surface minimal, matching `tass-repo-mage` / `tassle-ledger`. Transport and
+/// surface minimal, matching `tass-repo-mage` / `tass-ledger`. Transport and
 /// decode errors are stringified so this crate stays generic over the caller's
 /// client without leaking its error type parameters.
 #[derive(Debug)]

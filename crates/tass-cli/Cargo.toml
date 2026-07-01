@@ -1,0 +1,57 @@
+[package]
+name = "tass-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Tass CLI — Mint Nodes, Tass, etc. (Rust)"
+
+[[bin]]
+name = "tass"
+path = "src/main.rs"
+
+[features]
+default = []
+# Auth/session store backend (jac-store-fjall, turso native-SQL) + interactive
+# password prompt. Off by default so the base record-generator CLI stays lean.
+auth-store = [
+    "dep:jac-store-fjall",
+    "dep:rpassword",
+    "dep:base64",
+    "tass-config/auth-store",
+    "dep:tass-repo-mage",
+]
+
+[dependencies]
+tass-lexicons = { path = "../tass-lexicons" }
+tass-quint = { path = "../tass-quint" }
+tass-mage = { path = "../tass-mage" }
+tass-repo = { path = "../tass-repo" }
+tass-stats = { path = "../tass-stats" }
+# Optional: mage-record DAO (quint write commands + authed-client). Gated by `auth-store`.
+tass-repo-mage = { path = "../tass-repo-mage", optional = true }
+# Base config/profile model (figment2). The `auth-store` feature additionally
+# enables its `auth-store` feature for the AuthedClient path.
+tass-config = { path = "../tass-config" }
+jacquard.workspace = true
+jacquard-common.workspace = true
+jacquard-lexicon.workspace = true
+figment2.workspace = true
+# Optional: durable auth-session store + interactive login. Gated by `auth-store`.
+jac-store-fjall = { workspace = true, optional = true }
+rpassword = { version = "7", optional = true }
+base64 = { version = "0.22", optional = true }
+clap = { version = "~4.4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_ipld_dagcbor = "0.6"
+miette = { version = "7", features = ["fancy"] }
+chrono = "0.4"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+toml_edit = "0.22"
+
+[dev-dependencies]
+# Used by examples/spikes behind the `auth-store` feature.
+anyhow = "1"
+tempfile = "3"
