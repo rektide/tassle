@@ -120,6 +120,31 @@ impl Dispatcher {
     }
 }
 
+/// Fetches a record body (as JSON) by AT-URI — the pointer→body step for
+/// sources that yield pointers (Spacedust). Impls: Slingshot now
+/// (`tass-slingshot`), direct-PDS later (`tass-hydrate-pds`).
+pub trait Hydrator {
+    /// Error yielded when a record can't be fetched.
+    type Error: std::fmt::Display;
+    /// Fetch the record at `at_uri` as JSON.
+    fn hydrate(
+        &self,
+        at_uri: &str,
+    ) -> impl Future<Output = Result<serde_json::Value, Self::Error>>;
+}
+
+/// Split `at://<did>/<collection>/<rkey>` into `(did, collection, rkey)`.
+/// Returns `None` if any segment is missing or empty.
+pub fn parse_at_uri(at_uri: &str) -> Option<(&str, &str, &str)> {
+    let rest = at_uri.strip_prefix("at://")?;
+    let mut parts = rest.splitn(3, '/');
+    let (did, collection, rkey) = (parts.next()?, parts.next()?, parts.next()?);
+    if did.is_empty() || collection.is_empty() || rkey.is_empty() {
+        return None;
+    }
+    Some((did, collection, rkey))
+}
+
 /// A source of hydrated events. Source-agnostic: a Spacedust+hydration adapter,
 /// a jetstream consumer, or a test vec all implement this.
 pub trait EventSource {
@@ -227,6 +252,16 @@ mod tests {
                 Outcome::DryRun
             })
         }
+    }
+
+    #[test]
+    fn parse_at_uri_splits_or_rejects() {
+        assert_eq!(
+            parse_at_uri("at://did:plc:x/app.bsky.feed.post/3k"),
+            Some(("did:plc:x", "app.bsky.feed.post", "3k"))
+        );
+        assert_eq!(parse_at_uri("at://did:plc:x/app.bsky.feed.post"), None);
+        assert_eq!(parse_at_uri("https://example.com"), None);
     }
 
     #[test]

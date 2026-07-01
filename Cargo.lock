@@ -2257,7 +2257,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "jac-store-fjall"
+name = "jac-stores"
 version = "0.1.0"
 dependencies = [
  "async-stream",
@@ -4929,7 +4929,7 @@ dependencies = [
  "chrono",
  "clap",
  "figment2",
- "jac-store-fjall",
+ "jac-stores",
  "jacquard",
  "jacquard-common",
  "jacquard-lexicon",
@@ -4940,7 +4940,7 @@ dependencies = [
  "serde_json",
  "tass-config",
  "tass-lex",
- "tass-mage",
+ "tass-lex-rpg",
  "tass-quint",
  "tass-repo",
  "tass-repo-mage",
@@ -4965,7 +4965,7 @@ version = "0.1.0"
 dependencies = [
  "figment2",
  "http",
- "jac-store-fjall",
+ "jac-stores",
  "jacquard",
  "jacquard-common",
  "miette",
@@ -4977,6 +4977,7 @@ dependencies = [
 name = "tass-engine"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "tass-phase",
  "tokio",
  "tracing",
@@ -5079,10 +5080,23 @@ dependencies = [
  "jacquard-common",
  "serde",
  "serde_json",
- "tass-mage",
+ "tass-lex-rpg",
  "tass-quint",
  "tass-repo",
  "tass-stats",
+]
+
+[[package]]
+name = "tass-slingshot"
+version = "0.1.0"
+dependencies = [
+ "jacquard",
+ "jacquard-common",
+ "serde_json",
+ "tass-engine",
+ "tass-repo",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
@@ -5092,6 +5106,7 @@ dependencies = [
  "futures-util",
  "serde",
  "serde_json",
+ "tass-engine",
  "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite",

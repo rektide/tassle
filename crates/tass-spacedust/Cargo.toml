@@ -12,6 +12,7 @@ name = "tass_spacedust"
 path = "src/lib.rs"
 
 [dependencies]
+tass-engine = { path = "../tass-engine" }
 tokio = { version = "1", features = ["rt", "net", "time"] }
 tokio-tungstenite = { version = "0.24", features = ["connect", "native-tls"] }
 futures-util = "0.3"

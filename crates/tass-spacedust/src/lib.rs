@@ -130,6 +130,10 @@ pub enum SpacedustError {
     Ws(#[source] tokio_tungstenite::tungstenite::Error),
     #[error("failed to decode event: {0}")]
     Decode(#[source] serde_json::Error),
+    #[error("malformed source_record at-uri: {0}")]
+    BadUri(String),
+    #[error("hydration failed: {0}")]
+    Hydrate(String),
 }
 
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -181,9 +185,94 @@ impl Subscriber {
     }
 }
 
+// --- EventSource adapter: Spacedust links + a Hydrator → engine Events ---
+
+use tass_engine::{Event, EventSource, Hydrator};
+
+/// Build a `tass_engine::Event` from a link and its hydrated record body.
+///
+/// `actor_did` and `collection` come from the `source_record` at-uri (no
+/// hydration needed); `text` is the record's `text` field (empty if absent).
+fn event_from(link: LinkEvent, record: &serde_json::Value) -> Result<Event, SpacedustError> {
+    let (actor_did, collection) = {
+        let (did, collection, _rkey) = tass_engine::parse_at_uri(&link.source_record)
+            .ok_or_else(|| SpacedustError::BadUri(link.source_record.clone()))?;
+        (did.to_string(), collection.to_string())
+    };
+    let text = record
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    Ok(Event {
+        actor_did,
+        collection,
+        source_record: link.source_record,
+        source_rev: link.source_rev,
+        subject: link.subject,
+        text,
+    })
+}
+
+/// An [`EventSource`] over Spacedust: read the next link, hydrate its
+/// `source_record` via `H`, and yield an engine [`Event`]. `delete` links are
+/// skipped (nothing to hydrate).
+pub struct SpacedustSource<H> {
+    subscriber: Subscriber,
+    hydrator: H,
+}
+
+impl<H: Hydrator> SpacedustSource<H> {
+    /// Connect and pair the subscription with a hydrator.
+    pub async fn connect(cfg: &SpacedustConfig, hydrator: H) -> Result<Self, SpacedustError> {
+        Ok(Self {
+            subscriber: Subscriber::connect(cfg).await?,
+            hydrator,
+        })
+    }
+}
+
+impl<H: Hydrator> EventSource for SpacedustSource<H> {
+    type Error = SpacedustError;
+
+    async fn next(&mut self) -> Option<Result<Event, SpacedustError>> {
+        loop {
+            let link = match self.subscriber.next_event().await {
+                Ok(Some(link)) => link,
+                Ok(None) => return None,
+                Err(e) => return Some(Err(e)),
+            };
+            if link.operation != "create" {
+                continue; // deletes have nothing to hydrate
+            }
+            return Some(match self.hydrator.hydrate(&link.source_record).await {
+                Ok(record) => event_from(link, &record),
+                Err(e) => Err(SpacedustError::Hydrate(e.to_string())),
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn event_from_extracts_actor_collection_and_text() {
+        let link = LinkEvent {
+            operation: "create".to_string(),
+            source: "app.bsky.feed.post:reply.parent.uri".to_string(),
+            source_record: "at://did:plc:them/app.bsky.feed.post/3l".to_string(),
+            source_rev: "rev".to_string(),
+            subject: "at://did:plc:mage/app.bsky.feed.post/3k".to_string(),
+        };
+        let record = serde_json::json!({ "$type": "app.bsky.feed.post", "text": "burn my tass" });
+        let ev = event_from(link, &record).unwrap();
+        assert_eq!(ev.actor_did, "did:plc:them");
+        assert_eq!(ev.collection, "app.bsky.feed.post");
+        assert_eq!(ev.text, "burn my tass");
+        assert_eq!(ev.subject, "at://did:plc:mage/app.bsky.feed.post/3k");
+    }
 
     #[test]
     fn subscribe_url_encodes_did_and_params() {
