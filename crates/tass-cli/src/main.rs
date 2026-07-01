@@ -57,6 +57,9 @@ enum Command {
     /// Inspect self-rkey aggregate records
     #[command(name = "self")]
     SelfRecord(commands::self_record::SelfArgs),
+    /// Listen for tass commands posted at an account via Spacedust. (listen)
+    #[cfg(feature = "listen")]
+    Listen(tass_listen::ListenArgs),
 }
 
 #[tokio::main]
@@ -83,5 +86,9 @@ async fn main() -> miette::Result<ExitCode> {
         Command::Quint(args) => commands::quint::run(args, format, profile).await,
         Command::Repo(args) => commands::repo::run(args, format, profile).await,
         Command::SelfRecord(args) => commands::self_record::run(args, format, profile).await,
+        #[cfg(feature = "listen")]
+        Command::Listen(args) => tass_listen::run(args, profile)
+            .await
+            .map(|()| ExitCode::SUCCESS),
     }
 }

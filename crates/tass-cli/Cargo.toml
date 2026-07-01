@@ -21,6 +21,9 @@ auth-store = [
     "dep:base64",
     "tass-config/auth-store",
 ]
+# `tassle listen`: the Spacedust listener daemon, composed from tass-listen.
+# Off by default so the base CLI stays lean (it pulls websocket/http stacks).
+listen = ["dep:tass-listen"]
 
 [dependencies]
 tass-lex = { path = "../tass-lex" }
@@ -43,6 +46,8 @@ figment2.workspace = true
 jac-store-fjall = { workspace = true, optional = true }
 rpassword = { version = "7", optional = true }
 base64 = { version = "0.22", optional = true }
+# Optional: the listener daemon, exposed as `tassle listen`. Gated by `listen`.
+tass-listen = { path = "../tass-listen", optional = true }
 clap = { version = "~4.4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

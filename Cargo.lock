@@ -4951,6 +4951,7 @@ dependencies = [
  "tass-config",
  "tass-lex",
  "tass-lex-rpg",
+ "tass-listen",
  "tass-quint",
  "tass-repo",
  "tass-repo-mage",
