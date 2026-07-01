@@ -1,0 +1,16 @@
+{
+	"$type": "actor.rpg.stats",
+	"system": "mage",
+	"data": {
+		"Arete": 3,
+		"Willpower": 7,
+		"Prime": 3,
+		"Forces": 2,
+		"Life": 1,
+		"Mind": 2,
+		"quintessence": 8,
+		"paradox": 2
+	},
+	"createdAt": "2026-06-21T12:00:00.000Z",
+	"updatedAt": "2026-06-21T12:00:00.000Z"
+}

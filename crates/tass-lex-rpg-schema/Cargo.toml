@@ -1,0 +1,12 @@
+[package]
+name = "tass-lex-rpg-schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Raw upstream rpg.actor / equipment.rpg lexicon JSON + mage overlay + combined view. Source input for tass-lex-rpg."
+
+[lib]
+name = "tass_lex_rpg_schema"
+path = "src/lib.rs"

@@ -1,0 +1,78 @@
+{
+	"lexicon": 1,
+	"id": "equipment.rpg.give",
+	"description": "A provider's attestation that an item was given to a player. Lives on the provider's PDS.",
+	"defs": {
+		"main": {
+			"type": "record",
+			"description": "Records that a provider granted an item to a specific recipient. The asset blob is not stored here — only the CID for integrity verification. Each give record is one item to one recipient.",
+			"key": "any",
+			"record": {
+				"type": "object",
+				"required": [
+					"recipient",
+					"item",
+					"title",
+					"givenAt"
+				],
+				"properties": {
+					"recipient": {
+						"type": "string",
+						"format": "did",
+						"description": "DID of the player who received this item."
+					},
+					"item": {
+						"type": "string",
+						"maxLength": 50,
+						"description": "Unique item identifier (e.g. 'popcorn', 'theatre_shirt')."
+					},
+					"kind": {
+						"type": "string",
+						"maxLength": 20,
+						"description": "Item kind. 'layer' for sprite-generator wearables (held/overlay are subtypes). For non-wearable inventory items, any descriptive string such as 'badge', 'potion', 'map', 'key', 'ticket', etc. Defaults to 'layer' if omitted."
+					},
+					"category": {
+						"type": "string",
+						"maxLength": 30,
+						"description": "Generator layer category for 'layer' items (e.g. 'tops', 'righthand'). Omit for 'inventory' items."
+					},
+					"title": {
+						"type": "string",
+						"maxLength": 100,
+						"description": "Human-readable display name for the item."
+					},
+					"description": {
+						"type": "string",
+						"maxLength": 500,
+						"description": "Flavour text or description of the item."
+					},
+					"assetCid": {
+						"type": "string",
+						"maxLength": 200,
+						"description": "CID of the canonical asset or icon PNG. Used to verify the player's copy is untampered."
+					},
+					"iconCid": {
+						"type": "string",
+						"maxLength": 200,
+						"description": "CID of the item's icon PNG, if distinct from the asset."
+					},
+					"stats": {
+						"type": "object",
+						"description": "Provider-defined properties or metadata for the item.",
+						"properties": {}
+					},
+					"context": {
+						"type": "string",
+						"maxLength": 200,
+						"description": "Origin description — where and how the item was earned (e.g. 'Avonlea Theatre popcorn vendor')."
+					},
+					"givenAt": {
+						"type": "string",
+						"format": "datetime",
+						"description": "When this item was given."
+					}
+				}
+			}
+		}
+	}
+}

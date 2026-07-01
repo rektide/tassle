@@ -1,0 +1,15 @@
+{
+	"$type": "equipment.rpg.item",
+	"give": "at://did:plc:samplesamplesamplesample/equipment.rpg.give/3ksamplesample3",
+	"asset": {
+		"$type": "blob",
+		"mimeType": "image/png",
+		"ref": {
+			"$link": "bafyreifakefakefakefakefakefakefakefakefakefakefake"
+		},
+		"size": 1024
+	},
+	"assetCid": "bafyreifakefakefakefakefakefakefakefakefakefakefake",
+	"stats": {},
+	"acceptedAt": "2026-06-21T12:00:00.000Z"
+}

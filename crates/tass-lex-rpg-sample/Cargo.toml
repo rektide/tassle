@@ -1,0 +1,12 @@
+[package]
+name = "tass-lex-rpg-sample"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Example rpg.actor / equipment.rpg fixture records."
+
+[lib]
+name = "tass_lex_rpg_sample"
+path = "src/lib.rs"

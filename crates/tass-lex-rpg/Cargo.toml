@@ -1,0 +1,33 @@
+[package]
+name = "tass-lex-rpg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Generated Rust types for rpg.actor / equipment.rpg lexicons. Do not edit — regenerate via `cargo run -p tass-codegen -- --input crates/tass-lex-rpg-schema/lexicons --output crates/tass-lex-rpg/src`."
+
+[lib]
+name = "tass_lex_rpg"
+path = "src/lib.rs"
+
+[features]
+default = ["actor_rpg", "equipment_rpg"]
+actor_rpg = []
+equipment_rpg = []
+
+[dependencies]
+jacquard-common.workspace = true
+jacquard-derive.workspace = true
+jacquard-lexicon.workspace = true
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+chrono = "0.4"
+jacquard-common.workspace = true
+jacquard-lexicon.workspace = true
+
+[[example]]
+name = "smoke"
+path = "examples/smoke.rs"
