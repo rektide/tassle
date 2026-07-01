@@ -79,10 +79,11 @@ impl Login {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct StoreConfig {
-    /// Which DB to use, resolved to `state_dir()/store/<db>.db`. Absent = a
-    /// single **shared** DB named from the appname (`<appname>.db`) — the
-    /// default. The sentinel [`STORE_DB_PER_PROFILE`] selects a **per-profile**
-    /// DB (`<profile>.db`) instead.
+    /// Which DB to use, resolved to `state_dir()/store/<db>.db`. Two sentinels:
+    /// [`STORE_DB_APPNAME`] (`"@appname"`) = the single **shared** `<appname>.db`
+    /// — the default (also what an absent value means); [`STORE_DB_PER_PROFILE`]
+    /// (`"@profile"`) = a **per-profile** `<profile>.db`. Any other value is a
+    /// literal stem.
     pub db: Option<String>,
     /// Explicit full path to the DB file. When set it overrides [`db`](Self::db)
     /// resolution entirely (the escape hatch).
@@ -113,6 +114,10 @@ pub struct StoreLifecycle {
     /// Migrate an out-of-date schema (vs. failing on a stale one).
     pub update: bool,
 }
+
+/// The [`StoreConfig::db`] sentinel selecting the shared, appname-named DB
+/// (`<appname>.db`). The default (an absent `store.db` means the same).
+pub const STORE_DB_APPNAME: &str = "@appname";
 
 /// The [`StoreConfig::db`] sentinel selecting a per-profile DB (`<profile>.db`).
 /// (Chosen over the more obscure "EPONYMOUS".)
@@ -201,7 +206,7 @@ where
 /// `store.db` value.
 fn store_stem(store: &StoreConfig, profile_name: &str) -> String {
     match store.db.as_deref() {
-        None => crate::dirs::appname(),
+        None | Some(STORE_DB_APPNAME) => crate::dirs::appname(),
         Some(STORE_DB_PER_PROFILE) => profile_name.to_string(),
         Some(name) => name.to_string(),
     }
@@ -363,6 +368,9 @@ bind = "127.0.0.1:9090"
     fn store_stem_shared_profile_or_named() {
         // Absent => the shared appname DB (not per-profile).
         assert_eq!(store_stem(&StoreConfig::default(), "alice"), crate::dirs::appname());
+        // @appname sentinel => same shared DB as the default.
+        let app = StoreConfig { db: Some(STORE_DB_APPNAME.into()), ..Default::default() };
+        assert_eq!(store_stem(&app, "alice"), crate::dirs::appname());
         // Sentinel => the profile's own DB.
         let per = StoreConfig { db: Some(STORE_DB_PER_PROFILE.into()), ..Default::default() };
         assert_eq!(store_stem(&per, "alice"), "alice");
