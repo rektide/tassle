@@ -22,7 +22,6 @@
 //! race (see `tass-config-session-source`).
 
 use std::future::Future;
-use std::path::Path;
 
 use jacquard::client::credential_session::CredentialResumeResult;
 use jacquard::client::BasicClient;
@@ -38,8 +37,9 @@ use jacquard::identity::resolver::{
 };
 use jacquard::oauth::client::OAuthClient;
 
-use crate::auth::{open_session_at, AppPasswordSession, AuthError, Resolver};
-use crate::config::{self, CredentialSelector};
+use crate::auth::{AppPasswordSession, AuthError, Resolver};
+use crate::config::CredentialSelector;
+use crate::session::PreparedProfile;
 
 /// The turso-backed OAuth session store (mirrors [`crate::auth::Store`] for the
 /// app-password side).
@@ -289,20 +289,16 @@ async fn resume(
     target: Target,
     required: bool,
 ) -> Result<ReadClient, AuthError> {
-    let figment =
-        config::active_figment(cli_profile).map_err(|e| AuthError::Config(e.to_string()))?;
-    let profile = config::active_name(&figment);
-    let login = config::active_login(&figment).map_err(|e| AuthError::Config(e.to_string()))?;
-    let store_path =
-        config::resolve_store_path(&figment, &profile).map_err(|e| AuthError::Store(e.to_string()))?;
-    let lifecycle =
-        config::store_lifecycle(&figment).map_err(|e| AuthError::Store(e.to_string()))?;
-    config::precheck_store(&store_path, &lifecycle).map_err(|e| AuthError::Store(e.to_string()))?;
+    let prepared = PreparedProfile::resolve()
+        .maybe_cli_profile(cli_profile)
+        .call()
+        .await?;
+    let profile = prepared.name().to_string();
 
     // The identity string to resume by (a DID for `@active`, the given name
     // otherwise). Absent for `@active` when no active account is set.
     let ident: Option<String> = match target {
-        Target::Active => match active_account_at(&store_path).await? {
+        Target::Active => match prepared.active_account().await? {
             Some(did) => Some(did.as_str().to_string()),
             None => return absent(required, &profile),
         },
@@ -310,10 +306,10 @@ async fn resume(
     };
 
     // App-password vs OAuth chosen by the profile's login kind.
-    let kind = login.auth_mode.as_deref().unwrap_or("app_password");
+    let kind = prepared.login().auth_mode.as_deref().unwrap_or("app_password");
     match kind {
-        "oauth" => resume_oauth(&store_path, ident.as_deref(), required, &profile).await,
-        _ => resume_app_password(&store_path, ident.as_deref(), required, &profile).await,
+        "oauth" => resume_oauth(&prepared, ident.as_deref(), required, &profile).await,
+        _ => resume_app_password(&prepared, ident.as_deref(), required, &profile).await,
     }
 }
 
@@ -328,30 +324,13 @@ fn absent(required: bool, profile: &str) -> Result<ReadClient, AuthError> {
     }
 }
 
-/// Read the store's `active_account` DID pointer, if the store exists and one is
-/// set. Never creates the store (a missing DB = no active account).
-async fn active_account_at(
-    store_path: &Path,
-) -> Result<Option<Did>, AuthError> {
-    use jac_stores::RepoCore;
-    if !store_path.exists() {
-        return Ok(None);
-    }
-    let repo = jac_stores::TursoRepository::open_local(store_path)
-        .await
-        .map_err(|e| AuthError::Store(e.to_string()))?;
-    repo.active_account()
-        .await
-        .map_err(|e| AuthError::Store(e.to_string()))
-}
-
 async fn resume_app_password(
-    store_path: &Path,
+    prepared: &PreparedProfile,
     ident: Option<&str>,
     required: bool,
     profile: &str,
 ) -> Result<ReadClient, AuthError> {
-    let session = open_session_at(store_path).await?;
+    let session = prepared.app_password_session().await?;
     let hint = SessionHint::from_optional_input(ident);
     match session.resume(&hint).await {
         // Take the DID from the resumed session (authoritative — the `ident` may
@@ -365,16 +344,13 @@ async fn resume_app_password(
 }
 
 async fn resume_oauth(
-    store_path: &Path,
+    prepared: &PreparedProfile,
     ident: Option<&str>,
     required: bool,
     profile: &str,
 ) -> Result<ReadClient, AuthError> {
     use jac_stores::OAuthRepo;
-    let repo = jac_stores::TursoRepository::open_local(store_path)
-        .await
-        .map_err(|e| AuthError::Store(e.to_string()))?;
-    let store = OAuthAuthStore::new(repo);
+    let store = prepared.oauth_store().await?;
 
     // Find the stored session key for the target identity (DID or handle).
     let key = match ident {

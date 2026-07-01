@@ -17,7 +17,7 @@ default = []
 # app-password store, resumed from the active profile and pointed at its PDS.
 # Off by default so the pure config/profile build stays light; the app enables
 # this for write paths.
-auth-store = ["dep:jac-stores", "dep:jacquard", "dep:jacquard-common", "dep:http"]
+auth-store = ["dep:jac-stores", "dep:jacquard", "dep:jacquard-common", "dep:http", "dep:bon"]
 
 [dependencies]
 figment2.workspace = true
@@ -29,6 +29,8 @@ jac-stores = { workspace = true, optional = true }
 # the CLI/localhost OAuth login flow (see `oauth_login`).
 jacquard = { workspace = true, optional = true, features = ["loopback"] }
 jacquard-common = { workspace = true, optional = true }
+# Builder generator for the auth-path builders (PreparedProfile + terminals).
+bon = { workspace = true, optional = true }
 # `http::Request`/`http::Response` for the ReadClient `HttpClient` delegation.
 http = { version = "1", optional = true }
 

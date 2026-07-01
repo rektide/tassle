@@ -39,6 +39,9 @@ pub mod auth;
 #[cfg(feature = "auth-store")]
 pub mod read;
 
+#[cfg(feature = "auth-store")]
+pub mod session;
+
 pub use config::{auth_selector, CredentialSelector, Login};
 pub use service::{OAuthConfig, ServiceConfig};
 
@@ -57,6 +60,9 @@ pub use auth::{
 
 #[cfg(feature = "auth-store")]
 pub use read::{read_client, OAuthReadSession, ReadClient};
+
+#[cfg(feature = "auth-store")]
+pub use session::PreparedProfile;
 
 #[cfg(test)]
 mod tests {

@@ -14,17 +14,13 @@
 //! issue).
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use figment2::Figment;
-use jacquard::client::credential_session::{
-    CredentialLoginOptions, CredentialResumeResult, CredentialSession,
-};
+use jacquard::client::credential_session::{CredentialResumeResult, CredentialSession};
 use jacquard::common::session::SessionHint;
-use jacquard::identity::JacquardResolver;
 use jacquard_common::deps::fluent_uri::Uri;
 
-use crate::config;
+use crate::session::PreparedProfile;
 use crate::Login;
 
 /// The concrete app-password store + resolver backing an [`AuthedClient`].
@@ -92,37 +88,34 @@ impl AuthedClient {
     /// Resolve a profile (CLI override > `TASS_PROFILE` > config selector),
     /// resume its session non-interactively, and point it at the profile's PDS.
     pub async fn for_profile(cli_profile: Option<&str>) -> Result<Self, AuthError> {
-        let figment = config::active_figment(cli_profile)
-            .map_err(|e| AuthError::Config(e.to_string()))?;
-        let name = config::active_name(&figment);
-        let login =
-            config::active_login(&figment).map_err(|e| AuthError::Config(e.to_string()))?;
+        let prepared = PreparedProfile::resolve()
+            .maybe_cli_profile(cli_profile)
+            .call()
+            .await?;
+        let session = prepared.app_password_session().await?;
 
-        let store_path = config::resolve_store_path(&figment, &name)
-            .map_err(|e| AuthError::Store(e.to_string()))?;
-        let lifecycle =
-            config::store_lifecycle(&figment).map_err(|e| AuthError::Store(e.to_string()))?;
-        config::precheck_store(&store_path, &lifecycle)
-            .map_err(|e| AuthError::Store(e.to_string()))?;
-
-        let session = open_session_at(&store_path).await?;
-
-        let hint = SessionHint::from_optional_input(login.account());
+        let hint = SessionHint::from_optional_input(prepared.login().account());
         match session.resume(&hint).await {
             Ok(CredentialResumeResult::Resumed(_)) => {}
             Ok(CredentialResumeResult::LoginRequired(_)) => {
-                return Err(AuthError::LoginRequired { profile: name });
+                return Err(AuthError::LoginRequired {
+                    profile: prepared.name().to_string(),
+                });
             }
             Err(e) => return Err(AuthError::Resume(e.to_string())),
         }
 
-        let pds = login.pds.as_deref().ok_or(AuthError::NoPds)?;
+        let pds = prepared.login().pds.as_deref().ok_or(AuthError::NoPds)?;
         let endpoint = Uri::parse(pds)
             .map_err(|_| AuthError::Uri(pds.to_string()))?
             .to_owned();
         session.set_endpoint(endpoint).await;
 
-        Ok(AuthedClient { session, login, name })
+        Ok(AuthedClient {
+            session,
+            login: prepared.login().clone(),
+            name: prepared.name().to_string(),
+        })
     }
 
     /// Convenience for [`AuthedClient::for_profile`] with no CLI override
@@ -147,41 +140,15 @@ impl AuthedClient {
         actor: &str,
         password: String,
     ) -> Result<LoginOutcome, AuthError> {
-        let name = config::active_name(figment);
-        let store_path = config::resolve_store_path(figment, &name)
-            .map_err(|e| AuthError::Store(e.to_string()))?;
-        let lifecycle =
-            config::store_lifecycle(figment).map_err(|e| AuthError::Store(e.to_string()))?;
-        config::precheck_store(&store_path, &lifecycle)
-            .map_err(|e| AuthError::Store(e.to_string()))?;
-
-        let session = open_session_at(&store_path).await?;
-        let hint = SessionHint::from_optional_input(Some(actor));
-        let atp = match session.resume(&hint).await {
-            Ok(CredentialResumeResult::Resumed(s)) => s,
-            Ok(CredentialResumeResult::LoginRequired(challenge)) => session
-                .login_from_challenge(
-                    challenge,
-                    CredentialLoginOptions {
-                        password: password.into(),
-                        identifier: Some(actor.to_string().into()),
-                        allow_takendown: None,
-                        auth_factor_token: None,
-                        pds: None,
-                    },
-                )
-                .await
-                .map_err(|e| AuthError::Resume(e.to_string()))?,
-            Err(e) => return Err(AuthError::Resume(e.to_string())),
-        };
-
-        Ok(LoginOutcome {
-            profile_name: name,
-            store_path,
-            did: atp.did.to_string(),
-            handle: atp.handle.to_string(),
-            pds: atp.pds.as_ref().map(ToString::to_string),
-        })
+        PreparedProfile::resolve()
+            .figment(figment.clone())
+            .call()
+            .await?
+            .app_password_login()
+            .actor(actor)
+            .password(password)
+            .call()
+            .await
     }
 
     /// Lend the live session. Consumers (e.g.
@@ -264,69 +231,14 @@ pub async fn oauth_login(
     figment: &Figment,
     actor: &str,
 ) -> Result<OAuthLoginOutcome, AuthError> {
-    use jacquard::oauth::client::OAuthClient;
-    use jacquard::oauth::loopback::{LoopbackConfig, LoopbackPort};
-    use jacquard::oauth::types::AuthorizeOptions;
-
-    let name = config::active_name(figment);
-    let store_path = config::resolve_store_path(figment, &name)
-        .map_err(|e| AuthError::Store(e.to_string()))?;
-    let lifecycle =
-        config::store_lifecycle(figment).map_err(|e| AuthError::Store(e.to_string()))?;
-    config::precheck_store(&store_path, &lifecycle)
-        .map_err(|e| AuthError::Store(e.to_string()))?;
-
-    if let Some(parent) = store_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;
-    }
-    let repo = jac_stores::TursoRepository::open_local(&store_path)
+    PreparedProfile::resolve()
+        .figment(figment.clone())
+        .call()
+        .await?
+        .oauth_login()
+        .actor(actor)
+        .call()
         .await
-        .map_err(|e| AuthError::Store(e.to_string()))?;
-    let store = OAuthStore::new(repo);
-
-    // Public localhost client (no keyset). `login_with_local_server` overrides the
-    // redirect with the ephemeral loopback address it binds, so the fixed-port
-    // default is irrelevant — ask for an OS-assigned port to avoid clashes.
-    let client = OAuthClient::with_default_config(store);
-    let cfg = LoopbackConfig {
-        port: LoopbackPort::Ephemeral,
-        ..LoopbackConfig::default()
-    };
-    let session = client
-        .login_with_local_server(actor, AuthorizeOptions::default(), cfg)
-        .await
-        .map_err(|e| AuthError::Resume(e.to_string()))?;
-
-    // Pull the authoritative identity out of the persisted session data.
-    let data = session.data.read().await;
-    let did = data.account_did.to_string();
-    let session_id = data.session_id.to_string();
-    let pds = Some(data.host_url.as_str().to_string());
-    drop(data);
-
-    Ok(OAuthLoginOutcome {
-        profile_name: name,
-        store_path,
-        did,
-        pds,
-        session_id,
-    })
-}
-
-/// Open the profile's turso app-password store at `store_path` and build a
-/// fresh (unresumed) [`CredentialSession`] over it. The single store-open path,
-/// shared by [`AuthedClient::for_profile`] and [`AuthedClient::login`] so the
-/// `TursoRepository` + `AppPasswordStore` + resolver dance lives in one place.
-pub(crate) async fn open_session_at(store_path: &Path) -> Result<AppPasswordSession, AuthError> {
-    if let Some(parent) = store_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| AuthError::Store(e.to_string()))?;
-    }
-    let repo = jac_stores::TursoRepository::open_local(store_path)
-        .await
-        .map_err(|e| AuthError::Store(e.to_string()))?;
-    let store = Arc::new(jac_stores::AppPasswordStore::new(repo));
-    let resolver = Arc::new(JacquardResolver::default());
-    Ok(CredentialSession::new(store, resolver))
 }
 
 /// Read the access JWT of the session stored for `did`/`session_id` in the store
