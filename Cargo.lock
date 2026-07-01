@@ -4830,7 +4830,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tass-quint-jac"
+name = "tass-repo-mage"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -4860,7 +4860,7 @@ dependencies = [
  "serde_ipld_dagcbor",
  "serde_json",
  "tass-quint",
- "tass-quint-jac",
+ "tass-repo-mage",
  "tassle-config",
  "tassle-lexicons",
  "tempfile",

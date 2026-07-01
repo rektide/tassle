@@ -19,7 +19,7 @@
 //!    only know the legacy integer stay consistent with the milli balance.
 //!
 //! This crate is pure logic + [`serde`] adapters — no jacquard, no IO. The
-//! companion `tass-quint-jac` crate wraps a jacquard `XrpcClient` to read and
+//! companion `tass-repo-mage` crate wraps a jacquard `XrpcClient` to read and
 //! write these fields against a PDS. See `doc/ledger.md` for why the ledger
 //! must not *silently* mutate `actor.rpg.stats` — sheet writes through
 //! [`sheet_patch`] are an explicit command, not a ledger side-effect.
@@ -154,7 +154,7 @@ pub fn sheet_patch(q: Quint) -> SheetPatch {
 // ─────────────────────────────────────────────────────────────────────────────
 // Coherence — inline sync seam for `milliQuintessence` ↔ `quintessence`.
 //
-// This module is pure logic with no IO. [`QuintClient`] in `tass-quint-jac`
+// This module is pure logic with no IO. [`QuintClient`] in `tass-repo-mage`
 // consults it inline inside its existing `read` / `write_with` / `adjust_with`
 // paths so callers get a coherent value back without any separate sync pass.
 // See `doc/microquint.md` and the `tass-quint-stale-sync` ticket.
@@ -219,7 +219,7 @@ pub struct SheetFields<'a> {
 /// Pluggable coherence rule. The default impl is [`MilliIsTruthCoherence`],
 /// matching today's behavior exactly.
 ///
-/// The only callers of this trait live inside `tass-quint-jac`'s existing
+/// The only callers of this trait live inside `tass-repo-mage`'s existing
 /// `read` / `write_with` / `adjust_with` methods. Nothing outside the quint
 /// family calls it directly — it is a seam for varying drift heuristics per
 /// chronicle, not a new sync verb.

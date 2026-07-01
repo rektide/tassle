@@ -7,7 +7,7 @@
 use clap::{Args, Subcommand};
 use std::process::ExitCode;
 use tass_quint::Quint;
-use tass_quint_jac::{QuintClient, WriteOpts};
+use tass_repo_mage::{QuintClient, WriteOpts};
 use tassle_config::AuthedClient;
 
 use crate::commands::OutputFormat;

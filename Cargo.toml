@@ -5,7 +5,7 @@ members = [
     "crates/tass-lex-sample",
     "crates/tass-phase",
     "crates/tass-quint",
-    "crates/tass-quint-jac",
+    "crates/tass-repo-mage",
     "crates/tassle-codegen",
     "crates/tassle-config",
     "crates/tassle-lexicons",

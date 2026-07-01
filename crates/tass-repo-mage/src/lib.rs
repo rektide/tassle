@@ -1,5 +1,10 @@
-//! Jacquard-backed read/write for [`tass_quint`] against the mage block of an
-//! `actor.rpg.stats` record.
+//! Jacquard-backed DAO for the `actor.rpg.stats/mage` record.
+//!
+//! The mage record data-access layer: it owns reading and writing the mage
+//! block of an `actor.rpg.stats` record over jacquard. Its first hosted
+//! operation is the [`tass_quint`] pattern-quintessence field RMW
+//! ([`QuintClient`]); the crate is the home for mage-record I/O generally, not
+//! quint-specific. (Renamed from `tass-quint-jac`.)
 //!
 //! [`QuintClient`] is generic over any `jacquard` client implementing
 //! [`XrpcClient`] — read works unauthenticated (a public getRecord), write
@@ -10,7 +15,7 @@
 //!
 //! ```no_run
 //! # use jacquard::client::BasicClient;
-//! use tass_quint_jac::QuintClient;
+//! use tass_repo_mage::QuintClient;
 //! # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
 //! let client = BasicClient::unauthenticated();
 //! let qc = QuintClient::new(&client);
@@ -109,7 +114,7 @@ enum Stamp {
 /// supplies their own:
 ///
 /// ```
-/// use tass_quint_jac::WriteOpts;
+/// use tass_repo_mage::WriteOpts;
 /// let _default_now = WriteOpts::default();                       // stamp now
 /// let _at = WriteOpts::default().at("2026-06-30T00:00:00Z");     // caller time
 /// let _off = WriteOpts::default().unstamped();                   // no stamp
@@ -178,7 +183,7 @@ impl<'c, C: XrpcClient + Sync + ?Sized, Co: Coherence> QuintClient<'c, C, Co> {
     /// ```
     /// # use jacquard::client::BasicClient;
     /// use tass_quint::MilliIsTruthCoherence;
-    /// use tass_quint_jac::QuintClient;
+    /// use tass_repo_mage::QuintClient;
     /// # async fn demo() {
     /// let client = BasicClient::unauthenticated();
     /// let qc = QuintClient::new(&client).with_coherence(MilliIsTruthCoherence);

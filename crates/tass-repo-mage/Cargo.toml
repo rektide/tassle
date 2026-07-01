@@ -1,14 +1,14 @@
 [package]
-name = "tass-quint-jac"
+name = "tass-repo-mage"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Jacquard-backed read/write for tass-quint against actor.rpg.stats#mageStats."
+description = "Jacquard-backed DAO for the actor.rpg.stats/mage record (hosts the tass-quint field RMW)."
 
 [lib]
-name = "tass_quint_jac"
+name = "tass_repo_mage"
 path = "src/lib.rs"
 
 [dependencies]

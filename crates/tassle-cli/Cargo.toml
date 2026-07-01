@@ -20,14 +20,14 @@ auth-store = [
     "dep:rpassword",
     "dep:base64",
     "tassle-config/auth-store",
-    "dep:tass-quint-jac",
+    "dep:tass-repo-mage",
 ]
 
 [dependencies]
 tassle-lexicons = { path = "../tassle-lexicons" }
 tass-quint = { path = "../tass-quint" }
-# Optional: quint write commands + authed-client. Gated by `auth-store`.
-tass-quint-jac = { path = "../tass-quint-jac", optional = true }
+# Optional: mage-record DAO (quint write commands + authed-client). Gated by `auth-store`.
+tass-repo-mage = { path = "../tass-repo-mage", optional = true }
 # Base config/profile model (figment2). The `auth-store` feature additionally
 # enables its `auth-store` feature for the AuthedClient path.
 tassle-config = { path = "../tassle-config" }
