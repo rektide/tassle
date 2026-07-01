@@ -6,6 +6,7 @@ members = [
     "crates/tass-phase",
     "crates/tass-mage",
     "crates/tass-quint",
+    "crates/tass-repo",
     "crates/tass-repo-mage",
     "crates/tassle-codegen",
     "crates/tassle-config",

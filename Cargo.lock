@@ -4839,6 +4839,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tass-repo"
+version = "0.1.0"
+dependencies = [
+ "jacquard",
+ "jacquard-common",
+ "serde_json",
+]
+
+[[package]]
 name = "tass-repo-mage"
 version = "0.1.0"
 dependencies = [
