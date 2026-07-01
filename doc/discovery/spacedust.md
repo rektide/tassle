@@ -1,6 +1,6 @@
 # Spacedust + jetstream: the tassle listener daemon
 
-> tassle's primary interface is **atproto posts addressed at us**: a person posts something like *"burn my tass"* at our Mage account, and a standalone listener daemon reacts — reads their records, performs the action, and posts an attestation. That command stream comes from [Spacedust](https://spacedust.microcosm.blue/), microcosm's "configurable ATProto notifications firehose." A *second* source — a **jetstream** firehose of `com.superbfowle.tass.*` records **at large** — feeds the ledger fold so we always know each tass's real remaining quintessence. The daemon leans on our own crates: **`tass-phase`** models the work, **`tassle-config`** provides jacquard auth, and a shared local **turso** database backs the auth store and (later) job persistence. Epic: [`tass-listener-svc`](#tickets). Sibling: [attestation.md](attestation.md) (cosign *trust*, distinct from §8's action receipts).
+> tassle's primary interface is **atproto posts addressed at us**: a person posts something like *"burn my tass"* at our Mage account, and a standalone listener daemon reacts — reads their records, performs the action, and posts an attestation. That command stream comes from [Spacedust](https://spacedust.microcosm.blue/), microcosm's "configurable ATProto notifications firehose." A *second* source — a **jetstream** firehose of `com.superbfowle.tass.*` records **at large** — feeds the ledger fold so we always know each tass's real remaining quintessence. The daemon leans on our own crates: **`tass-phase`** models the work, **`tass-config`** provides jacquard auth, and a shared local **turso** database backs the auth store and (later) job persistence. Epic: [`tass-listener-svc`](#tickets). Sibling: [attestation.md](attestation.md) (cosign *trust*, distinct from §8's action receipts).
 
 ---
 
@@ -67,7 +67,7 @@ reads=on,  writes=own → enact records into our repo, no public reply
 reads=on,  writes=all → records + reply to the user's post
 ```
 
-Config lives in `tassle-config` under `[service.listen]`, with **nested per-verb tables that fall through** to the service level (reusing the existing figment2 profile-fallback helper — `select_profile_from_config` / `DropIns`). So `writes` control is granular: a service-level default, overridden per verb.
+Config lives in `tass-config` under `[service.listen]`, with **nested per-verb tables that fall through** to the service level via `tass-config`'s **`extract_cascade`** — `extract_cascade(&figment, &["service.listen", "service.listen.enervate"])` does a **per-key deep merge** (later layers override, missing layers skipped, `T`'s serde defaults as the base). So `writes` control is granular: a service-level default, overridden per verb.
 
 ```toml
 [service.listen]                    # service-level defaults (fall-through parent)
@@ -94,10 +94,10 @@ Sources (the two streams) are the daemon's fixed infrastructure; the per-verb ta
 Each verb is a unit of **phased async work** modeled with the **`tass-phase`** crate — a pure FSM (the *phases*) + an async `Driver` (the I/O) + a concurrent `Executor`. `tass-phase` is a **finished, abstract** library: its only deps are `rust-fsm` and `futures-util`, and its `tests/burn_chain.rs` is a **synthetic illustration** (scripted driver, no network, no clock) — not shipped behavior. The shape:
 
 - **Phases (pure FSM):** states are the phases of the work; inputs advance them; outputs are effects to perform. Short-circuits are just transitions to terminal phases. Fully I/O-free and unit-testable. **One FSM per verb** — each action composes only the steps it needs from a shared effect vocabulary (a menu, not a mandate); there is no generic parent FSM that verbs specialize. Reuse is at the *effect* level.
-- **Driver (async bridge):** awaits reality (`next_event`) and performs effects (`effect`). Both take `&mut self`, so **the Driver is the data accumulator** — the pure FSM carries no payload, so `Gather` stashes the fetched mages/tass into the Driver and later steps read them back out. All context lives here: the hydrated post, resolvers, shared turso db, and the **lent `tassle-config` `AuthedClient` session**.
+- **Driver (async bridge):** awaits reality (`next_event`) and performs effects (`effect`). Both take `&mut self`, so **the Driver is the data accumulator** — the pure FSM carries no payload, so `Gather` stashes the fetched mages/tass into the Driver and later steps read them back out. All context lives here: the hydrated post, resolvers, shared turso db, and the **lent `tass-config` `AuthedClient` session**.
 - **Executor:** runs many verb jobs concurrently on one task and streams each result the instant it finishes. This is "a model to track what work needs to happen" — every in-flight command is a job on the Executor.
 
-The **effect vocabulary** (`Gather`, `ResolveTarget`, `Authorize`, `ReadState`, `WriteEffect`, `Attest`, `Reply`) and the `Driver` trait glue live in **`tass-engine` (mechanism, no verbs)**. The verbs themselves are fine-grained crates — **`tass-act-enervate`, `tass-act-meditate`** — each owning its FSM + Driver + domain parameters, depending on `tass-engine` for the vocabulary and on the domain crates (`tassle-ledger` / `tass-quint` / `tassle-config`) for what the effects actually do.
+The **effect vocabulary** (`Gather`, `ResolveTarget`, `Authorize`, `ReadState`, `WriteEffect`, `Attest`, `Reply`) and the `Driver` trait glue live in **`tass-engine` (mechanism, no verbs)**. The verbs themselves are fine-grained crates — **`tass-act-enervate`, `tass-act-meditate`** — each owning its FSM + Driver + domain parameters, depending on `tass-engine` for the vocabulary and on the domain crates (`tassle-ledger` / `tass-quint` / `tass-config`) for what the effects actually do.
 
 The **"gather dependencies, then search/solve with matchers"** shape maps directly onto the front phases: a *Gather* phase whose effect fetches the actor's context (their mage character records and available tass), then a *Resolve* phase where the matchers run over the message **with that context** to solve for a concrete intent (or short-circuit). Sketch (extending the `burn_chain` FSM):
 
@@ -120,9 +120,9 @@ Matchers in the *Resolve* transition, all keyword spotting over the gathered con
 - **burn-tass (primary)** → the FSM above; writes a `com.superbfowle.tass.enervate` against the user's tassilize. **enervate implies the user as the effect target for now** (you burn your own tass); routing burned quintessence to a recipient is the future model, [`tass-recipient-alloc`](#tickets). Authz: **own tass only**.
 - **meditate (second and final v1.1)** → keyword-spot "meditate" → resolve character + Node → write `com.superbfowle.tass.meditate` (`node`, `amount` 0–20). Deferred completion (effect after an in-fiction duration) is the durability seam, [§7](#7-turso-the-work-executor-and-the-refresh-borrow-model).
 
-### Writing as the Mage — reuse `tassle-config`
+### Writing as the Mage — reuse `tass-config`
 
-Writes authenticate as the Mage via the **existing** `tassle-config` auth engine: `AuthedClient::for_profile(mage)` opens the jac-store session (turso backend), resumes a jacquard `CredentialSession`, points it at the PDS, and **lends** `&session`. The Driver borrows that session to perform write effects. The daemon does not implement auth — it consumes `tassle-config`.
+Writes authenticate as the Mage via the **existing** `tass-config` auth engine: `AuthedClient::for_profile(mage)` opens the jac-store session (turso backend), resumes a jacquard `CredentialSession`, points it at the PDS, and **lends** `&session`. The Driver borrows that session to perform write effects. The daemon does not implement auth — it consumes `tass-config`.
 
 ---
 
@@ -173,10 +173,10 @@ tass-act-enervate       the enervate verb: own FSM + Driver + domain params
 tass-act-meditate       the meditate verb: own FSM + Driver + domain params
 tass-listen             small standalone binary: load [service.listen], tass_engine::run()
 tassle-cli              `tassle listen` behind a feature → same tass_engine::run()   [low-pri]
-tassle-config           jacquard auth (AuthedClient) + [service.listen] fall-through config
+tass-config           jacquard auth (AuthedClient) + [service.listen] fall-through config
 ```
 
-Engine is mechanism; the verbs are `tass-act-*` crates that depend on it and on the domain crates (`tassle-ledger` / `tass-quint`). Mage auth is `tassle-config`; storage is turso. Both the standalone `tass-listen` binary and the `tassle listen` CLI subcommand are thin wrappers over one `tass_engine::run(config)` — a small focused daemon **and** the omni-CLI, from one brain.
+Engine is mechanism; the verbs are `tass-act-*` crates that depend on it and on the domain crates (`tassle-ledger` / `tass-quint`). Mage auth is `tass-config`; storage is turso. Both the standalone `tass-listen` binary and the `tassle listen` CLI subcommand are thin wrappers over one `tass_engine::run(config)` — a small focused daemon **and** the omni-CLI, from one brain.
 
 ---
 
